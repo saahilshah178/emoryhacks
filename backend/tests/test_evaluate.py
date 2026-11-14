@@ -216,7 +216,7 @@ def test_confirm_pose_flags_checks_three_most_severe(real_ai):
         if start == 8.0:  # the high flag's clip
             return FlagCheckReply(observed=True, kind="patient_unsteady", severity="medium", start_s=10, end_s=12,
                                   description="The patient's knees buckle as they stand.")
-        return FlagCheckReply(observed=False)
+        return FlagCheckReply(observed=False, description="")
     ctx = StubCtx(answer, duration=60.0)
     out = evaluate.confirm_pose_flags(ctx, GLOVE_REMOVAL, flags)
 
@@ -475,3 +475,11 @@ def test_confirmed_flag_on_a_track_with_no_known_role_drops_the_track_label(real
                                             description="The patient sways."))
     out = evaluate.confirm_pose_flags(ctx, GLOVE_REMOVAL, [flag, named])
     assert [f.person_label for f in out] == [None, "patient (track 1)"]
+    assert "description" in FlagCheckReply.model_json_schema()["required"]
+
+
+def test_safety_prompts_do_not_flag_the_instability_a_drill_is_about():
+    grade = evaluate.prompts.grade_prompt(GLOVE_SKILL, GLOVE_REMOVAL, GLOVE_TIMELINE, 70)
+    confirm = evaluate.prompts.confirm_flag_prompt(GLOVE_SKILL, _pose_flag("medium", 10), 8, 14, 70, [])
+    assert "do not flag that instability itself" in grade
+    assert "the loss of balance a drill" in confirm

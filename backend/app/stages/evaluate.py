@@ -80,7 +80,8 @@ class FlagCheckReply(BaseModel):
     severity: Severity = "low"
     start_s: int | None = Field(default=None, description="whole seconds from the start of the video")
     end_s: int | None = Field(default=None, description="whole seconds from the start of the video")
-    description: str = ""
+    # Required, so a confirmed flag is described in Gemini's words rather than the tracker's.
+    description: str = Field(description="one sentence on what you saw; empty when not observed")
 
 
 # --- stage entry points ------------------------------------------------------

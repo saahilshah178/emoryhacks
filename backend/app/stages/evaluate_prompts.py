@@ -118,6 +118,10 @@ Order problems found by that pass:
    - environment_hazard: hazards such as clutter, an unlocked wheelchair, a wet floor
    Severity: high = imminent risk of injury, medium = a concerning posture or instability,
    low = a minor point. Return an empty list when nothing is wrong.
+   Judge against what this skill expects. When the skill is a response to the patient's
+   instability (in a fall-response drill the patient losing balance and being lowered to the
+   floor is the scenario), do not flag that instability itself; flag only what the caregiver's
+   handling adds to it, such as the patient dropping hard, twisting or hitting their head.
    Skill-specific points to watch:
 {safety}
 
@@ -175,7 +179,9 @@ off-centre, sliding, unsteady or in distress in this clip? Points to watch for t
 {watch}
 
 Set observed true only if you clearly see or hear it; normal, controlled movement such as
-leaning forward to stand up on cue is not a problem. If observed, give the kind, a severity
+leaning forward to stand up on cue is not a problem, and neither is the loss of balance a drill
+is about (in a fall-response drill the patient is meant to start falling) unless the caregiver's
+handling makes it worse. If observed, give the kind, a severity
 (high = imminent risk of injury, medium = a concerning posture or instability, low = a minor
 point), the time span, and one sentence describing what you saw.
 """

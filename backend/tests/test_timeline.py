@@ -181,8 +181,12 @@ def test_run_sends_video_first_without_reference_times(monkeypatch):
     for step in FALL_RESPONSE.steps:  # reference timestamps must not leak into the request
         assert f"{step.start_s:.1f}" not in prompt.replace("60.0", "")
     assert [(v.step_id, v.expected_after) for v in tl.order_violations] == [("s3", "s2")]
+    # This rubric predates sight-only grading: "Stay and reassure" and "Call for help" are about
+    # something said with no criterion left that can be seen, so they are not graded or located.
+    assert "Stay and reassure" not in prompt and "Call for help" not in prompt
     assert tl.missing_step_ids == ["s4"]
-    assert [s.performed_index for s in tl.steps] == [1, 3, 2, None, 4, 5]
+    assert [s.performed_index for s in tl.steps] == [1, 3, 2, None, None, None]
+    assert tl.steps[4].note == tl.steps[5].note == timeline.HEARD_NOTE
 
 
 def test_refine_pass_tightens_boundaries_and_ignores_answers_outside_the_clip(monkeypatch):

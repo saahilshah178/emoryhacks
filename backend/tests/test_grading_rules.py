@@ -272,50 +272,67 @@ def test_a_conditional_step_the_recording_stopped_before_stays_unverified_withou
     assert not any(c["purpose"].startswith("evaluate_double_check") for c in ctx.calls)
 
 
-# Glove removal recorded from part-way in: the first steps are on screen from the start.
-STARTED_AT_S3 = Timeline(steps=[
-    TimelineStep(step_id="s1", found=False), TimelineStep(step_id="s2", found=False),
-    TimelineStep(step_id="s3", found=True, start_s=1, end_s=6, confidence=0.8),
-    TimelineStep(step_id="s4", found=False),
-    TimelineStep(step_id="s5", found=True, start_s=12, end_s=18, confidence=0.8),
-    TimelineStep(step_id="s6", found=True, start_s=18, end_s=26, confidence=0.8),
-])
+# The start of a recording is the model's call (the prompt's start rule). On the real path a
+# step the model reports as not performed has no evidence times whether or not it could be
+# seen, so code has nothing to go on and never overrides the model's verdict there.
+def _wheelchair_transfer():
+    from app.models import Rubric, RubricStep, StepEval
+
+    titles = ["Lock the wheelchair brakes", "Swing the footrests away", "Feet flat on the floor",
+              "Put on the gait belt", "Stand in front of the patient", "Assist to stand", "Pivot to the bed",
+              "Lower to sit on the bed"]
+    ev_ = StepEval(pass_criteria=["seen"], fail_criteria=["not seen"], unverified_when=["out of frame"])
+    return Rubric(order_matters=True, steps=[
+        RubricStep(step_id=f"s{i}", order=i, title=t, description="", start_s=0, end_s=1, critical=i in (1, 6),
+                   order_dependent=i > 1, must_follow=[f"s{i - 1}"] if i > 1 else [], evals=ev_)
+        for i, t in enumerate(titles, start=1)])
 
 
-def test_steps_before_the_recording_start():
-    assert evaluate.steps_before_recording_start(GLOVE_REMOVAL, STARTED_AT_S3) == ["s1", "s2"]
-    late = STARTED_AT_S3.model_copy(deep=True)
-    late.steps[2].start_s = 9.0  # the recording shows 9 s of something else first: s1 and s2 were skipped
-    assert evaluate.steps_before_recording_start(GLOVE_REMOVAL, late) == []
-    assert evaluate.steps_before_recording_start(GLOVE_REMOVAL, GLOVE_TIMELINE) == []  # s1 was located
-    nothing = Timeline(steps=[TimelineStep(step_id=s.step_id, found=False) for s in GLOVE_REMOVAL.steps])
-    assert evaluate.steps_before_recording_start(GLOVE_REMOVAL, nothing) == []
+def _graded_from_the_start(first: "StepJudgement", second=None):
+    """Run the timeline and evaluate stages on one reply in the shape the real path produces:
+    steps 2 to 8 located from 2 s on, step 1 as given."""
+    from app import config
+
+    rubric = _wheelchair_transfer()
+    reply = grade_reply(steps=[first] + [judgement(f"s{i}", "passed", 95, start=2 * i - 2, end=2 * i - 1)
+                                         for i in range(2, 9)])
+    ctx = StubCtx(answer_with(reply, second or (lambda step_id: judgement(step_id, "failed", 90, None, None))),
+                  duration=16.0)
+    assert not config.FAKE_AI
+    tl = timeline.run(ctx, rubric)
+    return rubric, tl, evaluate.run(ctx, rubric, tl), ctx
 
 
-def test_a_step_done_before_the_recording_began_is_unverified_not_failed(real_ai):  # noqa: F811
-    reply = grade_reply(steps=[
-        judgement("s1", "failed", 90, start=None, end=None),   # nothing of it seen: unverified
-        judgement("s2", "failed", 90, start=0, end=1),         # seen at the start and failed: stays failed
-        judgement("s3", "passed", 95, start=1, end=6),
-        judgement("s4", "failed", 90, start=None, end=None),   # skipped part-way through: still failed
-        judgement("s5", "passed", 95, start=12, end=18), judgement("s6", "passed", 95, start=18, end=26)])
-    ctx = StubCtx(answer_with(reply, lambda step_id: judgement(step_id, "failed", 99)), duration=30.0)
-    out = evaluate.run(ctx, GLOVE_REMOVAL, STARTED_AT_S3)
-    s1 = out.steps[0]
-    assert (s1.status, s1.confidence, s1.evidence_start_s) == ("unverified", 0.9, None)
-    assert s1.feedback.endswith("Start recording before you begin.") and not s1.double_checked
-    assert [r.status for r in out.steps[1:]] == ["failed", "passed", "failed", "passed", "passed"]
-    checked = sorted(c["purpose"].split(":")[1] for c in ctx.calls if c["purpose"].startswith("evaluate_double_check"))
-    assert checked == ["s2", "s4"]  # failed critical steps that were seen or could have been
-    assert out.overall_feedback == "Rewritten summary."
+def test_a_first_step_skipped_in_a_recording_that_starts_properly_stays_failed(real_ai):  # noqa: F811
+    skipped = judgement("s1", "failed", 90, start=None, end=None)
+    skipped.evidence = "The wheelchair brake levers stay up (unlocked) for the whole recording."
+    # The second look's clip cannot see the brakes being locked either.
+    rubric, tl, out, ctx = _graded_from_the_start(
+        skipped, second=lambda step_id: judgement(step_id, "unverified", 90, start=None, end=None))
+    assert not tl.steps[0].found and tl.steps[1].start_s == 2.0  # step 2 starts within seconds of 0
+    brakes = out.steps[0]
+    assert brakes.status == "failed" and brakes.evidence.startswith("The wheelchair brake levers stay up")
+    assert "evaluate_double_check:s1" in [c["purpose"] for c in ctx.calls]  # failed and critical: a second look
+    sc = scoring.score(rubric, tl, out, [])
+    assert sc.overall == "failed"
+    assert sc.reasons[0] == 'A critical step was not done correctly: "Lock the wheelchair brakes".'
 
 
-def test_the_start_rule_leaves_a_recording_that_starts_with_something_else_alone():
-    evaluation = ev(["failed", "passed", "passed", "passed", "passed", "passed"])
-    timeline_ = STARTED_AT_S3.model_copy(deep=True)
-    timeline_.steps[2].start_s = 9.0
-    assert evaluate.apply_recording_start(GLOVE_REMOVAL, timeline_, evaluation, 30.0) == []
-    assert evaluation.steps[0].status == "failed"
+def test_a_result_in_place_at_the_start_keeps_the_models_pass(real_ai):  # noqa: F811
+    in_place = judgement("s1", "passed", 90, start=0, end=2)
+    in_place.evidence = "The brakes are already locked when the recording begins."
+    rubric, tl, out, _ = _graded_from_the_start(in_place)
+    assert tl.steps[0].found and tl.steps[0].start_s == 0.0
+    assert out.steps[0].status == "passed" and scoring.score(rubric, tl, out, []).overall == "passed"
+
+
+def test_a_step_done_before_the_camera_was_on_is_what_the_model_said(real_ai):  # noqa: F811
+    unseen = judgement("s1", "unverified", 90, start=None, end=None,
+                       feedback="Start recording before you begin, so the brakes can be seen.")
+    rubric, tl, out, ctx = _graded_from_the_start(unseen)
+    assert out.steps[0].status == "unverified"
+    assert out.steps[0].feedback == "Start recording before you begin, so the brakes can be seen."
+    assert "evaluate_double_check:s1" not in [c["purpose"] for c in ctx.calls]  # it was sure it could not be seen
 
 
 # --- scoring ---------------------------------------------------------------------------------------
@@ -467,13 +484,6 @@ def test_order_violation_reasons_are_unchanged_by_not_needed_steps(statuses):
     sc = scoring.score(rubric, Timeline(steps=GLOVE_TIMELINE.steps, order_violations=[violation]),
                        ev(["passed"] * 4 + statuses), [])
     assert sc.reasons[0] == 'Steps out of order: "Peel" came before "Pinch".'
-
-
-def test_an_unseen_step_before_the_recording_start_gets_no_second_look():
-    evaluation = Evaluation(people=[], steps=[result("s1", "unverified", 0.5), result("s2", "unverified", 0.5, 0, 1),
-                                              *[result(f"s{i}", "passed") for i in range(3, 7)]])
-    assert evaluate.settled_by_recording_start(GLOVE_REMOVAL, STARTED_AT_S3, evaluation, 30.0) == {"s1"}
-    assert evaluate.pick_double_checks(GLOVE_REMOVAL, evaluation, skip={"s1"}) == ["s2"]
 
 
 # --- a conditional step is settled by whether its situation came up ------------------------------
@@ -651,3 +661,218 @@ def test_canned_ai_says_why_a_step_was_not_needed():
     assert out.steps[3].status == NA
     assert out.steps[3].feedback == ('Not needed this time: "Steady the person" is only needed when the person '
                                      "sways or looks unsteady once standing, and that did not happen.")
+
+
+# --- a step that can only be heard is not graded ---------------------------------------------------
+def _with_heard_step(critical=False):
+    """Glove removal with s3 replaced by a step that is only something said, as in a rubric
+    written before grading went silent ("Ask about home stair railing")."""
+    from app.models import StepEval
+
+    rubric = GLOVE_REMOVAL.model_copy(deep=True)
+    rubric.steps[2] = rubric.steps[2].model_copy(update={
+        "title": "Ask about home stair railing", "description": "Ask whether the stairs at home have a railing.",
+        "critical": critical,
+        "evals": StepEval(pass_criteria=["The caregiver asks about the railing.", "The patient answers."],
+                          fail_criteria=["No question is asked."], unverified_when=["No audio."],
+                          visual_cues=["Caregiver talking"])})
+    return rubric
+
+
+def test_which_steps_can_only_be_heard():
+    rubric = _with_heard_step()
+    assert prompts.heard_only(rubric.steps[2])
+    assert not prompts.heard_only(GLOVE_REMOVAL.steps[2])
+    greet = SIT_TO_STAND.steps[0]  # "Greet and explain": its pass criterion is speech too
+    assert prompts.heard_only(greet)
+    # A title about speech with a criterion that can be seen is graded by that criterion.
+    seen = greet.model_copy(deep=True)
+    seen.evals.pass_criteria.append("The caregiver faces the patient within arm's reach.")
+    assert not prompts.heard_only(seen)
+    # Speech in the criteria only: still graded, by title and description.
+    rise = SIT_TO_STAND.steps[5].model_copy(deep=True)
+    rise.title = "Rise from the chair"
+    assert not prompts.heard_only(rise)
+
+
+def test_a_step_that_can_only_be_heard_is_left_out_and_said_so(real_ai):  # noqa: F811
+    rubric = _with_heard_step(critical=True)
+    prompt = assess.assess_prompts.assess_prompt(GLOVE_SKILL, rubric, 70)
+    assert "Ask about home stair railing" not in prompt and "[s3]" not in prompt
+    # Whatever the model says about it anyway, it is not graded.
+    reply = grade_reply(steps=[judgement(f"s{i}", "failed" if i == 3 else "passed", 95, start=5 * i, end=5 * i + 3)
+                               for i in range(1, 7)])
+    ctx = StubCtx(answer_with(reply), duration=70.0)
+    tl = timeline.run(ctx, rubric)
+    out = evaluate.run(ctx, rubric, tl)
+    s3 = out.steps[2]
+    assert s3.status == NA and s3.evidence_start_s is None
+    assert "about something said" in s3.evidence and "without sound" in s3.evidence
+    assert "nurse will hear it" in s3.evidence
+    assert s3.feedback == ("This step is about something you say. The automatic check watches without sound, so "
+                           "the nurse will listen for it when they review your recording.")
+    assert not tl.steps[2].found and tl.steps[2].note == prompts.HEARD_NOTE and "s3" not in tl.missing_step_ids
+    assert not any(c["purpose"] == "evaluate_double_check:s3" for c in ctx.calls)
+    sc = scoring.score(rubric, tl, out, [])
+    assert (sc.overall, sc.score_pct, sc.needs_nurse_review) == ("passed", 100.0, True)
+    assert sc.reasons == [
+        "All the steps that were checked met the criteria.",
+        'A critical step is about something said, which the automatic check does not listen for, so a nurse will '
+        'check it: "Ask about home stair railing".',
+        "1 of 6 steps is about something said, so it was not counted: the automatic check watches without sound, "
+        "and a nurse will listen for it.",
+    ]
+    assert not any("not needed" in r for r in sc.reasons)
+
+
+def test_a_step_that_can_only_be_heard_does_not_hide_an_order_problem():
+    rubric = _with_heard_step()  # s4 must follow s3, which must follow s2
+    steps = [TimelineStep(step_id=f"s{i}", found=i != 3, start_s={1: 1, 2: 20, 4: 5, 5: 30, 6: 40}.get(i),
+                          end_s={1: 3, 2: 25, 4: 8, 5: 35, 6: 45}.get(i), confidence=0.9) for i in range(1, 7)]
+    tl = timeline.build_timeline(rubric, steps, not_needed={"s3"})
+    assert [(v.step_id, v.expected_after) for v in tl.order_violations] == [("s4", "s2")]
+
+
+def test_scoring_tells_heard_steps_from_steps_not_needed():
+    rubric = conditional(_with_heard_step(), "s6")
+    sc = scoring.score(rubric, GLOVE_TIMELINE, ev(["passed", "passed", NA, "passed", "passed", NA]), [])
+    assert sc.reasons[1:] == [
+        "1 of 6 steps was not needed in this recording, so it was not counted.",
+        "1 of 6 steps is about something said, so it was not counted: the automatic check watches without sound, "
+        "and a nurse will listen for it.",
+    ]
+    only_heard = Evaluation(people=[], steps=[result("s3", NA)])
+    lone = rubric.model_copy(update={"steps": [rubric.steps[2]]})
+    assert scoring.score(lone, GLOVE_TIMELINE, only_heard, []).reasons == [
+        "No step could be checked by sight, so there was nothing to grade."]
+
+
+def test_the_rewritten_summary_says_a_heard_step_was_not_checked(real_ai):  # noqa: F811
+    rubric = _with_heard_step()
+    reply = grade_reply(steps=[judgement("s1", "passed", 40)]
+                        + [judgement(f"s{i}", "passed", 95) for i in (2, 4, 5, 6)])
+    ctx = StubCtx(answer_with(reply, lambda step_id: judgement(step_id, "failed", 90)), duration=70.0)
+    sent = []
+    ctx.generate_text = lambda purpose, parts, **kw: sent.append(parts[0]["text"]) or "Summary."
+    evaluate.run(ctx, rubric, GLOVE_TIMELINE)
+    [text] = sent
+    assert ("- Ask about home stair railing: not checked, because it is about something said; a nurse will "
+            "listen for it.") in text
+
+
+def test_canned_ai_leaves_a_heard_step_out_like_the_real_grader():
+    class Ctx:
+        duration = 60.0
+    rubric = _with_heard_step()
+    tl = _fake.timeline(Ctx(), rubric)
+    out = _fake.evaluation(Ctx(), rubric, tl)
+    assert out.steps[2] == evaluate.heard_result(rubric.steps[2])
+    assert not tl.steps[2].found and tl.steps[2].note == prompts.HEARD_NOTE
+
+
+# --- a recording that does not show the skill leaves no step out --------------------------------------
+def test_no_step_is_not_needed_when_the_video_shows_another_skill(real_ai):  # noqa: F811
+    """From a real upload: glove removal sent as sit to stand. The conditional first step came back
+    not needed "because no chair with armrests or patient is present in this recording"."""
+    rubric = conditional(SIT_TO_STAND, "s2", "the chair has armrests")
+    rubric.steps[0] = rubric.steps[0].model_copy(update={"title": "Face the patient"})  # not about speech
+    armrests = judgement("s2", NA, 90, start=None, end=None, situation="no")
+    armrests.evidence = ("This step was not needed here because no chair with armrests or patient is present in "
+                         "this recording.")
+    reply = grade_reply(skill_match=False, skill_match_note="The video shows a person removing gloves.",
+                        steps=[armrests] + [judgement(f"s{i}", "failed", 95, start=None, end=None)
+                                            for i in (1, 3, 4, 5, 6, 7)])
+    ctx = StubCtx(answer_with(reply), duration=30.0)
+    tl = timeline.run(ctx, rubric)
+    out = evaluate.run(ctx, rubric, tl)
+    assert [r.status for r in out.steps] == ["failed"] * 7
+    assert out.steps[1].feedback == '"Hands on the armrests" was not seen, because this recording does not show ' \
+                                    "this skill."
+    assert "s2" in tl.missing_step_ids
+    sc = scoring.score(rubric, tl, out, [])
+    assert (sc.overall, sc.score_pct) == ("failed", 0.0)
+    assert sc.reasons == ["The video does not appear to show this skill. The video shows a person removing gloves."]
+    # A step that can only be heard is not left out either.
+    heard = _with_heard_step()
+    mismatch = grade_reply(skill_match=False, steps=[judgement(f"s{i}", "failed", 95, None, None) for i in range(1, 7)])
+    assert evaluate.build_evaluation(mismatch, heard, 30.0).steps[2].status == "failed"
+
+
+# --- timeouts --------------------------------------------------------------------------------------------
+def test_each_call_that_grades_an_attempt_has_a_timeout_that_fits_it(real_ai):  # noqa: F811
+    reply = grade_reply(steps=[judgement(f"s{i}", "passed", 40 if i == 1 else 95) for i in range(1, 7)])
+    ctx = StubCtx(answer_with(reply, lambda step_id: judgement(step_id, "failed", 90)), duration=70.0)
+    texts = []
+    ctx.generate_text = lambda purpose, parts, **kw: texts.append(kw) or "Summary."
+    evaluate.run(ctx, GLOVE_REMOVAL, GLOVE_TIMELINE)
+    by_purpose = {c["purpose"]: c for c in ctx.calls}
+    assert by_purpose["assess"]["timeout"] == assess.WHOLE_VIDEO_TIMEOUT_S == 240
+    assert by_purpose["evaluate_double_check:s1"]["timeout"] == assess.CLIP_TIMEOUT_S == 90
+    assert texts[0]["timeout"] == assess.TEXT_TIMEOUT_S == 60
+
+    nothing = Timeline(steps=[TimelineStep(step_id=s.step_id, found=False) for s in GLOVE_REMOVAL.steps])
+    ctx = StubCtx(answer_with(reply), duration=70.0)
+    evaluate.run(ctx, GLOVE_REMOVAL, nothing)
+    whole = next(c for c in ctx.calls if c["purpose"] == "evaluate_double_check:s1")
+    assert whole["video"]["start_s"] == 0.0 and whole["timeout"] == assess.WHOLE_VIDEO_TIMEOUT_S
+
+    flag = SafetyFlag(kind="patient_off_center", severity="high", start_s=10, end_s=12, description="leans",
+                      source="pose", counts_toward_score=False)
+    from app.stages.evaluate import FlagCheckReply
+
+    ctx = StubCtx(lambda *a: FlagCheckReply(observed=False, description=""), duration=60.0)
+    evaluate.confirm_pose_flags(ctx, GLOVE_REMOVAL, [flag])
+    assert ctx.calls[0]["timeout"] == assess.CLIP_TIMEOUT_S
+
+
+def test_the_refine_call_has_the_clip_timeout(monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "FAKE_AI", False)
+    reply = assess.AssessReply(
+        observed=[], people=[], skill_match=True, overall_feedback="",
+        steps=[assess.StepAssessment(step_id="s1", performed=True, start_s=20, end_s=40, timing_confidence_pct=50,
+                                     situation_came_up=None, evidence="", status="passed", confidence_pct=90,
+                                     feedback="", note="")])
+    calls = []
+
+    class Ctx:
+        duration = 300.0
+        skill = GLOVE_SKILL
+
+        def video_part(self, **kw):
+            return {}
+
+        def generate_json(self, purpose, parts, schema, **kw):
+            calls.append((purpose, kw))
+            return reply if purpose == "assess" else timeline._RefineReply(performed=False, start_s=0, end_s=0,
+                                                                           confidence=0)
+
+        def log(self, message):
+            pass
+    timeline.run(Ctx(), GLOVE_REMOVAL)
+    assert dict(calls)["timeline_refine:s1"]["timeout"] == assess.CLIP_TIMEOUT_S
+
+
+def test_a_request_that_times_out_is_retried(migrated, monkeypatch):
+    """A hung request ends at its timeout and is tried again, not treated as a final failure."""
+    import types
+
+    import httpx
+    from google.genai._gaos.lib.compat_errors import APITimeoutError
+
+    from app import gemini
+
+    calls = []
+
+    def create(**body):
+        calls.append(body)
+        if len(calls) == 1:
+            raise APITimeoutError(request=httpx.Request("POST", "https://example.invalid"))
+        usage = types.SimpleNamespace(total_input_tokens=10, total_output_tokens=5, total_thought_tokens=5)
+        return types.SimpleNamespace(status="completed", output_text="done", usage=usage)
+    fake = types.SimpleNamespace(interactions=types.SimpleNamespace(create=create))
+    monkeypatch.setattr(gemini, "client", lambda: fake)
+    monkeypatch.setattr(gemini.time, "sleep", lambda s: None)
+    assert gemini.generate_text("test_timeout", [gemini.text_part("hi")], timeout=60) == "done"
+    assert [c["timeout"] for c in calls] == [60, 60]

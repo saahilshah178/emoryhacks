@@ -1,7 +1,7 @@
 "use client";
 
 import { CircleAlert, HeartHandshake, ShieldCheck, Sparkles, TriangleAlert, Users } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { Avatar, Badge, Button, Card, ErrorNote, Skeleton, StateBadge } from "@/components/ui";
 import { attemptChapters, attemptReferenceChapters, attemptStepSpan } from "@/components/media/chapters";
 import { JobProgress } from "@/components/media/JobProgress";
@@ -13,7 +13,7 @@ import { StepResult } from "@/caregiver/components/results/StepResult";
 import { AttemptHistory, SendPanel } from "@/caregiver/components/results/SendPanel";
 import { useCaregiver } from "@/caregiver/context/CaregiverContext";
 import { practiceHref } from "@/caregiver/skills";
-import { attemptStateForCaregiver, readyToSend } from "@/caregiver/status";
+import { attemptStateForCaregiver, formatScore, readyToSend } from "@/caregiver/status";
 import { cn } from "@/lib/cn";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useApi, useJob, useTitle } from "@/lib/hooks";
@@ -223,8 +223,23 @@ function Graded({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
   const player = useVideoSegments();
   const demo = useVideoSegments();
   const playable = attempt.video.available;
-  const onPlay = playable ? player.play : undefined;
   const reference = attempt.reference_video?.available ? attempt.reference_video : null;
+  // Only one of the two videos plays at a time: starting a step in one stops the other.
+  const playMine = useCallback(
+    (start: number, end?: number | null) => {
+      demo.video?.pause();
+      player.play(start, end);
+    },
+    [demo.video, player],
+  );
+  const playDemo = useCallback(
+    (start: number, end?: number | null) => {
+      player.video?.pause();
+      demo.play(start, end);
+    },
+    [demo, player.video],
+  );
+  const onPlay = playable ? playMine : undefined;
   const chapters = useMemo(
     () =>
       attemptChapters(attempt.steps, (step) => {
@@ -234,7 +249,7 @@ function Graded({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
     [attempt.steps],
   );
   const demoChapters = useMemo(() => attemptReferenceChapters(attempt.steps), [attempt.steps]);
-  const current = useCurrentChapter(chapters, player.playhead, player.play);
+  const current = useCurrentChapter(chapters, player.playhead, playMine);
   const flags = attempt.safety_flags.filter((flag) => flag.counts_toward_score);
   const reviewed = attempt.review_state === "approved" || attempt.review_state === "retraining";
   const steps = [...attempt.steps].sort((a, b) => a.ord - b.ord);
@@ -285,6 +300,11 @@ function Graded({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
         }
       >
         <p className="text-[15px] leading-relaxed">{line}</p>
+        {state !== "unsubmitted" && attempt.score_pct !== null ? (
+          <p className="mt-1 text-sm text-ink-secondary">
+            Automatic check score: <span className="font-semibold tabular-nums text-navy">{formatScore(attempt.score_pct)}</span>
+          </p>
+        ) : null}
       </Header>
 
       <SendPanel attempt={attempt} skillId={skillId} onSent={onSent} />
@@ -344,7 +364,7 @@ function Graded({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
                   chapters={demoChapters}
                   duration={reference.duration_s}
                   time={demo.playhead}
-                  onPlay={demo.play}
+                  onPlay={playDemo}
                   label="Steps in the demonstration"
                   emptyText="Your nurse hasn't marked where each step is in the demonstration."
                 />
@@ -380,7 +400,7 @@ function Graded({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
                       number={index + 1}
                       violations={attempt.order_violations}
                       onPlay={onPlay}
-                      onPlayDemo={reference ? demo.play : undefined}
+                      onPlayDemo={reference ? playDemo : undefined}
                       active={step.step_id === current.id}
                     />
                   ))}

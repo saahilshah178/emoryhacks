@@ -8,7 +8,7 @@ import { practiceHref, resultsHref } from "@/caregiver/skills";
 import { attemptStateForCaregiver, formatScore, noAttemptsLeft } from "@/caregiver/status";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import type { Attempt, AttemptHistoryItem, SubmitRequest } from "@/lib/types";
 
 /** The note a "send anyway" needs, in characters (the API's FORCE_NOTE_MIN). */
@@ -364,7 +364,7 @@ function Replaced({ attempt }: { attempt: Attempt }) {
     >
       <p className="text-[15px] leading-relaxed text-ink">
         {newer
-          ? `Your nurse will review the one you sent on ${formatDate(newer.submitted_at)} instead.`
+          ? `Your nurse will review the one you sent on ${formatDateTime(newer.submitted_at)} instead.`
           : attempt.submission.reason}
       </p>
       <SentNote attempt={attempt} />

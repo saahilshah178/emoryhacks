@@ -15,9 +15,6 @@ type DashboardContextValue = {
   overview: Overview | undefined;
   overviewError: string | null;
   reloadOverview: () => void;
-  /** The search box in the top bar. Lists filter themselves with matchesQuery(search, ...). */
-  search: string;
-  setSearch: (value: string) => void;
   /** A one-line message shown under the top bar until dismissed or replaced. */
   flash: Flash | null;
   showFlash: (flash: Flash) => void;
@@ -31,7 +28,6 @@ const REFRESH_MS = 30_000;
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const { data, error, reload } = useApi<Overview>("/overview", { refreshMs: REFRESH_MS });
-  const [search, setSearch] = useState("");
   const [flash, setFlash] = useState<Flash | null>(null);
   const clearFlash = useCallback(() => setFlash(null), []);
 
@@ -40,13 +36,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       overview: data,
       overviewError: error,
       reloadOverview: reload,
-      search,
-      setSearch,
       flash,
       showFlash: setFlash,
       clearFlash,
     }),
-    [data, error, reload, search, flash, clearFlash],
+    [data, error, reload, flash, clearFlash],
   );
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;

@@ -2,16 +2,13 @@
 
 import { Plus } from "lucide-react";
 import { Button, EmptyState, Loadable, Skeleton } from "@/components/ui";
-import { matchesQuery, plural } from "@/lib/format";
+import { plural } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
-import { categoryLabel } from "@/lib/status";
 import type { SkillSummary } from "@/lib/types";
 import { SkillCard } from "@/nurse/components/skills/SkillCard";
-import { useDashboard } from "@/nurse/context/DashboardContext";
 
 export default function SkillsPage() {
   useTitle("Skills");
-  const { search } = useDashboard();
   const { data, error, loading, reload } = useApi<SkillSummary[]>("/skills");
 
   return (
@@ -53,27 +50,14 @@ export default function SkillsPage() {
               </EmptyState>
             );
           }
-          const shown = skills.filter((skill) =>
-            matchesQuery(search, skill.name, skill.summary, categoryLabel[skill.category], skill.category),
-          );
           return (
             <div className="space-y-3">
-              <p className="text-sm text-ink-secondary">
-                {shown.length === skills.length
-                  ? plural(skills.length, "skill")
-                  : `${shown.length} of ${plural(skills.length, "skill")} match “${search.trim()}”`}
-              </p>
-              {shown.length === 0 ? (
-                <EmptyState title="No skills match your search">
-                  Try a different word, or clear the search box above.
-                </EmptyState>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {shown.map((skill) => (
-                    <SkillCard key={skill.id} skill={skill} />
-                  ))}
-                </div>
-              )}
+              <p className="text-sm text-ink-secondary">{plural(skills.length, "skill")}</p>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {skills.map((skill) => (
+                  <SkillCard key={skill.id} skill={skill} />
+                ))}
+              </div>
             </div>
           );
         }}

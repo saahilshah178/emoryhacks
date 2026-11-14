@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 import { ErrorNote } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { Sidebar } from "@/nurse/components/layout/Sidebar";
@@ -9,13 +8,7 @@ import { TopNav } from "@/nurse/components/layout/TopNav";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-  const { flash, clearFlash, setSearch, overview, overviewError, reloadOverview } = useDashboard();
-
-  // The search box filters the page it is on, so a new page starts with it empty.
-  useEffect(() => {
-    setSearch("");
-  }, [pathname, setSearch]);
+  const { flash, clearFlash, overview, overviewError, reloadOverview } = useDashboard();
 
   return (
     <div className="flex min-h-screen flex-col bg-page">

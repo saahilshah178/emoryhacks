@@ -66,12 +66,6 @@ export function plural(count: number, one: string, many = `${one}s`) {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-export function matchesQuery(query: string, ...values: Array<string | number | null | undefined>) {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return values.some((value) => String(value ?? "").toLowerCase().includes(q));
-}
-
 export function percent(fraction: number | null | undefined, digits = 0) {
   if (fraction === null || fraction === undefined) return "–";
   return `${(fraction * 100).toFixed(digits)}%`;

@@ -2,36 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  BadgeCheck,
-  BookOpenCheck,
-  ClipboardList,
-  LayoutDashboard,
-  Settings,
-  ShieldAlert,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useDashboard } from "@/nurse/context/DashboardContext";
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: LucideIcon;
-  badge?: "pending" | "safety";
-  /** Other routes that belong to this item, e.g. a review opened from the pending list. */
-  also?: string[];
-};
-
-const nav: NavItem[] = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/dashboard/pending", label: "Pending reviews", icon: ClipboardList, badge: "pending", also: ["/dashboard/reviews"] },
-  { href: "/dashboard/caregivers", label: "Caregivers", icon: Users },
-  { href: "/dashboard/skills", label: "Skills", icon: BookOpenCheck },
-  { href: "/dashboard/verified", label: "Verified skills", icon: BadgeCheck },
-  { href: "/dashboard/safety", label: "Safety reports", icon: ShieldAlert, badge: "safety" },
-];
+import { primaryNav, settingsNav, type NavItem } from "@/nurse/nav";
 
 function under(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -49,12 +22,13 @@ export function Sidebar() {
     pending: overview?.counts.pending ?? 0,
     safety: overview?.counts.safety_flags ?? 0,
   };
-  const settingsActive = under(pathname, "/dashboard/settings");
+  const settingsActive = under(pathname, settingsNav.href);
+  const SettingsIcon = settingsNav.icon;
 
   return (
     <aside className="flex h-full w-[72px] shrink-0 flex-col overflow-y-auto bg-navy text-white lg:w-[248px]">
       <nav className="mt-3 flex flex-1 flex-col gap-1 px-2" aria-label="Clinical">
-        {nav.map((item) => {
+        {primaryNav.map((item) => {
           const active = isActive(pathname, item);
           const count = item.badge ? counts[item.badge] : 0;
           const Icon = item.icon;
@@ -90,8 +64,8 @@ export function Sidebar() {
 
       <div className="px-2 pb-4">
         <Link
-          href="/dashboard/settings"
-          title="Settings"
+          href={settingsNav.href}
+          title={settingsNav.label}
           aria-current={settingsActive ? "page" : undefined}
           className={cn(
             "relative flex h-11 items-center gap-3 rounded-[12px] px-3 text-sm transition-colors",
@@ -99,8 +73,8 @@ export function Sidebar() {
           )}
         >
           {settingsActive ? <span className="absolute bottom-2 left-0 top-2 w-0.5 rounded-full bg-teal" /> : null}
-          <Settings className={cn("h-[18px] w-[18px] shrink-0", settingsActive && "text-teal")} />
-          <span className="hidden lg:inline">Settings</span>
+          <SettingsIcon className={cn("h-[18px] w-[18px] shrink-0", settingsActive && "text-teal")} />
+          <span className="hidden lg:inline">{settingsNav.label}</span>
         </Link>
       </div>
     </aside>

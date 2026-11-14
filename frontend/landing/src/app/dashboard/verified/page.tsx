@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { Avatar, Card, CardBody, CardHeader, CardTitle, EmptyState, Loadable, Skeleton, StateBadge } from "@/components/ui";
-import { formatDateTime, matchesQuery } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
 import { aiAssessment } from "@/lib/status";
 import type { AttemptSummary } from "@/lib/types";
-import { useDashboard } from "@/nurse/context/DashboardContext";
 
 function reviewer(item: AttemptSummary) {
   if (!item.reviewer_name) return "";
@@ -15,7 +14,6 @@ function reviewer(item: AttemptSummary) {
 
 export default function VerifiedPage() {
   useTitle("Verified skills");
-  const { search } = useDashboard();
   const approved = useApi<AttemptSummary[]>("/attempts?state=approved");
 
   return (
@@ -30,28 +28,19 @@ export default function VerifiedPage() {
         reload={approved.reload}
         skeleton={<Skeleton className="h-72" />}
       >
-        {(all) => {
-          const rows = all.filter((item) =>
-            matchesQuery(search, item.caregiver_name, item.skill_name, reviewer(item), item.nurse_note),
-          );
+        {(rows) => {
           return (
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {rows.length === all.length
-                    ? `${all.length} approved ${all.length === 1 ? "competency" : "competencies"}`
-                    : `${rows.length} of ${all.length} approved competencies`}
+                  {rows.length} approved {rows.length === 1 ? "competency" : "competencies"}
                 </CardTitle>
               </CardHeader>
               <CardBody>
-                {all.length === 0 ? (
+                {rows.length === 0 ? (
                   <EmptyState title="No approved skills yet">
                     When you approve a caregiver&apos;s submission on its review page, it is recorded here with your
                     name and notes.
-                  </EmptyState>
-                ) : rows.length === 0 ? (
-                  <EmptyState title="No approvals match this search">
-                    Try a caregiver, skill or reviewer name.
                   </EmptyState>
                 ) : (
                   <div className="overflow-hidden rounded-[12px] border border-border">

@@ -5,22 +5,9 @@ import type { ReactNode } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { Avatar, StateBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import { formatDateTime, matchesQuery, plural, relativeTime } from "@/lib/format";
+import { formatDateTime, plural, relativeTime } from "@/lib/format";
 import { aiAssessment, flagTitle, reviewState } from "@/lib/status";
 import type { AttemptSummary } from "@/lib/types";
-import { useDashboard } from "@/nurse/context/DashboardContext";
-
-/** True when an attempt matches the top-bar search. Shared with the page that counts filters. */
-export function attemptMatches(search: string, item: AttemptSummary) {
-  return matchesQuery(
-    search,
-    item.caregiver_name,
-    item.caregiver_title,
-    item.skill_name,
-    item.ai_assessment ? aiAssessment[item.ai_assessment].label : null,
-    reviewState[item.review_state].label,
-  );
-}
 
 export function PendingReviewsTable({
   attempts,
@@ -33,9 +20,6 @@ export function PendingReviewsTable({
   /** Shown instead of the table when there is nothing to list at all. */
   empty?: ReactNode;
 }) {
-  const { search } = useDashboard();
-  const rows = attempts.filter((item) => attemptMatches(search, item));
-
   if (attempts.length === 0 && empty) return <>{empty}</>;
 
   // Below 1280px (and always in the compact version) the submitted time moves under the skill
@@ -61,14 +45,14 @@ export function PendingReviewsTable({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {attempts.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-10 text-center text-sm text-ink-secondary">
-                  No submissions match this search.
+                  No submissions to show.
                 </td>
               </tr>
             ) : null}
-            {rows.map((item) => {
+            {attempts.map((item) => {
               const href = `/dashboard/reviews/${item.id}`;
               const flagged = item.flag_count > 0;
               const flagNames = (item.flags ?? []).map((flag) => flagTitle(flag)).join("\n");

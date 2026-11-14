@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ChevronDown, LogOut, Search, Settings } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Settings } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Avatar } from "@/components/ui";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { relativeTime } from "@/lib/format";
+import { GlobalSearch } from "@/nurse/components/layout/GlobalSearch";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useAuth, useUser } from "@/shared/AuthProvider";
 import { Logo } from "@/shared/Logo";
@@ -23,15 +24,6 @@ const titles: Record<string, string> = {
   "/dashboard/settings": "Settings",
 };
 
-/** Pages whose lists filter themselves by the search box. Elsewhere the box would do nothing. */
-const searchable = new Set([
-  "/dashboard",
-  "/dashboard/pending",
-  "/dashboard/caregivers",
-  "/dashboard/verified",
-  "/dashboard/skills",
-]);
-
 function titleFor(pathname: string) {
   const path = pathname.replace(/\/+$/, "") || "/dashboard";
   if (titles[path]) return titles[path];
@@ -45,7 +37,7 @@ function titleFor(pathname: string) {
 
 export function TopNav() {
   const pathname = usePathname();
-  const { search, setSearch, overview, reloadOverview } = useDashboard();
+  const { overview, reloadOverview } = useDashboard();
   const { signOut } = useAuth();
   const user = useUser();
   const [menu, setMenu] = useState<"notifications" | "account" | null>(null);
@@ -61,7 +53,6 @@ export function TopNav() {
   const unread = overview?.unread ?? 0;
   const path = pathname.replace(/\/+$/, "") || "/dashboard";
   const title = titleFor(path);
-  const showSearch = searchable.has(path);
   const roleLine = [user.credentials, user.title].filter(Boolean).join(" · ") || "Nurse";
 
   useEffect(() => {
@@ -104,21 +95,9 @@ export function TopNav() {
       <span className="hidden h-6 w-px shrink-0 bg-border sm:block" aria-hidden />
       <h1 className="min-w-0 truncate text-lg font-semibold text-navy">{title}</h1>
 
-      {showSearch ? (
-        <label className="relative ml-auto hidden w-56 sm:block lg:w-72 xl:w-96">
-          <span className="sr-only">Search this page</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-secondary" />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search caregivers, skills, or submissions"
-            className="h-10 w-full rounded-[12px] border border-border bg-secondary pl-9 pr-3 text-sm text-ink outline-none placeholder:text-ink-secondary focus:border-teal focus:bg-white focus:ring-2 focus:ring-teal/20"
-          />
-        </label>
-      ) : null}
+      <GlobalSearch className="ml-auto hidden w-56 sm:block lg:w-72 xl:w-96" onOpen={() => setMenu(null)} />
 
-      <div className={cn("relative", showSearch ? "ml-auto sm:ml-0" : "ml-auto")} ref={notificationsRef}>
+      <div className="relative ml-auto sm:ml-0" ref={notificationsRef}>
         <button
           type="button"
           onClick={toggleNotifications}

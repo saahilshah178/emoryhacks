@@ -6,9 +6,8 @@ import { cn } from "@/lib/cn";
 import { plural } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
 import type { AiAssessment, AttemptSummary } from "@/lib/types";
-import { attemptMatches, PendingReviewsTable } from "@/nurse/components/dashboard/PendingReviewsTable";
+import { PendingReviewsTable } from "@/nurse/components/dashboard/PendingReviewsTable";
 import { ProcessingAttempts } from "@/nurse/components/dashboard/ProcessingAttempts";
-import { useDashboard } from "@/nurse/context/DashboardContext";
 
 type Filter = "all" | AiAssessment;
 
@@ -25,7 +24,6 @@ const REFRESH_MS = 15_000;
 
 export default function PendingPage() {
   useTitle("Pending reviews");
-  const { search } = useDashboard();
   const [filter, setFilter] = useState<Filter>("all");
   const pending = useApi<AttemptSummary[]>("/attempts?state=pending", { refreshMs: REFRESH_MS });
 
@@ -48,10 +46,9 @@ export default function PendingPage() {
         }
       >
         {(all) => {
-          const matching = all.filter((item) => attemptMatches(search, item));
           const count = (id: Filter) =>
-            id === "all" ? matching.length : matching.filter((item) => item.ai_assessment === id).length;
-          const rows = filter === "all" ? matching : matching.filter((item) => item.ai_assessment === filter);
+            id === "all" ? all.length : all.filter((item) => item.ai_assessment === id).length;
+          const rows = filter === "all" ? all : all.filter((item) => item.ai_assessment === filter);
           const active = filters.find((item) => item.id === filter) ?? filters[0];
 
           return (
@@ -86,10 +83,9 @@ export default function PendingPage() {
                       When a caregiver records a skill demonstration, it appears here once the AI has finished its
                       first read. This list refreshes on its own.
                     </EmptyState>
-                  ) : rows.length === 0 && matching.length > 0 ? (
+                  ) : rows.length === 0 ? (
                     <EmptyState title={`Nothing under “${active.label}”`}>
-                      None of the pending submissions{search.trim() ? " that match your search" : ""} have this AI
-                      assessment.
+                      None of the pending submissions have this AI assessment.
                     </EmptyState>
                   ) : (
                     <PendingReviewsTable attempts={rows} />

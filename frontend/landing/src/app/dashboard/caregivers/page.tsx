@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Avatar, Badge, Card, EmptyState, Loadable, ProgressBar, Skeleton, StateBadge } from "@/components/ui";
-import { formatDate, matchesQuery, plural, relativeTime } from "@/lib/format";
+import { formatDate, plural, relativeTime } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
 import { caregiverStatus } from "@/lib/status";
 import type { CaregiverRow } from "@/lib/types";
@@ -12,7 +12,7 @@ import { useUser } from "@/shared/AuthProvider";
 export default function CaregiversPage() {
   useTitle("Caregivers");
   const user = useUser();
-  const { search, overview } = useDashboard();
+  const { overview } = useDashboard();
   const roster = useApi<CaregiverRow[]>("/caregivers", { refreshMs: 30_000 });
   const agency = overview?.agency ?? user.org.name;
 
@@ -45,22 +45,9 @@ export default function CaregiversPage() {
               </EmptyState>
             );
           }
-          const rows = people.filter((person) =>
-            matchesQuery(
-              search,
-              person.name,
-              person.title,
-              person.email,
-              person.location,
-              caregiverStatus[person.status]?.label,
-            ),
-          );
-          if (rows.length === 0) {
-            return <EmptyState title="No caregivers match this search">Try a name, job title or location.</EmptyState>;
-          }
           return (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {rows.map((person) => (
+              {people.map((person) => (
                 <CaregiverCard key={person.id} person={person} />
               ))}
             </div>

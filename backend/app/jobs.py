@@ -129,11 +129,11 @@ def run_reference(job_id, slug: str | None = None, name: str | None = None) -> N
     (used when seeding known reference videos); the classifier still runs."""
     from .stages import classify, pose, rubric
 
-    job = repo.get_job(job_id)
-    video = repo.get_video(job["video_id"])
-    ctx = StageContext(job_id=job_id, video=video, slug_hint=slug)
-    track = Tracker(job_id, REFERENCE_STAGES)
-    try:
+    try:  # setup is inside the try so that a failure here marks the job instead of leaving it queued
+        job = repo.get_job(job_id)
+        video = repo.ensure_video_file(repo.get_video(job["video_id"]))
+        ctx = StageContext(job_id=job_id, video=video, slug_hint=slug)
+        track = Tracker(job_id, REFERENCE_STAGES)
         pose_future = _start_pose(ctx)
         track.run("gemini_upload", lambda: None if config.FAKE_AI else gemini.ensure_file(video))
         classification: Classification = track.run("classify", lambda: classify.run(ctx))
@@ -154,14 +154,14 @@ def run_attempt(job_id) -> None:
     """Run the caregiver-side pipeline for an attempt."""
     from .stages import evaluate, pose, scoring, timeline
 
-    job = repo.get_job(job_id)
-    video = repo.get_video(job["video_id"])
-    attempt = repo.get_attempt(job["attempt_id"])
-    skill = repo.get_skill(attempt["skill_id"])
-    rb = repo.get_rubric(attempt["skill_id"])
-    ctx = StageContext(job_id=job_id, video=video, skill=skill, attempt=attempt)
-    track = Tracker(job_id, ATTEMPT_STAGES)
-    try:
+    try:  # setup is inside the try so that a failure here marks the job instead of leaving it queued
+        job = repo.get_job(job_id)
+        video = repo.ensure_video_file(repo.get_video(job["video_id"]))
+        attempt = repo.get_attempt(job["attempt_id"])
+        skill = repo.get_skill(attempt["skill_id"])
+        rb = repo.get_rubric(attempt["skill_id"])
+        ctx = StageContext(job_id=job_id, video=video, skill=skill, attempt=attempt)
+        track = Tracker(job_id, ATTEMPT_STAGES)
         pose_future = _start_pose(ctx)
         track.run("gemini_upload", lambda: None if config.FAKE_AI else gemini.ensure_file(video))
 
@@ -211,6 +211,11 @@ def ingest(src_path: str, kind: str, original_name: str) -> dict:
     video_id = uuid.uuid4()
     dst = media.video_path(video_id)
     info = media.normalize(src_path, dst)
+    if info["duration_s"] < config.MIN_VIDEO_SECONDS:
+        dst.unlink(missing_ok=True)
+        raise media.MediaError(
+            f"That file is only {info['duration_s']:.1f} seconds long. Record at least "
+            f"{config.MIN_VIDEO_SECONDS:.0f} seconds of video.")
     return repo.create_video(kind, str(dst), original_name, info, video_id=video_id)
 
 

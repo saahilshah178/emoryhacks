@@ -102,6 +102,14 @@ def _video_or_404(video_id: str) -> dict:
     return video
 
 
+def _local_or_404(video: dict) -> dict:
+    """The video with its file present on this machine (rebuilt from reference_vids/ if it can be)."""
+    try:
+        return repo.ensure_video_file(video)
+    except media.MediaError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
 @router.get("/{video_id}")
 def get_video(video_id: str):
     return _video_or_404(video_id)
@@ -110,15 +118,13 @@ def get_video(video_id: str):
 @router.get("/{video_id}/file")
 def get_video_file(video_id: str):
     """The stored MP4. FileResponse answers Range requests with 206, which <video> needs to seek."""
-    video = _video_or_404(video_id)
-    if not Path(video["path"]).exists():
-        raise HTTPException(404, "Video file is missing on disk")
+    video = _local_or_404(_video_or_404(video_id))
     return FileResponse(video["path"], media_type="video/mp4")
 
 
 @router.get("/{video_id}/thumb")
 def get_thumbnail(video_id: str, t: float = 0.0):
-    video = _video_or_404(video_id)
+    video = _local_or_404(_video_or_404(video_id))
     t = max(0.0, min(float(t), max(0.0, float(video["duration_s"]) - 0.1)))
     out = config.THUMB_DIR / f"{video['id']}_{int(t * 10):06d}.jpg"
     if not out.exists():

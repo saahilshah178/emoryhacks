@@ -83,8 +83,12 @@ TMP_DIR = DATA_DIR / "tmp"
 MAX_UPLOAD_MB = int(_get("FIRSTSHIFT_MAX_UPLOAD_MB", "300"))
 
 # --- pose -----------------------------------------------------------------
-POSE_FPS = float(_get("POSE_FPS", "10"))
-POSE_MAX_FRAMES = int(_get("POSE_MAX_FRAMES", "1500"))
+# Pose is measured on every frame up to POSE_FPS, so a webcam attempt of up to about 100 s
+# at 30 fps has every frame stored. Longer videos are sampled down to POSE_MAX_FRAMES frames.
+POSE_FPS = float(_get("POSE_FPS", "30"))
+POSE_MAX_FRAMES = int(_get("POSE_MAX_FRAMES", "3000"))
+# Uploads shorter than this are rejected (a still image decodes as a one-frame video).
+MIN_VIDEO_SECONDS = float(_get("FIRSTSHIFT_MIN_VIDEO_SECONDS", "2"))
 POSE_ENABLED = _get("POSE_ENABLED", "1") == "1"
 
 

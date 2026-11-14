@@ -6,6 +6,8 @@ GET /api/jobs        most recent jobs
 """
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, HTTPException
 
 from .. import db, repo
@@ -21,9 +23,10 @@ def list_jobs(limit: int = 20):
 @router.get("/{job_id}")
 def get_job(job_id: str):
     try:
-        job = repo.get_job(job_id)
-    except Exception:
-        job = None
+        uuid.UUID(job_id)
+    except ValueError:
+        raise HTTPException(404, "Job not found") from None
+    job = repo.get_job(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
     return job

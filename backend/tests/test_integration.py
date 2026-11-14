@@ -100,3 +100,82 @@ def test_restart_only_fails_jobs_whose_process_is_gone(migrated):
     status = {j: repo.get_job(j)["status"] for j in (mine, other_live, other_dead)}
     assert status == {mine: "error", other_live: "queued", other_dead: "error"}
     db.execute("UPDATE jobs SET status='done' WHERE id=%s", (other_live,))
+
+
+def test_rebuild_keeps_graded_attempts_on_the_version_they_were_graded_against(migrated, sample_video):
+    import time
+
+    from fastapi.testclient import TestClient
+
+    from app import jobs
+    from app.main import app
+
+    ref = jobs.ingest(str(sample_video), "reference", sample_video.name)
+    job_id = repo.create_job("reference", ref["id"])
+    jobs.run_reference(job_id, slug="rebuild_demo", name="Rebuild demo")
+    skill_id = str(repo.get_job(job_id)["skill_id"])
+    video = jobs.ingest(str(sample_video), "attempt", "attempt.mp4")
+    attempt_id = repo.create_attempt(skill_id, video["id"], "Sam")
+    jobs.run_attempt(repo.create_job("attempt", video["id"], skill_id=skill_id, attempt_id=attempt_id))
+    before = [(s["step_id"], s["title"], s["status"]) for s in repo.get_attempt(attempt_id)["steps"]]
+
+    with TestClient(app) as client:
+        client.patch(f"/api/skills/{skill_id}/steps/s1", json={"title": "Edited before the rebuild"})
+        job = client.post(f"/api/skills/{skill_id}/regenerate").json()
+        for _ in range(240):
+            state = client.get(f"/api/jobs/{job['job_id']}").json()
+            if state["status"] in ("done", "error"):
+                break
+            time.sleep(0.25)
+        assert state["status"] == "done", state["error"]
+        listed = [s for s in client.get("/api/skills").json() if s["slug"] == "rebuild_demo"]
+        assert [s["id"] for s in listed] == [state["skill_id"]]  # only the newest version is listed
+        assert len([s for s in client.get("/api/skills?all=1").json() if s["slug"] == "rebuild_demo"]) == 2
+
+    after = repo.get_attempt(attempt_id)
+    assert str(after["skill_id"]) == skill_id
+    assert [(s["step_id"], s["status"]) for s in after["steps"]] == [(i, st) for i, _, st in before]
+    assert after["steps"][0]["title"] == "Edited before the rebuild"  # still the old version's steps
+
+
+def test_a_step_can_only_be_made_to_follow_earlier_steps(migrated, sample_video):
+    from fastapi.testclient import TestClient
+
+    from app import jobs
+    from app.main import app
+
+    ref = jobs.ingest(str(sample_video), "reference", sample_video.name)
+    job_id = repo.create_job("reference", ref["id"])
+    jobs.run_reference(job_id, slug="prereq_demo", name="Prereq demo")
+    skill_id = str(repo.get_job(job_id)["skill_id"])
+    with TestClient(app) as client:
+        ok = client.patch(f"/api/skills/{skill_id}/steps/s3", json={"must_follow": ["s1", "s2"]}).json()
+        assert ok["steps"][2]["must_follow"] == ["s1", "s2"] and ok["steps"][2]["order_dependent"] is True
+        assert client.patch(f"/api/skills/{skill_id}/steps/s2", json={"must_follow": ["s3"]}).status_code == 422
+        cleared = client.patch(f"/api/skills/{skill_id}/steps/s3", json={"must_follow": []}).json()
+        assert cleared["steps"][2]["must_follow"] == [] and cleared["steps"][2]["order_dependent"] is False
+
+
+def test_a_reference_video_missing_on_this_machine_is_rebuilt_from_the_repository(migrated, sample_video):
+    from pathlib import Path
+
+    from app import db, jobs
+
+    video = jobs.ingest(str(sample_video), "reference", sample_video.name)
+    Path(video["path"]).unlink()
+    db.execute("UPDATE videos SET path='/somewhere/else/on/another/laptop.mp4' WHERE id=%s", (video["id"],))
+    fixed = repo.ensure_video_file(repo.get_video(video["id"]))
+    assert Path(fixed["path"]).exists() and repo.get_video(video["id"])["path"] == fixed["path"]
+
+    other = jobs.ingest(str(sample_video), "attempt", "recorded-elsewhere.webm")
+    Path(other["path"]).unlink()
+    with pytest.raises(media.MediaError, match="another machine"):
+        repo.ensure_video_file(repo.get_video(other["id"]))
+
+
+def test_a_still_image_is_rejected_as_too_short(migrated, sample_video, tmp_path):
+    from app import jobs
+
+    still = media.thumbnail(sample_video, 5, tmp_path / "photo.jpg")
+    with pytest.raises(media.MediaError, match="seconds"):
+        jobs.ingest(str(still), "attempt", "photo.jpg")

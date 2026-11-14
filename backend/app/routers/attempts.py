@@ -6,6 +6,8 @@ GET /api/attempts/{id}        attempt with steps (rubric joined to results), ord
 """
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, HTTPException
 
 from .. import repo
@@ -21,9 +23,10 @@ def list_attempts(skill_id: str | None = None):
 @router.get("/{attempt_id}")
 def get_attempt(attempt_id: str):
     try:
-        attempt = repo.get_attempt(attempt_id)
-    except Exception:
-        attempt = None
+        uuid.UUID(attempt_id)
+    except ValueError:
+        raise HTTPException(404, "Attempt not found") from None
+    attempt = repo.get_attempt(attempt_id)
     if not attempt:
         raise HTTPException(404, "Attempt not found")
     return attempt

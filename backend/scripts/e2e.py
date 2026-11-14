@@ -39,10 +39,7 @@ DEFAULT_WRONG = "glove_removal"
 
 
 def latest_skills() -> dict[str, dict]:
-    out: dict[str, dict] = {}
-    for row in repo.list_skills():  # ordered by name, then version descending
-        out.setdefault(row["slug"], row)
-    return out
+    return {row["slug"]: row for row in repo.list_skills()}  # newest version of each skill
 
 
 def _last_step_end(skill: dict) -> float:

@@ -178,7 +178,12 @@ def test_skills_api_edit_and_regenerate(migrated, sample_video):
         job = _wait(client, started.json()["job_id"])
         assert job["status"] == "done", job["error"]
         assert [s["name"] for s in job["stages"]] == ["gemini_upload", "rubric"]
-        rebuilt = client.get(f"/api/skills/{skill_id}").json()
-        assert rebuilt["steps"][1]["title"] != "Feet back"  # the canned rubric replaced the edit
+        new_id = job["skill_id"]
+        assert new_id != skill_id  # a rebuild is stored as a new version
+        rebuilt = client.get(f"/api/skills/{new_id}").json()
+        assert rebuilt["version"] == skill["version"] + 1
+        assert rebuilt["steps"][1]["title"] != "Feet back"  # the canned rubric, not the edited one
         assert rebuilt["name"] == "Sit to stand, assisted"  # skill identity is kept
+        old = client.get(f"/api/skills/{skill_id}").json()
+        assert old["steps"][1]["title"] == "Feet back" and old["latest_id"] == new_id  # the old version is untouched
         assert client.post("/api/skills/00000000-0000-0000-0000-000000000000/regenerate").status_code == 404

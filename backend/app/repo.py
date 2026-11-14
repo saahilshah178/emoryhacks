@@ -9,10 +9,12 @@ from __future__ import annotations
 import datetime as dt
 import os
 import socket
+import threading
 import uuid
+from pathlib import Path
 from typing import Any, Iterable
 
-from . import db
+from . import config, db, media
 from .models import (
     Classification, Evaluation, PersonObs, Rubric, RubricStep, SafetyFlag, Score, StepEval, Timeline,
 )
@@ -42,6 +44,35 @@ def create_video(kind: str, path: str, original_name: str, info: dict, video_id:
 
 def get_video(video_id) -> dict | None:
     return db.fetch_one("SELECT * FROM videos WHERE id=%s", (video_id,))
+
+
+_file_locks: dict[str, threading.Lock] = {}
+_file_locks_guard = threading.Lock()
+
+
+def ensure_video_file(video: dict) -> dict:
+    """Make sure the video's MP4 exists on this machine and return the row with a usable path.
+
+    The database is shared (Tiger Cloud) but video files live on the machine that ingested
+    them. A teammate's checkout therefore has the rows without the files. Reference videos
+    can be rebuilt from reference_vids/, which is in the repository; anything else recorded
+    on another machine cannot, and raises media.MediaError saying so."""
+    if Path(video["path"]).exists():
+        return video
+    with _file_locks_guard:
+        lock = _file_locks.setdefault(str(video["id"]), threading.Lock())
+    with lock:
+        local = media.video_path(video["id"])
+        if not local.exists():
+            source = config.REFERENCE_DIR / (video.get("original_name") or "")
+            if not (video.get("original_name") and source.is_file()):
+                raise media.MediaError(
+                    "This video was recorded on another machine and its file is not on this one.")
+            config.ensure_dirs()
+            media.normalize(source, local)
+        db.execute("UPDATE videos SET path=%s WHERE id=%s", (str(local), video["id"]))
+        video["path"] = str(local)
+    return video
 
 
 # --- skills ---------------------------------------------------------------
@@ -86,13 +117,16 @@ def replace_rubric(skill_id, rubric: Rubric) -> None:
         _insert_steps(conn, skill_id, rubric.steps)
 
 
-def list_skills() -> list[dict]:
+def list_skills(all_versions: bool = False) -> list[dict]:
+    """Skills, newest version of each by default. Rebuilding a rubric adds a version."""
+    newest = "" if all_versions else "WHERE s.version = (SELECT max(version) FROM skills x WHERE x.slug = s.slug)"
     return db.fetch_all(
-        """SELECT s.id, s.slug, s.name, s.category, s.summary, s.version, s.order_matters,
+        f"""SELECT s.id, s.slug, s.name, s.category, s.summary, s.version, s.order_matters,
                   s.reference_video_id, s.created_at, v.duration_s,
                   (SELECT count(*) FROM skill_steps st WHERE st.skill_id = s.id) AS step_count,
                   (SELECT count(*) FROM attempts a WHERE a.skill_id = s.id) AS attempt_count
            FROM skills s LEFT JOIN videos v ON v.id = s.reference_video_id
+           {newest}
            ORDER BY s.name, s.version DESC"""
     )
 
@@ -103,6 +137,8 @@ def get_skill(skill_id) -> dict | None:
         return None
     skill["steps"] = db.fetch_all("SELECT * FROM skill_steps WHERE skill_id=%s ORDER BY ord", (skill_id,))
     skill["video"] = get_video(skill["reference_video_id"]) if skill["reference_video_id"] else None
+    newest = db.fetch_one("SELECT id FROM skills WHERE slug=%s ORDER BY version DESC LIMIT 1", (skill["slug"],))
+    skill["latest_id"] = newest["id"]
     return skill
 
 
@@ -137,7 +173,7 @@ def patch_step(skill_id, step_id: str, fields: dict[str, Any]) -> int:
     allowed = {"title", "description", "critical", "order_dependent", "must_follow", "start_s", "end_s", "evals"}
     sets, params = [], []
     for key, value in fields.items():
-        if key in allowed and value is not None:
+        if key in allowed and value is not None:  # an empty must_follow list clears the prerequisites
             sets.append(f"{key}=%s")
             params.append(db.J(value) if key in ("evals", "must_follow") else value)
     if not sets:
@@ -233,8 +269,10 @@ def get_flags(attempt_id) -> list[SafetyFlag]:
 
 
 def save_score(attempt_id, score: Score) -> None:
+    """Store the AI result. A nurse who reviewed while the job was still running keeps the last word."""
     db.execute(
-        "UPDATE attempts SET status=%s, score_pct=%s, reasons=%s, needs_review=%s WHERE id=%s",
+        "UPDATE attempts SET status=%s, score_pct=%s, reasons=%s, "
+        "needs_review = (%s AND reviewed_at IS NULL) WHERE id=%s",
         (score.overall, score.score_pct, db.J(score.reasons), score.needs_nurse_review, attempt_id),
     )
 

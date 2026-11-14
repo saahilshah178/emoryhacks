@@ -216,7 +216,7 @@ def test_extract_real_mediapipe_on_a_short_clip(migrated, tmp_path, monkeypatch)
     video = jobs.ingest(str(clip), "attempt", "clip.mp4")
     monkeypatch.setattr(config, "FAKE_AI", False)
     summary = pose.extract(jobs.StageContext(job_id=None, video=video))
-    assert summary.sample_fps == pytest.approx(10, abs=0.5)
+    assert summary.sample_fps == pytest.approx(min(config.POSE_FPS, 29.97), abs=0.5)  # every frame of a short clip
     assert summary.tracks >= 1 and summary.frames_written >= 40
     stored = db.fetch_one("""SELECT count(*) AS n, count(*) FILTER (WHERE valid) AS valid,
                                     avg(trunk_tilt) AS tilt, count(l_knee) AS knees

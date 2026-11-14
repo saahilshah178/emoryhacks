@@ -9,7 +9,7 @@ import { PendingReviewsTable } from "@/nurse/components/dashboard/PendingReviews
 import { ProcessingAttempts } from "@/nurse/components/dashboard/ProcessingAttempts";
 import { RecentActivity } from "@/nurse/components/dashboard/RecentActivity";
 import { SafetyOverview } from "@/nurse/components/dashboard/SafetyOverview";
-import { PageHeading } from "@/nurse/components/layout/PageHeading";
+import { PageHeading } from "@/shared/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useUser } from "@/shared/AuthProvider";
 import { APP_NAME } from "@/shared/brand";

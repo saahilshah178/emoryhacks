@@ -8,7 +8,7 @@ import { useApi, useTitle } from "@/lib/hooks";
 import type { AiAssessment, AttemptSummary } from "@/lib/types";
 import { PendingReviewsTable } from "@/nurse/components/dashboard/PendingReviewsTable";
 import { ProcessingAttempts } from "@/nurse/components/dashboard/ProcessingAttempts";
-import { PageHeading } from "@/nurse/components/layout/PageHeading";
+import { PageHeading } from "@/shared/layout/PageHeading";
 
 type Filter = "all" | AiAssessment;
 

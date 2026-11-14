@@ -2,7 +2,7 @@
 
 import { useTitle } from "@/lib/hooks";
 import { SafetyOverview } from "@/nurse/components/dashboard/SafetyOverview";
-import { PageHeading } from "@/nurse/components/layout/PageHeading";
+import { PageHeading } from "@/shared/layout/PageHeading";
 import { MovementTable } from "@/nurse/components/safety/MovementTable";
 import { OpenIssues } from "@/nurse/components/safety/OpenIssues";
 import { StoragePanel } from "@/nurse/components/safety/StoragePanel";

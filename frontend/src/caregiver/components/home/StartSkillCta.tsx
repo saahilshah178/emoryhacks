@@ -25,17 +25,19 @@ export function StartSkillCta({ skill }: { skill: MySkill }) {
           </p>
         </div>
       </div>
-      <Button href={practiceHref(skill.id)} className="mt-5 w-full" size="xl">
-        Start a skill check
-      </Button>
-      {again && skill.attempt_id ? (
-        <Link
-          href={resultsHref(skill.id, skill.attempt_id)}
-          className="mt-3 block rounded-[12px] py-2 text-center text-sm font-semibold text-white/90 underline-offset-4 hover:underline"
-        >
-          Read your nurse&apos;s feedback
-        </Link>
-      ) : null}
+      <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:gap-5">
+        <Button href={practiceHref(skill.id)} className="w-full xl:w-auto" size="xl">
+          Start a skill check
+        </Button>
+        {again && skill.attempt_id ? (
+          <Link
+            href={resultsHref(skill.id, skill.attempt_id)}
+            className="block rounded-[12px] py-2 text-center text-sm font-semibold text-white/90 underline-offset-4 hover:underline"
+          >
+            Read your nurse&apos;s feedback
+          </Link>
+        ) : null}
+      </div>
     </section>
   );
 }

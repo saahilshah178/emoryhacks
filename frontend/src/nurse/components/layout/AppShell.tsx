@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { ErrorNote } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import { RAIL_WIDTH, SCREEN_CORNER, SCREEN_INSET } from "@/nurse/components/layout/chrome";
+import { RAIL_WIDTH, SCREEN_CORNER, SCREEN_INSET } from "@/shared/layout/chrome";
 import { Sidebar } from "@/nurse/components/layout/Sidebar";
 import { TopNav } from "@/nurse/components/layout/TopNav";
 import { useDashboard } from "@/nurse/context/DashboardContext";

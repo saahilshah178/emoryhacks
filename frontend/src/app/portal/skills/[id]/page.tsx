@@ -27,7 +27,7 @@ export default function SkillCheckPage() {
       <div className="space-y-4 py-6">
         <h1 className="text-xl font-semibold text-navy">We couldn&apos;t open this skill</h1>
         <ErrorNote message={error} onRetry={reload} />
-        <Button href="/portal/skills" variant="secondary" size="lg" className="w-full">
+        <Button href="/portal/skills" variant="secondary" size="lg" className="w-full lg:w-auto">
           Back to my skills
         </Button>
       </div>

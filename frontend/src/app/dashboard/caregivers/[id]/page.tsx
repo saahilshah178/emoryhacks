@@ -22,8 +22,8 @@ import { firstName, formatDate, formatDateTime, plural, relativeTime } from "@/l
 import { useApi, useTitle } from "@/lib/hooks";
 import { aiAssessment, caregiverStatus, categoryLabel, reviewState, skillState } from "@/lib/status";
 import type { CaregiverDetail } from "@/lib/types";
-import { BackLink } from "@/nurse/components/layout/BackLink";
-import { PageHeading } from "@/nurse/components/layout/PageHeading";
+import { BackLink } from "@/shared/layout/BackLink";
+import { PageHeading } from "@/shared/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 
 export default function CaregiverPage() {

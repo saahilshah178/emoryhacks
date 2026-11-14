@@ -3,21 +3,12 @@
 import { Suspense } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Video } from "lucide-react";
-import { Button, Card, ErrorNote, Skeleton } from "@/components/ui";
-import { AssessmentResults } from "@/caregiver/components/results/AssessmentResults";
+import { Button, Card, ErrorNote } from "@/components/ui";
+import { BackToSkills } from "@/caregiver/components/layout/PortalHeading";
+import { AssessmentResults, ResultsSkeleton } from "@/caregiver/components/results/AssessmentResults";
 import { useCaregiver } from "@/caregiver/context/CaregiverContext";
 import { practiceHref } from "@/caregiver/skills";
 import { useTitle } from "@/lib/hooks";
-
-function ResultsSkeleton() {
-  return (
-    <div className="space-y-4">
-      <Skeleton className="h-20" />
-      <Skeleton className="aspect-video" />
-      <Skeleton className="h-40" />
-    </div>
-  );
-}
 
 /** ?attempt=<id> shows that attempt; without it, the attempt behind this skill's current state. */
 function Results() {
@@ -35,8 +26,9 @@ function Results() {
   }
 
   return (
-    <div className="space-y-5 py-4">
-      <Card className="flex flex-col items-center p-6 text-center">
+    <div className="space-y-5 py-4 lg:py-0">
+      <BackToSkills />
+      <Card className="flex flex-col items-center p-6 text-center lg:py-10">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-soft text-teal">
           <Video className="h-6 w-6" aria-hidden />
         </span>
@@ -47,13 +39,13 @@ function Results() {
             : "We couldn't find this skill in your list. Pick one from My skills to get started."}
         </p>
       </Card>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:justify-center">
         {skill ? (
-          <Button href={practiceHref(skill.id)} size="xl" className="w-full">
+          <Button href={practiceHref(skill.id)} size="xl" className="w-full lg:w-auto">
             Start practice
           </Button>
         ) : null}
-        <Button href="/portal/skills" variant="secondary" size="lg" className="w-full">
+        <Button href="/portal/skills" variant="secondary" size="lg" className="w-full lg:min-h-14 lg:w-auto">
           Back to my skills
         </Button>
       </div>

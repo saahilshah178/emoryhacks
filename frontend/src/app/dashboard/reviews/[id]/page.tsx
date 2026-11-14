@@ -9,8 +9,8 @@ import { formatDateTime } from "@/lib/format";
 import { useApi, useJob, useTitle } from "@/lib/hooks";
 import { aiAssessment, reviewState } from "@/lib/status";
 import type { Attempt } from "@/lib/types";
-import { BackLink } from "@/nurse/components/layout/BackLink";
-import { PageHeading } from "@/nurse/components/layout/PageHeading";
+import { BackLink } from "@/shared/layout/BackLink";
+import { PageHeading } from "@/shared/layout/PageHeading";
 import { ReviewWorkspace } from "@/nurse/components/review/ReviewWorkspace";
 
 export default function SkillReviewPage() {

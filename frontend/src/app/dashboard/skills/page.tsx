@@ -5,7 +5,7 @@ import { Button, EmptyState, Loadable, Skeleton } from "@/components/ui";
 import { plural } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
 import type { SkillSummary } from "@/lib/types";
-import { PageHeading } from "@/nurse/components/layout/PageHeading";
+import { PageHeading } from "@/shared/layout/PageHeading";
 import { SkillCard } from "@/nurse/components/skills/SkillCard";
 
 export default function SkillsPage() {

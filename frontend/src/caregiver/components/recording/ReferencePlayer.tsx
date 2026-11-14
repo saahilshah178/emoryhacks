@@ -2,6 +2,7 @@
 
 import { Play, RotateCcw, Video } from "lucide-react";
 import { Button, Card } from "@/components/ui";
+import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
 import { VideoFrame } from "@/components/media/VideoFrame";
 import { StepChecklist } from "@/caregiver/components/recording/StepChecklist";
 import { useVideoSegments } from "@/lib/segment";
@@ -18,60 +19,71 @@ export function ReferencePlayer({
 }) {
   const player = useVideoSegments();
   const available = Boolean(skill.video?.available);
+  // Shown once: under the video on a laptop, after the steps on a phone.
+  const actions = (
+    <>
+      <Button onClick={onContinue} className="w-full" size="xl">
+        I&apos;m ready to record
+      </Button>
+      <Button variant="ghost" size="lg" onClick={onBack} className="w-full">
+        Back
+      </Button>
+    </>
+  );
 
   return (
     <div className="space-y-5">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-wide text-teal">Reference demonstration</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-navy">
-          {available ? "Watch it once, then try it" : "Read the steps, then try it"}
-        </h1>
-        <p className="mt-1 text-sm text-ink-secondary">
-          {available
+      <PortalHeading
+        eyebrow="Reference demonstration"
+        title={available ? "Watch it once, then try it" : "Read the steps, then try it"}
+        description={
+          available
             ? `This is your nurse's example of ${skill.name.toLowerCase()}.`
-            : `These are the steps your nurse expects for ${skill.name.toLowerCase()}.`}
-        </p>
-      </header>
-
-      <VideoFrame
-        video={skill.video}
-        videoRef={player.ref}
-        missing={
-          <>
-            <Video className="h-8 w-8 text-teal" aria-hidden />
-            <p className="text-sm text-white/80">
-              {skill.video ? "The demonstration video isn't available right now." : "Demonstration coming soon"}
-            </p>
-          </>
+            : `These are the steps your nurse expects for ${skill.name.toLowerCase()}.`
         }
       />
 
-      {available ? (
-        <Button variant="secondary" size="lg" className="w-full" onClick={() => player.play(0)}>
-          {player.playing || player.time > 0 ? (
-            <RotateCcw className="h-4 w-4" aria-hidden />
-          ) : (
-            <Play className="h-4 w-4" aria-hidden />
-          )}
-          {player.playing || player.time > 0 ? "Replay the demonstration" : "Play the demonstration"}
-        </Button>
-      ) : null}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
+        {/* On a laptop the video stays in view while the steps beside it scroll. */}
+        <div className="space-y-5 lg:sticky lg:top-20">
+          <VideoFrame
+            video={skill.video}
+            videoRef={player.ref}
+            missing={
+              <>
+                <Video className="h-8 w-8 text-teal" aria-hidden />
+                <p className="text-sm text-white/80">
+                  {skill.video ? "The demonstration video isn't available right now." : "Demonstration coming soon"}
+                </p>
+              </>
+            }
+          />
 
-      <Card className="p-4">
-        <StepChecklist
-          steps={skill.steps}
-          orderMatters={skill.order_matters}
-          onPlay={available ? player.play : undefined}
-        />
-      </Card>
+          {available ? (
+            <Button variant="secondary" size="lg" className="w-full" onClick={() => player.play(0)}>
+              {player.playing || player.time > 0 ? (
+                <RotateCcw className="h-4 w-4" aria-hidden />
+              ) : (
+                <Play className="h-4 w-4" aria-hidden />
+              )}
+              {player.playing || player.time > 0 ? "Replay the demonstration" : "Play the demonstration"}
+            </Button>
+          ) : null}
 
-      <div className="flex flex-col gap-3">
-        <Button onClick={onContinue} className="w-full" size="xl">
-          I&apos;m ready to record
-        </Button>
-        <Button variant="ghost" size="lg" onClick={onBack} className="w-full">
-          Back
-        </Button>
+          <div className="hidden flex-col gap-3 lg:flex">{actions}</div>
+        </div>
+
+        <div className="space-y-5">
+          <Card className="p-4 lg:p-5">
+            <StepChecklist
+              steps={skill.steps}
+              orderMatters={skill.order_matters}
+              onPlay={available ? player.play : undefined}
+            />
+          </Card>
+
+          <div className="flex flex-col gap-3 lg:hidden">{actions}</div>
+        </div>
       </div>
     </div>
   );

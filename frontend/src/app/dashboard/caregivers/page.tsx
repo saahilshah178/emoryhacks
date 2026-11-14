@@ -6,7 +6,7 @@ import { formatDate, plural, relativeTime } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
 import { caregiverStatus } from "@/lib/status";
 import type { CaregiverRow } from "@/lib/types";
-import { PageHeading } from "@/nurse/components/layout/PageHeading";
+import { PageHeading } from "@/shared/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useUser } from "@/shared/AuthProvider";
 

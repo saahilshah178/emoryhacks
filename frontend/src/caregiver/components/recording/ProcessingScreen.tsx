@@ -44,7 +44,7 @@ export function ProcessingScreen({
 
   if (failed) {
     return (
-      <div className="space-y-5 py-4">
+      <div className="mx-auto max-w-xl space-y-5 py-4">
         <div className="flex flex-col items-center text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-danger-bg text-danger">
             <CircleAlert className="h-6 w-6" aria-hidden />

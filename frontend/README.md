@@ -38,4 +38,5 @@ Where things are:
 | `src/components/ui`, `src/components/media` | The one UI kit, and the video / time-range / job-progress pieces |
 | `src/shared` | Auth provider, login form, role gate, logo, public pages |
 | `src/nurse`, `src/app/dashboard` | Nurse dashboard |
-| `src/caregiver`, `src/app/portal` | Caregiver portal |
+| `src/shared/layout` | What both portals' frames are built from: the rail, the account menu, the page heading, the back link |
+| `src/caregiver`, `src/app/portal` | Caregiver portal. A phone gets one narrow column with the pages along the bottom; from the `lg` width (1024px) it uses the dashboard's frame and lays each page out in columns. |

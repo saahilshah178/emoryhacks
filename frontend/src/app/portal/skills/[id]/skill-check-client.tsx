@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BackToSkills } from "@/caregiver/components/layout/PortalHeading";
 import { CameraStage } from "@/caregiver/components/recording/CameraStage";
 import { ProcessingScreen } from "@/caregiver/components/recording/ProcessingScreen";
 import { ReferencePlayer } from "@/caregiver/components/recording/ReferencePlayer";
@@ -9,6 +10,7 @@ import { ReviewScreen } from "@/caregiver/components/recording/ReviewScreen";
 import { SkillIntro } from "@/caregiver/components/recording/SkillIntro";
 import { useCaregiver } from "@/caregiver/context/CaregiverContext";
 import { resultsHref } from "@/caregiver/skills";
+import { cn } from "@/lib/cn";
 import { errorMessage, uploadVideo } from "@/lib/api";
 import type { Recording } from "@/lib/recorder";
 import type { Job, MySkill, Skill } from "@/lib/types";
@@ -29,14 +31,19 @@ function WizardProgress({ step }: { step: Step }) {
   const current = stepOrder.indexOf(step);
 
   return (
-    <ol className="mb-5 flex items-center gap-2" aria-label="Skill check steps">
+    <ol className="mb-5 flex items-start gap-2 lg:gap-3" aria-label="Skill check steps">
       {stepOrder.map((item, index) => (
-        <li
-          key={item}
-          aria-current={index === current ? "step" : undefined}
-          className={`h-1.5 flex-1 rounded-full ${index <= current ? "bg-teal" : "bg-secondary"}`}
-        >
-          <span className="sr-only">{stepNames[item]}</span>
+        <li key={item} aria-current={index === current ? "step" : undefined} className="flex-1">
+          <span className={cn("block h-1.5 rounded-full", index <= current ? "bg-teal" : "bg-secondary")} />
+          {/* A laptop has room to name the steps; a phone shows the bars alone. */}
+          <span
+            className={cn(
+              "sr-only lg:not-sr-only lg:mt-2 lg:block lg:text-xs lg:font-medium",
+              index === current ? "lg:text-teal" : index < current ? "lg:text-ink" : "lg:text-ink-muted",
+            )}
+          >
+            {index + 1}. {stepNames[item]}
+          </span>
         </li>
       ))}
     </ol>
@@ -152,6 +159,9 @@ export function SkillCheckClient({ skill, standing }: { skill: Skill; standing: 
 
   return (
     <div>
+      <div className="lg:mb-5">
+        <BackToSkills />
+      </div>
       <WizardProgress step={step} />
       {body}
     </div>

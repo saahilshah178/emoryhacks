@@ -1,4 +1,5 @@
 import { Card, ProgressBar } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import type { MySkills } from "@/lib/types";
 
 function waitingLine(counts: MySkills["counts"]) {
@@ -18,9 +19,10 @@ function waitingLine(counts: MySkills["counts"]) {
   return parts.length > 0 ? parts.join(" ") : "Nothing waiting on a nurse right now.";
 }
 
-export function ProgressOverview({ counts }: { counts: MySkills["counts"] }) {
+/** Where the caregiver stands, on one card. The phone version of ProgressTiles. */
+export function ProgressOverview({ counts, className }: { counts: MySkills["counts"]; className?: string }) {
   return (
-    <Card className="p-5">
+    <Card className={cn("p-5", className)}>
       <p className="text-2xl font-semibold tracking-tight text-navy tabular-nums">
         {counts.verified} of {counts.total}{" "}
         <span className="text-base font-medium text-ink-secondary">skills verified</span>

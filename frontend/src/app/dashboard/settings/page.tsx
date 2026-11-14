@@ -17,7 +17,7 @@ import {
 import { api, errorMessage } from "@/lib/api";
 import { useApi, useTitle } from "@/lib/hooks";
 import type { Health, Prefs, User } from "@/lib/types";
-import { PageHeading } from "@/nurse/components/layout/PageHeading";
+import { PageHeading } from "@/shared/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useAuth, useUser } from "@/shared/AuthProvider";
 import { APP_NAME } from "@/shared/brand";

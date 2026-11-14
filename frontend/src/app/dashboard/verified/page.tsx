@@ -6,7 +6,7 @@ import { formatDateTime } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
 import { aiAssessment } from "@/lib/status";
 import type { AttemptSummary } from "@/lib/types";
-import { PageHeading } from "@/nurse/components/layout/PageHeading";
+import { PageHeading } from "@/shared/layout/PageHeading";
 
 function reviewer(item: AttemptSummary) {
   if (!item.reviewer_name) return "";

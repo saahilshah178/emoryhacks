@@ -21,8 +21,8 @@ import { errorMessage, uploadVideo } from "@/lib/api";
 import { useApi, useJob, useTitle } from "@/lib/hooks";
 import { useRecorder } from "@/lib/recorder";
 import type { Job, Skill } from "@/lib/types";
-import { BackLink } from "@/nurse/components/layout/BackLink";
-import { PageHeading } from "@/nurse/components/layout/PageHeading";
+import { BackLink } from "@/shared/layout/BackLink";
+import { PageHeading } from "@/shared/layout/PageHeading";
 import { ReferenceRecorder } from "@/nurse/components/skills/ReferenceRecorder";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 

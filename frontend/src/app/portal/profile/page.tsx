@@ -3,6 +3,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Building2, CalendarClock, Mail, Pencil, ShieldCheck } from "lucide-react";
 import { Avatar, Button, Card, ErrorNote, Field, Input, ProgressBar, Skeleton } from "@/components/ui";
+import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
 import { useCaregiver } from "@/caregiver/context/CaregiverContext";
 import { practiceHref, recommendedSkill } from "@/caregiver/skills";
 import { api, errorMessage } from "@/lib/api";
@@ -83,66 +84,79 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-5">
-      {editing ? (
-        <Card className="p-5">
-          <NameEditor user={user} onDone={() => setEditing(false)} />
-        </Card>
-      ) : (
-        <header className="flex items-center gap-4">
-          <Avatar name={user.name} size="xl" />
-          <div className="min-w-0 flex-1">
-            <h1 className="break-words text-2xl font-semibold tracking-tight text-navy">{user.name}</h1>
-            {user.title ? <p className="text-sm text-ink-secondary">{user.title}</p> : null}
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => setEditing(true)} className="h-10 shrink-0">
-            <Pencil className="h-4 w-4" aria-hidden />
-            Edit name
-          </Button>
-        </header>
-      )}
+      <PortalHeading title="Profile" description="Your details and how far along you are." />
 
-      <Card className="space-y-4 p-5">
-        <Row icon={Building2} label="Agency">
-          <p className="text-sm font-medium text-navy">{user.org.name}</p>
-        </Row>
-        <Row icon={Mail} label="Email">
-          <p className="break-all text-sm font-medium text-navy">{user.email}</p>
-        </Row>
-        {user.next_shift ? (
-          <Row icon={CalendarClock} label="Next shift">
-            <p className="text-sm font-medium text-navy">{user.next_shift}</p>
-          </Row>
-        ) : null}
-        <Row icon={ShieldCheck} label="Skills verified">
-          {counts ? (
-            <>
-              <p className="text-sm font-medium tabular-nums text-navy">
-                {counts.verified} of {counts.total}
-                {counts.in_review > 0 ? ` · ${counts.in_review} with a nurse` : ""}
-              </p>
-              <ProgressBar className="mt-2" value={counts.verified} max={counts.total} label="Skills verified" />
-            </>
-          ) : error ? (
-            <ErrorNote className="mt-1" message={error} onRetry={reload} />
+      {/* One column on a phone; on a laptop, who you are on the left and your progress on the right. */}
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+        <div className="space-y-5">
+          {editing ? (
+            <Card className="p-5">
+              <NameEditor user={user} onDone={() => setEditing(false)} />
+            </Card>
           ) : (
-            <Skeleton className="mt-1 h-8" />
+            // A card on a laptop; on a phone it sits straight on the page, which leaves the name more room.
+            <div className="flex items-center gap-4 lg:rounded-[12px] lg:border lg:border-border lg:bg-white lg:p-5 lg:shadow-[var(--shadow-card)]">
+              <Avatar name={user.name} size="xl" />
+              <div className="min-w-0 flex-1">
+                <h2 className="break-words text-xl font-semibold tracking-tight text-navy">{user.name}</h2>
+                {user.title ? <p className="text-sm text-ink-secondary">{user.title}</p> : null}
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setEditing(true)} className="h-10 shrink-0">
+                <Pencil className="h-4 w-4" aria-hidden />
+                Edit name
+              </Button>
+            </div>
           )}
-        </Row>
-      </Card>
 
-      <div className="rounded-[12px] border border-border shadow-[var(--shadow-card)] bg-teal-soft p-5">
-        <p className="text-sm leading-relaxed text-navy">
-          {APP_NAME} is here to help you feel ready, not to test you. A nurse always makes the final call on every
-          skill.
-        </p>
+          <Card className="space-y-4 p-5">
+            <Row icon={Building2} label="Agency">
+              <p className="text-sm font-medium text-navy">{user.org.name}</p>
+            </Row>
+            <Row icon={Mail} label="Email">
+              <p className="break-all text-sm font-medium text-navy">{user.email}</p>
+            </Row>
+            {user.next_shift ? (
+              <Row icon={CalendarClock} label="Next shift">
+                <p className="text-sm font-medium text-navy">{user.next_shift}</p>
+              </Row>
+            ) : null}
+          </Card>
+        </div>
+
+        <div className="space-y-5">
+          <Card className="p-5">
+            <Row icon={ShieldCheck} label="Skills verified">
+              {counts ? (
+                <>
+                  <p className="text-sm font-medium tabular-nums text-navy">
+                    {counts.verified} of {counts.total}
+                    {counts.in_review > 0 ? ` · ${counts.in_review} with a nurse` : ""}
+                  </p>
+                  <ProgressBar className="mt-2" value={counts.verified} max={counts.total} label="Skills verified" />
+                </>
+              ) : error ? (
+                <ErrorNote className="mt-1" message={error} onRetry={reload} />
+              ) : (
+                <Skeleton className="mt-1 h-8" />
+              )}
+            </Row>
+          </Card>
+
+          <div className="rounded-[12px] border border-border bg-teal-soft p-5 shadow-[var(--shadow-card)]">
+            <p className="text-sm leading-relaxed text-navy">
+              {APP_NAME} is here to help you feel ready, not to test you. A nurse always makes the final call on
+              every skill.
+            </p>
+          </div>
+
+          <Button href={next ? practiceHref(next.id) : "/portal/skills"} size="xl" className="w-full">
+            Continue practicing
+          </Button>
+          <Button variant="ghost" size="lg" className="w-full" onClick={() => void signOut()}>
+            Sign out
+          </Button>
+        </div>
       </div>
-
-      <Button href={next ? practiceHref(next.id) : "/portal/skills"} size="xl" className="w-full">
-        Continue practicing
-      </Button>
-      <Button variant="ghost" size="lg" className="w-full" onClick={() => void signOut()}>
-        Sign out
-      </Button>
     </div>
   );
 }

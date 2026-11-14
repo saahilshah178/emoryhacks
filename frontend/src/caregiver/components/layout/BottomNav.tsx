@@ -2,30 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleUserRound, Home, ListChecks } from "lucide-react";
+import { bottomNav } from "@/caregiver/nav";
 import { cn } from "@/lib/cn";
 
-export const navItems = [
-  { href: "/portal", label: "Home", icon: Home },
-  { href: "/portal/skills", label: "My skills", icon: ListChecks },
-  { href: "/portal/profile", label: "Profile", icon: CircleUserRound },
-];
-
-export function isActive(pathname: string, href: string) {
-  return href === "/portal" ? pathname === "/portal" : pathname.startsWith(href);
+function isActive(pathname: string, href: string, exact?: boolean) {
+  return exact ? pathname === href : pathname.startsWith(href);
 }
 
+/** The portal's pages along the bottom of a phone or tablet. A laptop has the rail instead. */
 export function BottomNav() {
   const pathname = usePathname();
 
   return (
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-white/95 backdrop-blur-sm md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-white/95 backdrop-blur-sm lg:hidden"
     >
       <ul className="mx-auto flex max-w-lg items-stretch justify-around px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5">
-        {navItems.map((item) => {
-          const active = isActive(pathname, item.href);
+        {bottomNav.map((item) => {
+          const active = isActive(pathname, item.href, item.exact);
           const Icon = item.icon;
           return (
             <li key={item.href} className="flex-1">

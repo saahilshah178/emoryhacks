@@ -5,8 +5,9 @@
   uv run python -m scripts.try_pose "Fall Response Backup.mp4" --roles      # real Gemini calls
 
 --at draws landmarks, track ids and readings onto the frames nearest those times and
-saves them as JPEGs in --out. --roles also runs assign_roles; the people descriptions
-come from a stored skill for the video when there is one, else a generic pair.
+saves them as JPEGs in --out. --roles also runs assign_roles and stores the pose flags,
+named by role, as the reference pipeline does; the people descriptions come from a
+stored skill for the video when there is one, else a generic pair.
 A video already ingested under the same file name is reused.
 """
 from __future__ import annotations
@@ -153,7 +154,8 @@ def main() -> None:
         flags = summary.candidate_flags
         if args.roles:
             pose.assign_roles(ctx, people_for(video["id"]))
-            flags = pose.relabel_flags(video["id"], flags)  # as the pipeline stores them
+            flags = pose.relabel_flags(video["id"], flags)  # stored as the reference pipeline does
+            repo.save_flags(video["id"], None, flags, sources=("pose", "pose_confirmed"))
         report(video["id"])
         for f in flags:
             print(f"  flag {f.kind} {f.severity} {f.start_s:.1f}-{f.end_s:.1f}s {f.person_label}: {f.description}")

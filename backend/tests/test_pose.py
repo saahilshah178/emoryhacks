@@ -414,6 +414,20 @@ def _patient_rows(n_frames: int, standing: range, off_centre: set[int], fps: flo
     return rows
 
 
+def test_summary_survives_a_track_with_one_valid_frame(fake_video):
+    from app.main import app
+
+    video = fake_video
+    rows = _patient_rows(40, range(0), set())
+    for r in rows[1:]:
+        r["valid"] = False  # one valid frame: the standard deviation of its tilt is NaN in SQL
+    track = [{"person_idx": 0, "segment_id": 0, "role": "patient", "first_t": 0, "last_t": 1.3, "n_frames": 40}]
+    repo.replace_pose(video["id"], video["recorded_at"], rows, track)
+    with TestClient(app) as client:
+        res = client.get(f"/api/safety/videos/{video['id']}/summary")
+        assert res.status_code == 200 and res.json()["tracks"][0]["tilt_sd"] is None
+
+
 def test_off_centre_share_is_of_standing_time_and_blank_without_it(fake_video):
     from app.main import app
 

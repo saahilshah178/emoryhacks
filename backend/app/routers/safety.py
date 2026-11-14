@@ -41,6 +41,7 @@ FRAME_METRICS = [k for k in repo.POSE_ROW_KEYS if k not in ("person_idx", "t_off
 _ROLE_COUNTS = """
   count(*) FILTER (WHERE f.valid) AS valid_frames,
   count(*) FILTER (WHERE f.valid AND t.role IN ('patient', 'caregiver')) AS role_frames,
+  count(*) FILTER (WHERE f.valid AND t.role = 'patient') AS patient_frames,
   count(f.com_offset) FILTER (WHERE f.valid AND t.role = 'patient') AS patient_standing_frames,
   count(*) FILTER (WHERE f.valid AND t.role = 'patient' AND abs(f.com_offset) > %(off)s) AS patient_off_frames,
   min(f.balance_score) FILTER (WHERE f.valid AND t.role = 'patient') AS patient_balance_min,
@@ -64,7 +65,9 @@ _ALL_SAMPLE_RATES = _SAMPLE_RATE.format(where="")
 
 
 def _rounded(rows: list[dict], places: int = 3) -> list[dict]:
-    return [{k: round(v, places) if isinstance(v, float) else v for k, v in r.items()} for r in rows]
+    """Floats rounded, and NaN (e.g. the standard deviation of a single frame) as None, which JSON allows."""
+    return [{k: (None if v != v else round(v, places)) if isinstance(v, float) else v for k, v in r.items()}
+            for r in rows]
 
 
 def _sampling(sample_fps: float | None, video_fps: float | None) -> dict:
@@ -76,16 +79,18 @@ def _sampling(sample_fps: float | None, video_fps: float | None) -> dict:
 def _role_figures(row: dict) -> dict:
     """Replace the _ROLE_COUNTS frame counts in row with seconds and shares a nurse can read.
 
-    patient_standing_s is how long the patient was seen standing with both feet in view; the
+    patient_tracked_s is how long the patient was measured at all, and patient_standing_s how
+    long they were seen standing with both feet in view; the
     patient's balance average, lowest and off-centre share are shares of that time, and are
     None when it is under THRESHOLDS["min_standing_s"] (there is nothing to judge, so neither
     0 nor 100 percent is true). caregiver_bent_share is a share of caregiver_tracked_s.
     role_share is the share of measured person-frames whose person has a known role."""
     fps = row.get("sample_fps") or 0
     seconds = (lambda n: (n or 0) / fps) if fps else (lambda n: None)
-    standing, off = row.pop("patient_standing_frames"), row.pop("patient_off_frames")
+    patient, standing, off = row.pop("patient_frames"), row.pop("patient_standing_frames"), row.pop("patient_off_frames")
     tracked, bent = row.pop("caregiver_frames"), row.pop("caregiver_bent_frames")
     valid, labelled = row.pop("valid_frames"), row.pop("role_frames")
+    row["patient_tracked_s"] = seconds(patient)
     row["patient_standing_s"], row["patient_off_center_s"] = seconds(standing), seconds(off)
     enough = row["patient_standing_s"] is not None and row["patient_standing_s"] >= THRESHOLDS["min_standing_s"]
     row["patient_off_center_share"] = off / standing if enough else None
@@ -132,7 +137,8 @@ def overview():
                    coalesce(sa.name, sr.name) AS skill_name, coalesce(sa.slug, sr.slug) AS skill_slug,
                    r.seconds_tracked, r.balance_avg, r.balance_min, r.trunk_tilt_max,
                    x.person_frames, x.tracks, x.valid_frames, x.role_frames,
-                   x.patient_standing_frames, x.patient_off_frames, x.patient_balance_min, x.patient_balance_avg,
+                   x.patient_frames, x.patient_standing_frames, x.patient_off_frames,
+                   x.patient_balance_min, x.patient_balance_avg,
                    x.caregiver_frames, x.caregiver_bent_frames, x.caregiver_tilt_avg, x.caregiver_tilt_peak,
                    (SELECT count(*) FROM safety_flags sf WHERE sf.video_id = v.id) AS flag_count,
                    (SELECT count(*) FROM safety_flags sf WHERE sf.video_id = v.id AND sf.counts_toward_score)

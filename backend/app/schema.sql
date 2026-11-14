@@ -421,3 +421,15 @@ END $$;
 -- caregiver's attempt is uploaded without sound, because grading is by sight only; NULL is a
 -- handle made before that, which had sound.
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS gemini_file_audio boolean;
+-- @@
+-- Which revision of builtin_skills.json an agency was given for each standard skill
+-- (builtin.ensure). A revision is installed once: a version of it that a nurse deletes is not
+-- put back at the next start.
+CREATE TABLE IF NOT EXISTS builtin_installs (
+  org_id        uuid NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  slug          text NOT NULL,
+  revision      integer NOT NULL,
+  skill_id      uuid,
+  installed_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (org_id, slug, revision)
+);

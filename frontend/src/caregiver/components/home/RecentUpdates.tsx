@@ -17,7 +17,9 @@ type Update = { id: string; time: string; title: string; detail: string; href: s
 const afterSending: Record<AttemptSummary["review_state"], string> = {
   processing: "It is being checked now.",
   error: "It couldn't be checked. Please record it again.",
+  unsubmitted: "It is checked and has not been sent to a nurse yet.",
   pending: "It is with a nurse for review.",
+  superseded: "You sent a newer recording, so a nurse will review that one instead.",
   approved: "A nurse has since verified it.",
   retraining: "A nurse has since asked you to practice it again.",
 };

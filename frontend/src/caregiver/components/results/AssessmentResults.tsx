@@ -22,7 +22,9 @@ import type { Attempt, AttemptSummary, ReviewState, Status } from "@/lib/types";
 export const attemptStateForCaregiver: Record<ReviewState, { label: string; tone: Tone }> = {
   processing: { label: "Checking", tone: reviewState.processing.tone },
   error: reviewState.error,
+  unsubmitted: reviewState.unsubmitted,
   pending: skillState.in_review,
+  superseded: reviewState.superseded,
   approved: skillState.verified,
   retraining: skillState.needs_practice,
 };

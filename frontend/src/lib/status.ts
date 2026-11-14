@@ -49,7 +49,9 @@ export const aiAssessment: Record<AiAssessment, Entry> = {
 export const reviewState: Record<ReviewState, Entry> = {
   processing: { label: "Processing", tone: "info" },
   error: { label: "Processing failed", tone: "danger" },
+  unsubmitted: { label: "Not sent yet", tone: "neutral" },
   pending: { label: "Awaiting nurse", tone: "warning" },
+  superseded: { label: "Replaced by a newer one", tone: "neutral" },
   approved: { label: "Approved", tone: "success" },
   retraining: { label: "Retraining requested", tone: "danger" },
 };
@@ -57,6 +59,7 @@ export const reviewState: Record<ReviewState, Entry> = {
 /** A caregiver's standing on a skill. */
 export const skillState: Record<SkillState, Entry & { action: string }> = {
   not_started: { label: "Not started", tone: "neutral", action: "Start practice" },
+  practicing: { label: "In progress", tone: "teal", action: "Continue practice" },
   in_review: { label: "In review", tone: "warning", action: "View results" },
   needs_practice: { label: "Practice again", tone: "info", action: "View feedback" },
   verified: { label: "Verified", tone: "success", action: "View results" },

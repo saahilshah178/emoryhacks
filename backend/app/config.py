@@ -60,11 +60,11 @@ GEMINI_BUDGET_USD = float(_get("GEMINI_BUDGET_USD", "10"))
 # What one pipeline job may spend. Optional calls (second looks at unclear steps, pose-flag
 # confirmation, boundary refinement, the summary rewrite) are skipped once the job's recorded
 # spend plus the call's estimate would pass the allowance; the required calls always run.
-# Nothing at all is sent once a job has spent twice its allowance (the hard ceiling), so
+# Nothing at all is sent once a job has spent 1.5 times its allowance (the hard ceiling), so
 # retries and repairs on a difficult video cannot run up the bill.
 GEMINI_JOB_BUDGET_USD = float(_get("GEMINI_JOB_BUDGET_USD", "0.15"))            # caregiver attempt
 GEMINI_REFERENCE_BUDGET_USD = float(_get("GEMINI_REFERENCE_BUDGET_USD", "0.20"))  # nurse reference video
-GEMINI_JOB_HARD_LIMIT_FACTOR = 2.0
+GEMINI_JOB_HARD_LIMIT_FACTOR = 1.5
 GEMINI_CONCURRENCY = int(_get("GEMINI_CONCURRENCY", "3"))
 # Per-call ceiling on thinking plus reply tokens. Stages set lower caps of their own.
 GEMINI_MAX_OUTPUT_TOKENS = int(_get("GEMINI_MAX_OUTPUT_TOKENS", "10000"))
@@ -81,9 +81,9 @@ GEMINI_PRICES: dict[str, tuple[float, float]] = {
     "gemini-3.5-flash-lite": (0.3, 2.5),
 }
 GEMINI_DEFAULT_PRICE = (4.0, 20.0)
-# Input tokens Gemini bills for video: per frame at each resolution, plus the audio track per
-# second (measured: low and medium both about 85 a frame). Used only to estimate a call's cost
-# before sending it.
+# Input tokens Gemini bills for media, used only to estimate a call's cost before sending it:
+# video per frame at each resolution (measured: low and medium both about 85 a frame), the
+# audio track per second, and one image at each resolution (measured: low 300, default 1,100).
 VIDEO_TOKENS_PER_FRAME = {"low": 85, "medium": 85, "high": 300}
 AUDIO_TOKENS_PER_SECOND = 25
 IMAGE_TOKENS = {"low": 300, "medium": 600, "high": 1100}

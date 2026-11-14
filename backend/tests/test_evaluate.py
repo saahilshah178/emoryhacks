@@ -443,6 +443,17 @@ def test_steps_the_recording_stopped_before_are_failed_without_a_second_look(rea
     assert sc.overall == "failed" and sc.score_pct == 50.0
 
 
+def test_unseen_failed_steps_after_the_recording_ends_get_no_second_look(real_ai):
+    reply = grade_reply(steps=[judgement(f"s{i}", "passed", 95) for i in (1, 2, 3)]
+                        + [judgement("s4", "failed", 90, start=22, end=24)]  # seen: still worth a second look
+                        + [judgement(f"s{i}", "failed", 90, start=None, end=None) for i in (5, 6)])
+    ctx = StubCtx(answer_with(reply), duration=24.0)
+    ev = evaluate.run(ctx, GLOVE_REMOVAL, STOPPED_AFTER_S3)
+    checked = [c["purpose"] for c in ctx.calls if c["purpose"].startswith("evaluate_double_check")]
+    assert checked == ["evaluate_double_check:s4"]
+    assert [r.status for r in ev.steps[4:]] == ["failed", "failed"]
+
+
 def test_rewritten_summary_is_told_about_order_problems_and_safety_flags(real_ai):
     violation = OrderViolation(step_id="s2", expected_after="s1", message='"Peel" came before "Pinch".')
     timeline = Timeline(steps=GLOVE_TIMELINE.steps, order_violations=[violation])

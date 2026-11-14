@@ -100,7 +100,8 @@ def run(ctx, rubric: Rubric, timeline: Timeline) -> Evaluation:
     if not evaluation.skill_match:  # steps of a different skill are not worth a closer look
         return evaluation
     not_reached = apply_recording_end(rubric, timeline, evaluation, ctx.duration)
-    rechecked = _double_check(ctx, rubric, timeline, evaluation, skip=set(not_reached))
+    rechecked = _double_check(ctx, rubric, timeline, evaluation,
+                              skip=settled_by_recording_end(rubric, timeline, evaluation, ctx.duration))
     if not_reached or rechecked:
         evaluation.overall_feedback = _rewrite_feedback(ctx, rubric, timeline, evaluation)
     return evaluation
@@ -229,6 +230,15 @@ def apply_recording_end(rubric: Rubric, timeline: Timeline, evaluation: Evaluati
             })
             changed.append(r.step_id)
     return changed
+
+
+def settled_by_recording_end(rubric: Rubric, timeline: Timeline, evaluation: Evaluation,
+                             duration: float) -> set[str]:
+    """Steps the recording stopped before that are failed with nothing seen: a second look at
+    the last seconds of the video cannot change them, so they are not double-checked."""
+    tail = set(steps_after_recording_end(rubric, timeline, duration))
+    return {r.step_id for r in evaluation.steps
+            if r.step_id in tail and r.status == "failed" and r.evidence_start_s is None}
 
 
 # --- double-check ----------------------------------------------------------------

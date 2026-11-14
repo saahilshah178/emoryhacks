@@ -25,6 +25,7 @@
   .bar .seg.unverified { background: #c58f1c; }
   .bar .seg.pending { background: #b3a897; }
   .bar .seg.selected { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .bar .seg.by-grader { background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0 4px, transparent 4px 8px); }
   .bar .markers { position: relative; height: 20px; margin-top: 3px; }
   .bar .marker { position: absolute; top: 0; transform: translateX(-50%); border: 0; background: none; padding: 0; cursor: pointer;
                  font-size: 0.85rem; line-height: 1; }
@@ -42,6 +43,7 @@
 
   .step { scroll-margin-top: 0.75rem; }
   .step.playing { border-color: var(--accent); box-shadow: 0 0 0 2px #f3d9cc; }
+  .step.focused { border-color: var(--ink); box-shadow: 0 0 0 2px #e6dccb; }
   .step .top { display: flex; gap: 0.5rem; align-items: baseline; justify-content: space-between; }
   .step h3 { font-size: 1.05rem; }
   .step .meta { display: flex; gap: 0.5rem 0.9rem; flex-wrap: wrap; align-items: center; font-size: 0.85rem; color: var(--muted); margin: 0.35rem 0; }
@@ -106,6 +108,7 @@
         <span><i style="background: var(--fail)"></i>Failed</span>
         <span><i style="background: #c58f1c"></i>Unverified</span>
         <span><i style="background: #b3a897"></i>Not graded yet</span>
+        <span><i style="background: repeating-linear-gradient(135deg, #b3a897 0 3px, #ddd3c4 3px 6px)"></i>Placed by the grader, not the timeline</span>
         <span><span style="color: var(--fail)">▲</span> Safety flag</span>
         <span><span style="color: var(--accent)">◆</span> Out of order</span>
       </div>

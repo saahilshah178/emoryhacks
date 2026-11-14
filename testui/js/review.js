@@ -1,7 +1,9 @@
 // Nurse review screen: review.html?id=<attempt_id>.
 // The nurse verifies an attempt by jumping straight to each step, flag and order
 // violation instead of watching the whole video, then records a decision.
-import { api, badge, esc, fmtDate, fmtRange, fmtTime, mountNav, qs, showError, stagesHtml, thumbUrl, videoUrl } from "/js/common.js";
+import {
+  api, badge, esc, fmtDate, fmtRange, fmtTime, mountNav, qs, showError, stagesHtml, stepTally, thumbUrl, videoUrl,
+} from "/js/common.js";
 
 mountNav("attempts");
 
@@ -19,6 +21,7 @@ const FLAG_LABEL = {
   other: "Other",
 };
 const SOURCE_LABEL = { gemini: "AI video review", pose: "Pose readings (advisory)", pose_confirmed: "Pose readings, confirmed by AI" };
+const ROLE_LABEL = { caregiver: "Caregiver", patient: "Patient", other: "Other person" };
 const STATUSES = [["passed", "Pass"], ["failed", "Fail"], ["unverified", "Unverified"]];
 const LANE_PX = 26;
 
@@ -31,21 +34,29 @@ const state = {
   playing: null,     // step_id under the playhead
   refEnd: null,      // stop the reference clip here
   loadedVideo: false,
+  itemIndex: -1,     // position in reviewItems() of the last "Next item" visited
 };
+const POLL_MS = 2500;
 
 // --- data -----------------------------------------------------------------
+// While the job runs the page polls. A failed poll leaves the page and the nurse's
+// unsaved choices alone, says so in the job card and tries again.
 async function load() {
+  let attempt;
   try {
-    const attempt = await api(`/attempts/${attemptId}`);
-    const first = !state.attempt;
-    state.attempt = attempt;
-    if (first) initNurseState(attempt);
-    render();
-    const job = attempt.job;
-    if (job && (job.status === "queued" || job.status === "running")) setTimeout(load, 2500);
+    attempt = await api(`/attempts/${attemptId}`);
   } catch (err) {
-    showError("#app", err);
+    if (!state.attempt) { showError("#app", err); return; }
+    $("#job").innerHTML = `<div class="card"><p class="error small">Lost contact with the server (${esc(err.message)}). Trying again…</p></div>`;
+    setTimeout(load, POLL_MS * 2);
+    return;
   }
+  const first = !state.attempt;
+  state.attempt = attempt;
+  if (first) initNurseState(attempt);
+  render();
+  const job = attempt.job;
+  if (job && (job.status === "queued" || job.status === "running")) setTimeout(load, POLL_MS);
 }
 
 function initNurseState(attempt) {
@@ -56,7 +67,15 @@ function initNurseState(attempt) {
 
 const steps = () => state.attempt.steps;
 const stepById = (id) => steps().find((s) => s.step_id === id);
-const foundSteps = () => steps().filter((s) => s.found && s.start_s != null).sort((a, b) => a.start_s - b.start_s);
+// Where a step is in the attempt video: the timeline's span, or else the span the grader
+// cited as evidence (the grader looks for steps the timeline missed). null if neither.
+function stepTimes(s) {
+  if (s.found && s.start_s != null) return { start: s.start_s, end: s.end_s, byGrader: false };
+  if (s.evidence_start_s != null) return { start: s.evidence_start_s, end: s.evidence_end_s, byGrader: true };
+  return null;
+}
+const locatedSteps = () => steps().filter((s) => stepTimes(s)).sort((a, b) => stepTimes(a).start - stepTimes(b).start);
+const unlocatedSteps = () => steps().filter((s) => !stepTimes(s));
 const duration = () => Number(state.attempt.video?.duration_s) || video.duration || 1;
 const pct = (t) => `${Math.min(100, Math.max(0, (100 * Number(t)) / duration()))}%`;
 const shownStatus = (s) => state.overrides[s.step_id]?.status || s.status || "pending";
@@ -90,13 +109,32 @@ function render() {
       $("#compare").parentElement.title = "This skill has no reference video";
     }
   }
+  const restoreFocus = keepFocus();
   renderHeader();
   renderJob();
   renderSummary();
   renderBar();
   renderSteps();
   renderDecision();
+  restoreFocus();
   updatePlayhead();
+}
+
+// Re-rendering replaces the note fields; put the caret back where the nurse was typing.
+// The typed text itself lives in state and is rendered back into the new field.
+function keepFocus() {
+  const el = document.activeElement;
+  if (!el || !el.matches("input[type=text], textarea")) return () => {};
+  const row = el.closest(".nurse");
+  const selector = row ? `.nurse[data-step="${CSS.escape(row.dataset.step)}"] input` : el.id ? `#${CSS.escape(el.id)}` : null;
+  if (!selector) return () => {};
+  const { selectionStart, selectionEnd } = el;
+  return () => {
+    const field = document.querySelector(selector);
+    if (!field || field === el) return;
+    field.focus({ preventScroll: true });
+    field.setSelectionRange(selectionStart, selectionEnd);
+  };
 }
 
 function renderHeader() {
@@ -107,17 +145,23 @@ function renderHeader() {
     fmtDate(a.created_at),
     a.video?.duration_s ? `${fmtTime(a.video.duration_s)} long` : "",
   ].filter(Boolean).join(" · ");
+  const failed = !a.status && a.job?.status === "error";
   $("#final").innerHTML = a.reviewed_at
     ? `<div class="small muted">Final status</div>${badge(a.final_status)}<div class="small muted">Reviewed ${esc(fmtDate(a.reviewed_at))}</div>`
-    : `<span class="badge ${a.needs_review ? "unverified" : "neutral"}">${a.needs_review ? "Needs nurse review" : "Not reviewed yet"}</span>`;
+    : failed ? badge("error")
+      : `<span class="badge ${a.needs_review ? "unverified" : "neutral"}">${a.needs_review ? "Needs nurse review" : "Not reviewed yet"}</span>`;
 }
 
 function renderJob() {
-  const job = state.attempt.job;
+  const a = state.attempt;
+  const job = a.job;
   if (!job || job.status === "done") {
     $("#job").innerHTML = "";
   } else if (job.status === "error") {
-    $("#job").innerHTML = `<div class="card"><p class="error">Processing failed: ${esc((job.error || "").split("\n")[0])}</p>${stagesHtml(job)}</div>`;
+    $("#job").innerHTML = `<div class="card">
+      <p><strong>Processing error.</strong> The attempt could not be analysed, so it has no AI grade. This is not a result for the caregiver.</p>
+      <p class="error small">${esc((job.error || "Unknown error").split("\n")[0])}</p>${stagesHtml(job)}
+      <a class="btn small" href="/attempt.html?skill_id=${encodeURIComponent(a.skill_id)}">Record a new attempt</a></div>`;
   } else {
     $("#job").innerHTML = `<div class="card"><p class="muted">Still analysing this attempt. This page updates by itself.</p>${stagesHtml(job)}</div>`;
   }
@@ -126,10 +170,15 @@ function renderJob() {
 function renderSummary() {
   const a = state.attempt;
   const reasons = (a.reasons || []).map((r) => `<li>${esc(r)}</li>`).join("");
+  // score_pct already includes order and safety deductions, so it is shown out of 100 and
+  // the AI's own step count is shown beside it rather than presenting the score as a share.
+  const aiSteps = steps().map((s) => ({ status: s.status }));
+  const unscored = a.job?.status === "error" ? badge("error") : `<span class="badge pending">Not scored yet</span>`;
   const ai = `<div class="card">
       <p class="label" style="margin-top:0">AI result</p>
-      <div class="result-line">${a.status ? badge(a.status) : `<span class="badge pending">Not scored yet</span>`}
-        ${a.score_pct != null ? `<span class="score">${Math.round(a.score_pct)}%</span>` : ""}</div>
+      <div class="result-line">${a.status ? badge(a.status) : unscored}
+        ${a.score_pct != null ? `<span class="score">${Math.round(a.score_pct)}</span><span class="muted small">score out of 100</span>` : ""}</div>
+      ${a.status ? `<p class="small muted">${esc(stepTally(aiSteps))}</p>` : ""}
       ${a.skill_match === false ? `<p class="error small">Skill mismatch: ${esc(a.skill_match_note)}</p>` : ""}
       ${reasons ? `<ul class="tight small">${reasons}</ul>` : ""}
       ${a.overall_feedback ? `<p class="small muted">${esc(a.overall_feedback)}</p>` : ""}
@@ -144,30 +193,47 @@ function renderSummary() {
         : timelineDone ? "Steps were done in the expected order." : "Not checked yet."}</p>`}
     </div>`;
 
+  const people = a.people || [];
+  const roleOf = (label) => people.find((p) => p.label === label)?.role;
+  const who = (label) => {
+    if (!label) return "";
+    const role = roleOf(label);
+    return ` (${esc(label)}${role ? `, ${esc((ROLE_LABEL[role] || role).toLowerCase())}` : ""})`;
+  };
   const flags = a.safety_flags.map((f) => `<div class="issue">
       <span class="badge ${f.severity === "high" ? "failed" : "unverified"}">${esc(f.severity)}</span>
-      <span class="grow"><strong>${esc(FLAG_LABEL[f.kind] || f.kind)}</strong>${f.person_label ? ` (${esc(f.person_label)})` : ""}:
+      <span class="grow"><strong>${esc(FLAG_LABEL[f.kind] || f.kind)}</strong>${who(f.person_label)}:
         ${esc(f.description)}<br><span class="muted small">${esc(SOURCE_LABEL[f.source] || f.source)}${f.counts_toward_score ? "" : " · does not affect the score"}</span></span>
       ${timeChip(f.start_s, f.end_s)}</div>`).join("");
   const safety = `<div class="card">
       <p class="label" style="margin-top:0">Safety flags</p>
       ${flags || `<p class="muted small">No safety flags.</p>`}
     </div>`;
-  $("#summary").innerHTML = ai + order + safety;
+
+  const identified = `<div class="card">
+      <p class="label" style="margin-top:0">Who the AI identified</p>
+      ${people.map((p) => `<div class="issue"><strong>${esc(p.label)}</strong>
+          <span class="badge neutral">${esc(ROLE_LABEL[p.role] || p.role)}</span>
+          <span class="grow small">${esc(p.description)}</span></div>`).join("")
+        || `<p class="muted small">${a.status ? "No one was identified." : "Not identified yet."}</p>`}
+    </div>`;
+  $("#summary").innerHTML = ai + identified + order + safety;
 }
 
 function renderBar() {
   // Greedy lanes so overlapping steps sit on separate rows instead of hiding each other.
   const laneEnds = [];
-  const segs = foundSteps().map((s) => {
-    let lane = laneEnds.findIndex((end) => end <= s.start_s + 0.05);
+  const segs = locatedSteps().map((s) => {
+    const { start, end, byGrader } = stepTimes(s);
+    let lane = laneEnds.findIndex((e) => e <= start + 0.05);
     if (lane === -1) { lane = laneEnds.length; laneEnds.push(0); }
-    laneEnds[lane] = s.end_s ?? s.start_s;
-    const width = `max(14px, calc(${pct((s.end_s ?? s.start_s + 1) - s.start_s)} - 2px))`;
+    laneEnds[lane] = end ?? start;
+    const width = `max(14px, calc(${pct((end ?? start + 1) - start)} - 2px))`;
     const out = violationsFor(s.step_id).length ? " · out of order" : "";
-    return `<button class="seg ${shownStatus(s)}" data-step="${esc(s.step_id)}" data-seek="${s.start_s}"
-      style="left:${pct(s.start_s)};width:${width};top:${2 + lane * LANE_PX}px"
-      title="${esc(`${s.ord}. ${s.title} (${fmtRange(s.start_s, s.end_s)})${out}`)}">${s.ord}</button>`;
+    const how = byGrader ? " · not located by the timeline, seen by the grader" : "";
+    return `<button class="seg ${shownStatus(s)}${byGrader ? " by-grader" : ""}" data-step="${esc(s.step_id)}" data-seek="${start}"
+      style="left:${pct(start)};width:${width};top:${2 + lane * LANE_PX}px"
+      title="${esc(`${s.ord}. ${s.title} (${fmtRange(start, end)})${out}${how}`)}">${s.ord}</button>`;
   });
   const lanes = $("#lanes");
   lanes.style.height = `${Math.max(1, laneEnds.length) * LANE_PX + 4}px`;
@@ -190,9 +256,11 @@ function renderSteps() {
   $("#steps").innerHTML = steps().map((s) => {
     const nurse = state.overrides[s.step_id];
     const violations = violationsFor(s.step_id);
+    const times = stepTimes(s);
     const where = s.found
-      ? `${timeChip(s.start_s, s.end_s)}<span>Done ${ordinal(s.performed_index)}</span>`
-      : s.found === false ? `<span>Not found in the video</span>` : `<span>Not located yet</span>`;
+      ? `${timeChip(s.start_s, s.end_s)}${s.performed_index ? `<span>Done ${ordinal(s.performed_index)}</span>` : ""}`
+      : times ? `<span>Not located by the timeline; seen by the grader at</span>${timeChip(times.start, times.end)}`
+        : s.found === false ? `<span>Not found in the video</span>` : `<span>Not located yet</span>`;
     const conf = [s.found && s.timeline_confidence != null ? `located ${percent(s.timeline_confidence)}` : "",
       s.confidence != null ? `graded ${percent(s.confidence)}` : ""].filter(Boolean).join(" · ");
     return `<div class="card step ${state.playing === s.step_id ? "playing" : ""}" id="step-${esc(s.step_id)}">
@@ -238,19 +306,34 @@ function renderDecision() {
 // --- playback -------------------------------------------------------------
 function seek(t, play = true) {
   if (t == null || Number.isNaN(Number(t))) return;
+  document.querySelectorAll(".step.focused").forEach((el) => el.classList.remove("focused"));
   video.currentTime = Math.max(0, Number(t));
   if (play) video.play().catch(() => { /* autoplay blocked: the nurse can press play */ });
   updatePlayhead();
 }
 
+// Seek to a step, or, for a step with no place in the video, bring its card into view.
 function jumpToStep(step) {
   state.selected = step.step_id;
-  seek(step.start_s);
+  const times = stepTimes(step);
+  if (times) seek(times.start); else focusCard(step);
   if ($("#compare").checked) playReference(step);
 }
 
+function focusCard(step) {
+  document.querySelectorAll(".step.focused").forEach((el) => el.classList.remove("focused"));
+  const card = document.getElementById(`step-${step.step_id}`);
+  if (!card) return;
+  video.pause(); // the step has no place in the video, so stop the playhead wandering elsewhere
+  card.classList.add("focused");
+  card.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
 function stepAt(t) {
-  const here = foundSteps().filter((s) => s.start_s <= t && t < (s.end_s ?? s.start_s + 1));
+  const here = locatedSteps().filter((s) => {
+    const { start, end } = stepTimes(s);
+    return start <= t && t < (end ?? start + 1);
+  });
   return here.length ? here[here.length - 1] : null;
 }
 
@@ -287,45 +370,70 @@ function playReference(step) {
   refVideo.play().catch(() => {});
 }
 
-// Items a nurse should look at, in time order: unverified and failed steps, violations, flags.
+// Items a nurse should look at: every failed or unverified step, order violations and
+// safety flags. Items with a time come first in time order; failed or unverified steps
+// with no place in the video follow in rubric order (t is null for those).
 function reviewItems() {
   const a = state.attempt;
   const items = [];
-  for (const s of foundSteps()) {
+  for (const s of steps()) {
     if (s.status === "unverified" || s.status === "failed") {
-      items.push({ t: s.start_s, step: s, label: `${s.status === "failed" ? "Failed" : "Unverified"} step: ${s.ord}. ${s.title}` });
+      items.push({ t: stepTimes(s)?.start ?? null, step: s, label: `${s.status === "failed" ? "Failed" : "Unverified"} step: ${s.ord}. ${s.title}` });
     }
   }
-  for (const v of a.order_violations) if (v.at_s != null) items.push({ t: v.at_s, step: stepById(v.step_id), label: `Out of order: ${v.message}` });
+  for (const v of a.order_violations) items.push({ t: v.at_s, step: stepById(v.step_id), label: `Out of order: ${v.message}` });
   for (const f of a.safety_flags) items.push({ t: f.start_s, label: `Safety flag: ${FLAG_LABEL[f.kind] || f.kind} (${f.severity}). ${f.description}` });
-  return items.sort((x, y) => x.t - y.t);
+  const timed = items.filter((it) => it.t != null).sort((x, y) => x.t - y.t); // stable: ties keep their order
+  return [...timed, ...items.filter((it) => it.t == null)];
 }
 
+// Steps through the items by position, so items that share a time are each visited.
 function nextItem() {
   const items = reviewItems();
   if (!items.length) {
     $("#next-label").textContent = "Nothing flagged for review.";
     return;
   }
-  const t = video.currentTime || 0;
-  let i = items.findIndex((it) => it.t > t + 0.3);
-  if (i === -1) i = 0; // wrap around to the first item
+  state.itemIndex = (state.itemIndex + 1) % items.length;
+  const i = state.itemIndex;
   const item = items[i];
-  $("#next-label").textContent = `Item ${i + 1} of ${items.length} at ${fmtTime(item.t)}: ${item.label}`;
+  const where = item.t != null ? `at ${fmtTime(item.t)}` : "(not located in the video)";
+  $("#next-label").textContent = `Item ${i + 1} of ${items.length} ${where}: ${item.label}`;
   if (item.step) {
     state.selected = item.step.step_id;
     if ($("#compare").checked) playReference(item.step);
   }
-  seek(item.t);
+  if (item.t != null) seek(item.t);
+  else if (item.step) focusCard(item.step);
 }
 
+// The step j and k move from: the one last jumped to while the playhead is still in it
+// (or it has no place in the video), else the one under the playhead.
+function currentStepId() {
+  const selected = state.selected && stepById(state.selected);
+  if (selected) {
+    const times = stepTimes(selected);
+    const t = video.currentTime || 0;
+    if (!times || (t >= times.start - 0.5 && t < (times.end ?? times.start + 1))) return selected.step_id;
+  }
+  return state.playing;
+}
+
+// j and k walk the steps in video order, then on to the steps with no place in the video.
 function moveStep(direction) {
-  const list = foundSteps();
+  const located = locatedSteps();
+  const list = [...located, ...unlocatedSteps()];
   if (!list.length) return;
-  const t = video.currentTime || 0;
-  const target = direction > 0
-    ? list.find((s) => s.start_s > t + 0.3)
-    : [...list].reverse().find((s) => s.start_s < t - 1);
+  const i = list.findIndex((s) => s.step_id === currentStepId());
+  let target;
+  if (i !== -1) {
+    target = list[i + direction];
+  } else {
+    const t = video.currentTime || 0;
+    target = direction > 0
+      ? located.find((s) => stepTimes(s).start > t + 0.3) || list[located.length]
+      : [...located].reverse().find((s) => stepTimes(s).start < t - 1);
+  }
   if (target) jumpToStep(target);
 }
 
@@ -357,7 +465,7 @@ document.addEventListener("click", (e) => {
   if (chip) {
     const card = chip.closest(".step");
     const step = card && stepById(card.id.replace(/^step-/, ""));
-    if (step && Number(chip.dataset.seek) === step.start_s) { jumpToStep(step); return; }
+    if (step && Number(chip.dataset.seek) === stepTimes(step)?.start) { jumpToStep(step); return; }
     seek(chip.dataset.seek);
     return;
   }
@@ -399,7 +507,7 @@ $("#compare").addEventListener("change", (e) => {
   $("#ref-figure").hidden = !e.target.checked;
   $("#videos").classList.toggle("compare", e.target.checked);
   if (!e.target.checked) { refVideo.pause(); return; }
-  const step = stepById(state.selected) || stepById(state.playing) || foundSteps()[0] || steps()[0];
+  const step = stepById(state.selected) || stepById(state.playing) || locatedSteps()[0] || steps()[0];
   if (step) { state.selected = step.step_id; playReference(step); }
 });
 

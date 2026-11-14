@@ -46,10 +46,8 @@ mountNav("record");
 const progress = document.querySelector("#progress");
 const errorBox = document.querySelector("#error");
 const retry = document.querySelector("#retry");
-let lastFile = null;
 
 async function submit(file) {
-  lastFile = file;
   errorBox.innerHTML = "";
   retry.hidden = true;
   const form = new FormData();
@@ -58,7 +56,11 @@ async function submit(file) {
   const name = document.querySelector("#skill-name").value.trim();
   if (name) form.append("expected_name", name);
   try {
-    const { job } = await uploadAndWait(form, progress);
+    // The skill is created part-way through the job, so its link appears once the job reports it.
+    const { job } = await uploadAndWait(form, progress, {
+      linkFor: (body, lastJob) => (lastJob && lastJob.skill_id
+        ? { href: `/skill.html?id=${lastJob.skill_id}`, text: "The skill is saved. Open the skill page" } : null),
+    });
     location.href = `/skill.html?id=${job.skill_id}`;
   } catch (err) {
     showError(errorBox, err);
@@ -66,8 +68,8 @@ async function submit(file) {
   }
 }
 
-createRecorder(document.querySelector("#recorder"), { onVideo: submit });
-retry.addEventListener("click", () => lastFile && submit(lastFile));
+const recorder = createRecorder(document.querySelector("#recorder"), { onVideo: submit });
+retry.addEventListener("click", () => recorder.use());
 </script>
 </body>
 </html>

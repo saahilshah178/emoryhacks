@@ -102,6 +102,7 @@ export function createRecorder(root, { onVideo, maxSeconds = 600 }) {
   let timers = [];
   let busy = false;
   let hitLimit = false;
+  let cameraRequest = 0; // bumped by each camera start and each file pick; a stale start is discarded
 
   function message(text, isError = false) {
     $(".rec-message").innerHTML = text ? `<span class="${isError ? "error" : "muted"}">${esc(text)}</span>` : "";
@@ -134,15 +135,24 @@ export function createRecorder(root, { onVideo, maxSeconds = 600 }) {
     live.srcObject = null;
   }
 
+  // Only one camera start at a time: a second click while the permission prompt is open
+  // would open a second stream that nothing ever stops.
   async function startCamera() {
+    if (buttons.camera.disabled || stream) return;
     const reason = recordingUnavailableReason();
     if (reason) return message(reason, true);
+    const request = ++cameraRequest;
+    buttons.camera.disabled = buttons.again.disabled = true;
     message("Starting the camera…");
     // getUserMedia waits silently while a browser or operating-system permission prompt is open.
     const slow = setTimeout(() => message("Still waiting for the camera. Check for a permission prompt from the browser or the operating system."), 8000);
     try {
       const opened = await openCamera();
       clearTimeout(slow);
+      if (request !== cameraRequest) { // a file was picked while the camera was starting
+        opened.stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
       stream = opened.stream;
       live.srcObject = stream;
       await live.play().catch(() => {});
@@ -150,8 +160,11 @@ export function createRecorder(root, { onVideo, maxSeconds = 600 }) {
       message(opened.audio ? "" : "Microphone unavailable: the recording will have no sound.");
     } catch (err) {
       clearTimeout(slow);
+      if (request !== cameraRequest) return;
       show("idle");
       message(cameraErrorMessage(err), true);
+    } finally {
+      buttons.camera.disabled = buttons.again.disabled = false;
     }
   }
 
@@ -262,6 +275,7 @@ export function createRecorder(root, { onVideo, maxSeconds = 600 }) {
     fileInput.value = "";
     if (!file) return;
     if (file.type && !file.type.startsWith("video/")) return message(`${file.name} is not a video file.`, true);
+    cameraRequest += 1; // a camera still starting is no longer wanted
     releaseCamera();
     setClip(file, true);
   });
@@ -270,7 +284,8 @@ export function createRecorder(root, { onVideo, maxSeconds = 600 }) {
   show("idle");
   const reason = recordingUnavailableReason();
   if (reason) message(reason, true);
-  return { releaseCamera };
+  // use() hands the clip under review to onVideo again, behind the same busy guard as the button.
+  return { releaseCamera, use: useClip };
 }
 
 // An Error for the page to show; retryable says whether sending the same file again could help.
@@ -298,14 +313,29 @@ export function uploadVideo(form, onProgress) {
   });
 }
 
+// Resolves when the person presses a "keep waiting" button added to panel.
+function waitForButton(panel, label) {
+  return new Promise((resolve) => {
+    const button = document.createElement("button");
+    button.className = "btn small";
+    button.textContent = label;
+    button.addEventListener("click", () => { button.remove(); resolve(); }, { once: true });
+    panel.append(button);
+  });
+}
+
 // Upload the form, then follow the pipeline job, rendering progress into panel.
-// Resolves with the upload response plus the finished job; rejects with a readable Error.
-export async function uploadAndWait(form, panel) {
+// Resolves with the upload response plus the finished job; rejects with a readable Error
+// when the upload or the analysis fails. Once the upload has succeeded the new record
+// exists, so losing contact while polling does not reject: the panel keeps a link to
+// the record (linkFor(body, lastJob) returns {href, text} or null) and offers to keep waiting.
+export async function uploadAndWait(form, panel, { linkFor } = {}) {
   panel.hidden = false;
   panel.innerHTML = `
     <p class="upload-status">Uploading… 0%</p>
     <progress class="upload-progress" max="1" value="0"></progress>
-    <div class="upload-stages"></div>`;
+    <div class="upload-stages"></div>
+    <p class="upload-link small"></p>`;
   const status = panel.querySelector(".upload-status");
   const bar = panel.querySelector(".upload-progress");
   let body;
@@ -319,8 +349,30 @@ export async function uploadAndWait(form, panel) {
     throw err;
   }
   bar.hidden = true;
-  status.textContent = "Analysing the video. This can take a minute or two.";
-  const job = await pollJob(body.job_id, (j) => { panel.querySelector(".upload-stages").innerHTML = stagesHtml(j); });
+  const analysing = "Analysing the video. This can take a minute or two.";
+  status.textContent = analysing;
+  let lastJob = null;
+  const showLink = () => {
+    const link = linkFor ? linkFor(body, lastJob) : null;
+    panel.querySelector(".upload-link").innerHTML = link ? `<a href="${esc(link.href)}">${esc(link.text)}</a>` : "";
+  };
+  showLink();
+  let job;
+  for (;;) {
+    try {
+      job = await pollJob(body.job_id, (j) => {
+        lastJob = j;
+        panel.querySelector(".upload-stages").innerHTML = stagesHtml(j);
+        showLink();
+      });
+      break;
+    } catch (err) {
+      status.innerHTML = `<span class="error">Your video was uploaded, but this page lost contact with the server
+        while checking on it (${esc(err.message)}). The analysis may still be running.</span>`;
+      await waitForButton(panel, "Keep waiting");
+      status.textContent = analysing;
+    }
+  }
   if (job.status === "error") {
     status.textContent = "Analysis stopped.";
     const firstLine = String(job.error || "unknown error").split("\n")[0];
@@ -356,4 +408,5 @@ const RECORDER_CSS = `
   .recorder .rec-file { margin: 0; color: var(--accent); font-size: 1rem; cursor: pointer; }
   .recorder .rec-message { min-height: 1.4rem; margin: 0.5rem 0 0; }
   .upload-progress { width: 100%; height: 0.6rem; accent-color: var(--accent); }
+  .upload-link:empty { display: none; }
 `;

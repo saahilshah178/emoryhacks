@@ -82,7 +82,7 @@ export default function MovementDetailPage() {
                 actions={
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone={sum.video.kind === "reference" ? "teal" : "neutral"}>
-                      {sum.video.kind === "reference" ? "Reference" : "Caregiver attempt"}
+                      {sum.video.kind === "reference" ? "Reference" : "Caregiver recording"}
                     </Badge>
                     {sum.attempt ? (
                       <Link

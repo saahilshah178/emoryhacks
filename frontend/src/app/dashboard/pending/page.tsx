@@ -6,14 +6,14 @@ import { cn } from "@/lib/cn";
 import { plural } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
 import type { AiAssessment, AttemptSummary } from "@/lib/types";
-import { PendingReviewsTable } from "@/nurse/components/dashboard/PendingReviewsTable";
-import { ProcessingAttempts } from "@/nurse/components/dashboard/ProcessingAttempts";
+import { earlierRecordings, PendingReviewsTable } from "@/nurse/components/dashboard/PendingReviewsTable";
 import { PageHeading } from "@/shared/layout/PageHeading";
 
-type Filter = "all" | AiAssessment;
+type Filter = "all" | "forced" | AiAssessment;
 
 const filters: Array<{ id: Filter; label: string }> = [
   { id: "all", label: "All pending" },
+  { id: "forced", label: "Sent anyway" },
   { id: "safety_concern", label: "Safety concern" },
   { id: "needs_review", label: "Needs review" },
   { id: "not_passed", label: "Not passed" },
@@ -27,12 +27,14 @@ export default function PendingPage() {
   useTitle("Pending reviews");
   const [filter, setFilter] = useState<Filter>("all");
   const pending = useApi<AttemptSummary[]>("/attempts?state=pending", { refreshMs: REFRESH_MS });
+  // Every recording, sent or not, to say how many came before each one in the queue.
+  const everything = useApi<AttemptSummary[]>("/attempts?all=1", { refreshMs: REFRESH_MS });
 
   return (
     <div className="space-y-5">
       <PageHeading
         title="Pending reviews"
-        description="AI assessments sort the work. Certification happens only after you approve or request retraining."
+        description="The latest recording each caregiver sent you for each skill. AI assessments sort the work; certification happens only after you approve or request retraining."
       />
 
       <Loadable
@@ -48,14 +50,15 @@ export default function PendingPage() {
         }
       >
         {(all) => {
-          const count = (id: Filter) =>
-            id === "all" ? all.length : all.filter((item) => item.ai_assessment === id).length;
-          const rows = filter === "all" ? all : all.filter((item) => item.ai_assessment === filter);
+          const matches = (id: Filter, item: AttemptSummary) =>
+            id === "all" || (id === "forced" ? item.submit_kind === "forced" : item.ai_assessment === id);
+          const count = (id: Filter) => all.filter((item) => matches(id, item)).length;
+          const rows = all.filter((item) => matches(filter, item));
           const active = filters.find((item) => item.id === filter) ?? filters[0];
 
           return (
             <>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by AI assessment">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter the queue">
                 {filters.map((item) => (
                   <button
                     key={item.id}
@@ -82,24 +85,29 @@ export default function PendingPage() {
                 <CardBody>
                   {all.length === 0 ? (
                     <EmptyState title="No submissions waiting for review">
-                      When a caregiver records a skill demonstration, it appears here once the AI has finished its
-                      first read. This list refreshes on its own.
+                      When a caregiver sends you a recording, it appears here. Practice runs they have not sent stay
+                      with them. This list refreshes on its own.
                     </EmptyState>
                   ) : rows.length === 0 ? (
                     <EmptyState title={`Nothing under “${active.label}”`}>
-                      None of the pending submissions have this AI assessment.
+                      {filter === "forced"
+                        ? "No caregiver has sent a recording anyway, under the score needed to send."
+                        : "None of the pending submissions have this AI assessment."}
                     </EmptyState>
                   ) : (
-                    <PendingReviewsTable attempts={rows} />
+                    <PendingReviewsTable attempts={rows} earlier={earlierRecordings(rows, everything.data)} />
                   )}
+                  <p className="mt-3 text-xs text-ink-secondary">
+                    One row per caregiver and skill: when a caregiver sends a newer recording, it takes the place of
+                    the one waiting here. Earlier recordings, and practice runs never sent to you, are on each
+                    caregiver&apos;s page.
+                  </p>
                 </CardBody>
               </Card>
             </>
           );
         }}
       </Loadable>
-
-      <ProcessingAttempts />
     </div>
   );
 }

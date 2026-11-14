@@ -334,7 +334,7 @@ function SystemCard() {
                 </Row>
                 <Row label="Stored, all agencies">
                   {number.format(database.skills)} skill {database.skills === 1 ? "version" : "versions"} ·{" "}
-                  {number.format(database.attempts)} {database.attempts === 1 ? "submission" : "submissions"} ·{" "}
+                  {number.format(database.attempts)} {database.attempts === 1 ? "caregiver recording" : "caregiver recordings"} ·{" "}
                   {number.format(database.pose_frames)} movement readings
                 </Row>
                 <Row label="AI models">

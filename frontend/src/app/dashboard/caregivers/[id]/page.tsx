@@ -1,35 +1,34 @@
 "use client";
 
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import {
-  Card,
-  CardBody,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-  ErrorNote,
-  Loadable,
-  ProgressBar,
-  Skeleton,
-  StateBadge,
-} from "@/components/ui";
+import { Card, CardBody, ErrorNote, Loadable, ProgressBar, Skeleton, StateBadge } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { firstName, formatDate, formatDateTime, plural, relativeTime } from "@/lib/format";
+import { formatDate, formatDateTime, plural } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
-import { aiAssessment, caregiverStatus, categoryLabel, reviewState, skillState } from "@/lib/status";
+import { caregiverStatus } from "@/lib/status";
 import type { CaregiverDetail } from "@/lib/types";
 import { BackLink } from "@/shared/layout/BackLink";
 import { PageHeading } from "@/shared/layout/PageHeading";
+import { CaregiverHistory, scrollToHistory, useHistorySlug } from "@/nurse/components/caregivers/CaregiverHistory";
+import { CaregiverSkills } from "@/nurse/components/caregivers/CaregiverSkills";
 import { useDashboard } from "@/nurse/context/DashboardContext";
+
+/** "12 recordings, 5 sent to you" */
+function recordingsLine(person: CaregiverDetail) {
+  const total = person.attempts.length;
+  if (total === 0) return "No recordings yet";
+  const sent = person.attempts.filter((item) => item.submitted_at).length;
+  return `${plural(total, "recording")}, ${sent === total ? "all" : sent} sent to you`;
+}
 
 export default function CaregiverPage() {
   const { id } = useParams<{ id: string }>();
   const detail = useApi<CaregiverDetail>(`/caregivers/${id}`);
   useTitle(detail.data?.name ?? "Caregiver");
+  // Which skill's recordings the history shows; a link to #history-<skill> picks one.
+  const [historySlug, setHistorySlug] = useHistorySlug();
 
   return (
     <div className="space-y-5">
@@ -56,8 +55,15 @@ export default function CaregiverPage() {
               actions={<StateBadge entry={caregiverStatus[person.status]} />}
             />
             <Profile person={person} onSaved={detail.setData} />
-            <SkillsCard person={person} />
-            <HistoryCard person={person} />
+            <CaregiverSkills
+              person={person}
+              onSaved={detail.setData}
+              onShowHistory={(slug) => {
+                setHistorySlug(slug);
+                scrollToHistory();
+              }}
+            />
+            <CaregiverHistory person={person} slug={historySlug} onSlug={setHistorySlug} />
           </>
         )}
       </Loadable>
@@ -123,7 +129,7 @@ function Profile({ person, onSaved }: { person: CaregiverDetail; onSaved: (next:
               label={`${person.skills_verified} of ${person.skills_total} skills verified`}
             />
             <p className="mt-2 text-xs text-ink-muted">
-              {plural(person.attempt_count, "submission")}
+              {recordingsLine(person)}
               {person.skills_in_review > 0 ? ` · ${plural(person.skills_in_review, "skill")} in review` : ""}
               {person.open_flags > 0 ? ` · ${plural(person.open_flags, "open safety flag")}` : ""}
             </p>
@@ -168,178 +174,5 @@ function Profile({ person, onSaved }: { person: CaregiverDetail; onSaved: (next:
         </div>
       </CardBody>
     </Card>
-  );
-}
-
-function SkillsCard({ person }: { person: CaregiverDetail }) {
-  return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Skills</CardTitle>
-          <CardDescription>
-            {firstName(person.name)}&apos;s standing on each of the agency&apos;s skills.
-          </CardDescription>
-        </div>
-      </CardHeader>
-      <CardBody>
-        {person.skills.length === 0 ? (
-          <EmptyState title="No skills yet">
-            Skills appear here once a nurse adds one to the library from a reference recording.
-          </EmptyState>
-        ) : (
-          <ul className="divide-y divide-border overflow-hidden rounded-[12px] border border-border">
-            {person.skills.map((skill) => {
-              const state = skillState[skill.state];
-              return (
-                <li key={skill.skill_id} className="flex flex-wrap items-center gap-3 bg-white px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <Link href={`/dashboard/skills/${skill.skill_id}`} className="font-medium text-ink hover:text-teal">
-                      {skill.name}
-                    </Link>
-                    <p className="text-xs text-ink-muted">
-                      {categoryLabel[skill.category] ?? categoryLabel.other} ·{" "}
-                      {skill.attempts === 0 ? "No submissions" : plural(skill.attempts, "submission")}
-                    </p>
-                  </div>
-                  <StateBadge entry={state} />
-                  {skill.attempt_id ? (
-                    <Link
-                      href={`/dashboard/reviews/${skill.attempt_id}`}
-                      className="w-28 text-right text-sm font-medium text-teal hover:underline"
-                      aria-label={`Open the review for ${skill.name}`}
-                    >
-                      {skill.state === "in_review" ? "Review" : "Open review"}
-                    </Link>
-                  ) : (
-                    <span className="w-28 text-right text-xs text-ink-muted">Not submitted</span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </CardBody>
-    </Card>
-  );
-}
-
-function HistoryCard({ person }: { person: CaregiverDetail }) {
-  const attempts = person.attempts;
-  return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle>Submission history</CardTitle>
-          <CardDescription>
-            Every recording {firstName(person.name)} has submitted, newest first, including ones sent back for
-            retraining.
-          </CardDescription>
-        </div>
-      </CardHeader>
-      <CardBody>
-        {attempts.length === 0 ? (
-          <EmptyState title="No submissions yet">
-            Recordings appear here when this caregiver practises a skill in the caregiver portal.
-          </EmptyState>
-        ) : (
-          <div className="overflow-hidden rounded-[12px] border border-border">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="whitespace-nowrap bg-secondary text-xs font-medium text-ink-secondary">
-                  <tr>
-                    <th className="px-3 py-3 font-medium">Skill</th>
-                    <th className="px-3 py-3 font-medium">Submitted</th>
-                    <th className="px-3 py-3 font-medium">AI assessment</th>
-                    <th className="hidden px-3 py-3 font-medium xl:table-cell">Safety flags</th>
-                    <th className="px-3 py-3 font-medium">Review status</th>
-                    <th className="hidden px-3 py-3 font-medium xl:table-cell">Reviewer</th>
-                    <th className="px-3 py-3 text-right font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {attempts.map((item) => (
-                    <tr
-                      key={item.id}
-                      className={cn(
-                        "border-t border-border align-top",
-                        item.review_state === "retraining" ? "bg-danger-bg/30 hover:bg-danger-bg/50" : "bg-white hover:bg-page",
-                      )}
-                    >
-                      <td className="px-3 py-3">
-                        <span className="block font-medium text-ink xl:min-w-28">{item.skill_name}</span>
-                        {item.skill_version > 1 ? (
-                          <span className="text-xs text-ink-muted">Version {item.skill_version}</span>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-3 text-ink-secondary xl:whitespace-nowrap" title={relativeTime(item.created_at)}>
-                        {formatDateTime(item.created_at)}
-                      </td>
-                      <td className="px-3 py-3">
-                        {item.ai_assessment ? (
-                          <StateBadge entry={aiAssessment[item.ai_assessment]} />
-                        ) : (
-                          <span className="text-ink-muted">Not graded</span>
-                        )}
-                        {item.flag_count > 0 ? (
-                          <span className="mt-1 block whitespace-nowrap text-xs font-medium text-danger xl:hidden">
-                            {plural(item.flag_count, "safety flag")}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="hidden px-3 py-3 xl:table-cell">
-                        {item.flag_count > 0 ? (
-                          <span className="whitespace-nowrap font-medium text-danger">{plural(item.flag_count, "flag")}</span>
-                        ) : (
-                          <span className="text-ink-muted">None</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <StateBadge entry={reviewState[item.review_state]} />
-                        <div className="mt-2 xl:hidden">
-                          <Reviewer item={item} />
-                        </div>
-                      </td>
-                      <td className="hidden px-3 py-3 xl:table-cell">
-                        <Reviewer item={item} />
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <Link
-                          href={`/dashboard/reviews/${item.id}`}
-                          className="text-sm font-medium text-teal hover:underline"
-                          aria-label={`Open ${item.skill_name} from ${formatDateTime(item.created_at)}`}
-                        >
-                          {item.review_state === "pending" ? "Review" : "Open"}
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-        {attempts.some((item) => item.review_state === "retraining") ? (
-          <p className="mt-3 text-xs text-ink-secondary">
-            Rows shaded red were sent back for retraining. They stay here for the record; the caregiver sees the
-            nurse&apos;s feedback in their portal.
-          </p>
-        ) : null}
-      </CardBody>
-    </Card>
-  );
-}
-
-function Reviewer({ item }: { item: CaregiverDetail["attempts"][number] }) {
-  if (!item.reviewer_name) return <span className="text-xs text-ink-muted xl:text-sm">Not reviewed</span>;
-  return (
-    <div className="xl:min-w-40">
-      <p className="text-ink">
-        {item.reviewer_name}
-        {item.reviewer_credentials ? `, ${item.reviewer_credentials}` : ""}
-      </p>
-      {item.reviewed_at ? <p className="text-xs text-ink-muted">{formatDateTime(item.reviewed_at)}</p> : null}
-      {item.nurse_note ? <p className="mt-1 text-xs text-ink-secondary">“{item.nurse_note}”</p> : null}
-    </div>
   );
 }

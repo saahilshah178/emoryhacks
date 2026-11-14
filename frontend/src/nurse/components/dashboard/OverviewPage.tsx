@@ -5,8 +5,7 @@ import { Card, CardBody, CardHeader, CardTitle, EmptyState, Loadable, Skeleton }
 import { useApi, useTitle } from "@/lib/hooks";
 import type { AttemptSummary } from "@/lib/types";
 import { KpiCards } from "@/nurse/components/dashboard/KpiCards";
-import { PendingReviewsTable } from "@/nurse/components/dashboard/PendingReviewsTable";
-import { ProcessingAttempts } from "@/nurse/components/dashboard/ProcessingAttempts";
+import { earlierRecordings, PendingReviewsTable } from "@/nurse/components/dashboard/PendingReviewsTable";
 import { RecentActivity } from "@/nurse/components/dashboard/RecentActivity";
 import { SafetyOverview } from "@/nurse/components/dashboard/SafetyOverview";
 import { PageHeading } from "@/shared/layout/PageHeading";
@@ -21,6 +20,7 @@ export function OverviewPage() {
   const user = useUser();
   const { overview } = useDashboard();
   const pending = useApi<AttemptSummary[]>("/attempts?state=pending", { refreshMs: 30_000 });
+  const everything = useApi<AttemptSummary[]>("/attempts?all=1", { refreshMs: 30_000 });
   const pendingCount = overview?.counts.pending;
 
   return (
@@ -60,7 +60,8 @@ export function OverviewPage() {
               <div>
                 <CardTitle>Pending reviews</CardTitle>
                 <p className="mt-1 text-sm text-ink-secondary">
-                  Newest caregiver submissions. Open a row to compare against the nurse reference.
+                  The latest recording each caregiver sent you for each skill. Open a row to compare it with the
+                  reference.
                 </p>
               </div>
               <Link href="/dashboard/pending" className="shrink-0 text-sm font-medium text-teal hover:underline">
@@ -85,11 +86,12 @@ export function OverviewPage() {
                   <>
                     <PendingReviewsTable
                       attempts={rows.slice(0, SHOWN)}
+                      earlier={earlierRecordings(rows.slice(0, SHOWN), everything.data)}
                       compact
                       empty={
                         <EmptyState title="No submissions waiting for review">
-                          When a caregiver records a skill demonstration, it appears here once the AI has finished
-                          its first read.
+                          When a caregiver sends you a recording, it appears here. Practice runs they have not sent
+                          stay with them.
                         </EmptyState>
                       }
                     />
@@ -106,7 +108,6 @@ export function OverviewPage() {
               </Loadable>
             </CardBody>
           </Card>
-          <ProcessingAttempts />
         </div>
         <RecentActivity />
       </div>

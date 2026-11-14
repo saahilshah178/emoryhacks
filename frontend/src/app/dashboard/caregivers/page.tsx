@@ -30,7 +30,7 @@ export default function CaregiversPage() {
         loading={roster.loading}
         reload={roster.reload}
         skeleton={
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {[0, 1, 2].map((key) => (
               <Skeleton key={key} className="h-56" />
             ))}
@@ -47,7 +47,7 @@ export default function CaregiversPage() {
             );
           }
           return (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {people.map((person) => (
                 <CaregiverCard key={person.id} person={person} />
               ))}

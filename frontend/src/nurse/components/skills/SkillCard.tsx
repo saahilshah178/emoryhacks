@@ -1,10 +1,16 @@
 import Link from "next/link";
-import { ListOrdered } from "lucide-react";
+import { ListOrdered, Repeat2, Users } from "lucide-react";
 import { SkillIcon } from "@/components/skills/SkillIcon";
 import { Badge } from "@/components/ui";
 import { formatClock, plural } from "@/lib/format";
 import { categoryLabel } from "@/lib/status";
 import type { SkillSummary } from "@/lib/types";
+import { attemptsEach } from "@/nurse/components/attempts/words";
+
+function assignedTo(policy: SkillSummary["policy"]) {
+  if (policy.assign_all) return "Every caregiver";
+  return policy.assigned_count === 0 ? "No caregivers yet" : plural(policy.assigned_count, "caregiver");
+}
 
 /** One skill in the list: a black-and-white pictogram of the skill and the facts a nurse scans for. */
 export function SkillCard({ skill }: { skill: SkillSummary }) {
@@ -24,10 +30,22 @@ export function SkillCard({ skill }: { skill: SkillSummary }) {
           </Badge>
         </div>
         {skill.summary ? <p className="line-clamp-2 text-sm text-ink-secondary">{skill.summary}</p> : null}
+        {/* What the nurse set for the skill, then the facts about its reference. */}
+        <p className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-xs font-medium text-ink">
+          <span className="inline-flex items-center gap-1">
+            <Repeat2 className="h-3.5 w-3.5 text-teal" aria-hidden />
+            {attemptsEach(skill.policy.max_attempts)}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Users className="h-3.5 w-3.5 text-teal" aria-hidden />
+            {assignedTo(skill.policy)}
+          </span>
+        </p>
         {/* Two lines, so no separator is left hanging at the end of one. */}
-        <div className="mt-auto space-y-1 pt-1 text-xs text-ink-secondary">
+        <div className="space-y-1 text-xs text-ink-secondary">
           <p>
-            Version {skill.version} · {plural(skill.step_count, "step")} · {plural(skill.attempt_count, "attempt")}
+            Version {skill.version} · {plural(skill.step_count, "step")}
+            {skill.submission_count > 0 ? ` · ${skill.submission_count} sent for review` : ""}
           </p>
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span>{skill.duration_s ? `${formatClock(skill.duration_s)} reference video` : "No reference video"}</span>

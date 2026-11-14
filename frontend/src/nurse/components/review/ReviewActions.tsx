@@ -4,10 +4,18 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ErrorNote, StateBadge, Textarea } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
-import { formatDateTime, plural } from "@/lib/format";
+import { firstName, formatDateTime, plural } from "@/lib/format";
 import { reviewState, stepStatus } from "@/lib/status";
 import type { Attempt, Status } from "@/lib/types";
+import { freshSet } from "@/nurse/components/attempts/words";
 import { useDashboard } from "@/nurse/context/DashboardContext";
+
+/** "Jamie gets a fresh set of 3 attempts", or null for a recording with no caregiver account. */
+function freshSetSentence(attempt: Attempt) {
+  if (attempt.attempts.used === null) return null;
+  const name = firstName(attempt.caregiver_name || "") || "The caregiver";
+  return `${name} gets a fresh set of ${freshSet(attempt.attempts.allowed)} for this skill.`;
+}
 
 type Decision = "approved" | "retraining";
 
@@ -92,6 +100,8 @@ function DecisionForm({
   const [apiError, setApiError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Decision | null>(null);
   const [saving, setSaving] = useState(false);
+  const fresh = freshSetSentence(attempt);
+  const replaced = attempt.review_state === "superseded";
 
   async function submit(decision: Decision) {
     if (decision === "retraining" && notes.trim().length < 8) {
@@ -108,7 +118,12 @@ function DecisionForm({
       showFlash(
         decision === "approved"
           ? { tone: "success", message: "Skill approved. The caregiver can perform this task independently once scheduled." }
-          : { tone: "danger", message: "Retraining requested. The caregiver will be notified and this skill stays restricted." },
+          : {
+              tone: "danger",
+              message: `Retraining requested. The caregiver will be notified and this skill stays restricted.${
+                fresh ? ` ${fresh}` : ""
+              }`,
+            },
       );
       reloadOverview();
       router.push("/dashboard/pending");
@@ -156,6 +171,7 @@ function DecisionForm({
               ? "Approve this skill? The caregiver will be cleared for independent performance."
               : "Request retraining? This skill stays restricted until a new demonstration is approved."}
           </p>
+          {confirm === "retraining" && fresh ? <p className="mt-1 text-sm text-ink-secondary">{fresh}</p> : null}
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant={confirm === "approved" ? "primary" : "destructive"} loading={saving} onClick={() => submit(confirm)}>
               Confirm {confirm === "approved" ? "approval" : "retraining"}
@@ -183,13 +199,16 @@ function DecisionForm({
           >
             Request retraining
           </Button>
-          {reviewed ? (
+          {reviewed || replaced ? (
             <Button variant="ghost" onClick={onCancel}>
-              Keep current decision
+              {reviewed ? "Keep current decision" : "Back"}
             </Button>
           ) : null}
         </div>
       )}
+      {fresh && !confirm ? (
+        <p className="text-xs text-ink-secondary">If you request retraining, {fresh.replace(/^The caregiver/, "the caregiver")}</p>
+      ) : null}
     </div>
   );
 }

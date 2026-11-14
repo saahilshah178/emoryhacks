@@ -97,7 +97,11 @@ function attemptOption(attempt: AttemptSummary): Option {
     key: `attempt-${attempt.id}`,
     href: `/dashboard/reviews/${attempt.id}`,
     title: attempt.skill_name,
-    detail: `${attempt.caregiver_name} · ${relativeTime(attempt.created_at)}`,
+    // The list holds what caregivers sent, so it is timed by when it was sent.
+    detail: `${attempt.caregiver_name} · sent ${relativeTime(attempt.submitted_at ?? attempt.created_at).replace(
+      /^(Just now|Yesterday)$/,
+      (m) => m.toLowerCase(),
+    )}${attempt.submit_kind === "forced" ? " · sent anyway" : ""}`,
     leading: <IconTile icon={Video} />,
     trailing: <StateBadge entry={reviewState[attempt.review_state]} />,
   };

@@ -1,12 +1,18 @@
 // The caregiver's result screen: result.html?id=<attempt_id>.
 // Polls the attempt while its job runs, then renders the overall result, the video,
 // one card per rubric step, safety flags and the people identified.
-import { api, qs, esc, fmtTime, fmtDate, badge, videoUrl, thumbUrl, stagesHtml, showError } from "/js/common.js";
+import { api, qs, esc, fmtTime, fmtDate, badge, videoUrl, thumbUrl, stagesHtml, showError, stepTally } from "/js/common.js";
 
+// Headlines before a nurse has looked at the attempt (the AI's result) and after (the nurse's).
 const HEADLINE = {
   passed: { title: "Passed", line: "Well done. You met the criteria for this skill." },
   failed: { title: "Not passed yet", line: "You're on your way. The notes below show what to work on before you try again." },
   unverified: { title: "Needs a closer look", line: "Some steps could not be seen clearly, so a nurse will check them." },
+};
+const REVIEWED_HEADLINE = {
+  passed: { title: "Passed", line: "A nurse reviewed your attempt and confirmed you met the criteria." },
+  failed: { title: "Not passed yet", line: "A nurse reviewed your attempt. The notes below show what to work on before you try again." },
+  unverified: { title: "Not confirmed", line: "A nurse reviewed your attempt but could not confirm every step from this video. Record it again with the whole skill in view." },
 };
 const ROLE = { caregiver: "Caregiver", patient: "Patient", other: "Other person" };
 const FLAG_KIND = {
@@ -38,43 +44,65 @@ function progressHtml(a) {
   const job = a.job || {};
   if (job.status === "error") {
     return `<div class="card"><h2>We couldn't finish checking this attempt</h2>
-      <p class="error small">${esc(job.error || "Unknown error").split("\n")[0]}</p>
+      <p>This was a problem on our side while processing the video, not a result for your attempt.</p>
+      <p class="error small">${esc((job.error || "Unknown error").split("\n")[0])}</p>
       <p class="muted">Please record the skill again.</p>${stagesHtml(job)}</div>`;
   }
-  return `<div class="card"><h2>Checking your attempt…</h2>
+  return `<div class="card progress"><h2>Checking your attempt…</h2>
     <p class="muted">This usually takes a minute or two. The page updates on its own.</p>${stagesHtml(job)}</div>`;
 }
 
+// The headline follows final_status, which is the nurse's decision once reviewed_at is set.
+// The AI's own summary and reasons stay visible, but labelled as the AI's and, after a
+// review, as superseded by the nurse.
 function summaryHtml(a) {
   const status = a.final_status;
-  const head = HEADLINE[status] || { title: "Result pending", line: "" };
   const reviewed = Boolean(a.reviewed_at);
+  const head = (reviewed ? REVIEWED_HEADLINE : HEADLINE)[status] || { title: "Result pending", line: "" };
   const review = reviewed
-    ? `<p class="small"><span class="badge neutral">Reviewed by a nurse</span>${a.nurse_note ? ` ${esc(a.nurse_note)}` : ""}</p>`
+    ? `<p class="small"><span class="badge neutral">Reviewed by a nurse</span> ${esc(fmtDate(a.reviewed_at))}</p>
+       ${a.nurse_note ? `<p class="feedback nurse-note">“${esc(a.nurse_note)}”</p>` : ""}`
     : a.needs_review ? `<p class="small"><span class="badge pending">Awaiting nurse review</span></p>` : "";
   const reasons = (a.reasons || []).length
     ? `<ul class="tight">${a.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : "";
   const mismatch = a.skill_match === false
     ? `<p class="notice small">This recording doesn't seem to show ${esc(a.skill_name)}. ${esc(a.skill_match_note)}</p>` : "";
+  const aiPart = `${a.overall_feedback ? `<p class="feedback">${esc(a.overall_feedback)}</p>` : ""}
+      ${reasons ? `<p class="label">Why</p>${reasons}` : ""}`;
+  const ai = reviewed && a.status
+    ? `<div class="superseded"><p class="small"><span class="badge neutral">AI</span>
+        The automatic check said ${badge(a.status)} before the nurse's review:</p>${aiPart}</div>`
+    : aiPart;
+  // score_pct is a 0-100 score that already includes order and safety deductions, so it is
+  // not a share of steps; the step count is shown next to it instead.
+  const score = a.score_pct != null
+    ? `<div class="score"><span>${Math.round(a.score_pct)}</span><small class="muted">${reviewed ? "AI score" : "score"} out of 100</small></div>` : "";
   return `<section class="card hero ${esc(status || "pending")}">
       <div class="hero-top">
-        <div><p class="label">Your result</p><h2 class="hero-title">${esc(head.title)}</h2><p>${esc(head.line)}</p></div>
-        ${a.score_pct != null ? `<div class="score"><span>${Math.round(a.score_pct)}%</span><small class="muted">of steps</small></div>` : ""}
+        <div><p class="label">Your result</p><h2 class="hero-title">${esc(head.title)}</h2><p>${esc(head.line)}</p>
+          <p class="small muted">${esc(stepTally(a.steps))}</p></div>
+        ${score}
       </div>
       ${review}${mismatch}
-      ${a.overall_feedback ? `<p class="feedback">${esc(a.overall_feedback)}</p>` : ""}
-      ${reasons ? `<p class="label">Why</p>${reasons}` : ""}
+      ${ai}
     </section>`;
 }
 
+// Where the nurse changed a step, the nurse's status and note lead and the AI's feedback
+// follows, marked as the AI's and as superseded.
 function stepHtml(step, violations) {
   const status = step.nurse_status || step.status;
+  const changed = step.nurse_status && step.nurse_status !== step.status;
   const t = step.evidence_start_s ?? step.start_s;
   const notes = violations
     .filter((v) => v.step_id === step.step_id || v.expected_after === step.step_id)
     .map((v) => `<p class="small order-note">Out of order: ${esc(v.message)}</p>`).join("");
   const nurse = step.nurse_status
-    ? `<p class="small"><span class="badge neutral">Nurse</span> ${esc(step.nurse_note || "Updated by a nurse.")}</p>` : "";
+    ? `<p><span class="badge neutral">Nurse</span> ${esc(step.nurse_note || (changed ? "A nurse changed this step's result." : "A nurse confirmed this step."))}</p>` : "";
+  const feedback = step.feedback ? esc(step.feedback) : `<span class="muted">No feedback for this step.</span>`;
+  const ai = changed
+    ? `<div class="superseded small"><span class="badge neutral">AI</span> The automatic check said ${badge(step.status)}: ${feedback}</div>`
+    : `<p>${feedback}</p>`;
   return `<article class="card step ${esc(status || "pending")}">
       <div class="step-head">
         <span class="step-num">${step.ord}</span>
@@ -82,8 +110,8 @@ function stepHtml(step, violations) {
         ${step.critical ? `<span class="badge critical">Critical</span>` : ""}
         ${badge(status)}
       </div>
-      ${step.feedback ? `<p>${esc(step.feedback)}</p>` : `<p class="muted">No feedback for this step.</p>`}
-      ${notes}${nurse}
+      ${nurse}${ai}
+      ${notes}
       <p class="small muted seen">${timeChip(t)} ${step.evidence ? `What we saw: ${esc(step.evidence)}` : ""}
         ${step.double_checked ? `<span class="badge neutral" title="Looked at a second time, more closely">Checked twice</span>` : ""}</p>
     </article>`;
@@ -153,22 +181,30 @@ async function load() {
     app.innerHTML = `<div class="notice">No attempt selected. Open a result from the <a href="/attempts.html">attempts list</a>.</div>`;
     return;
   }
-  try {
-    for (;;) {
-      const attempt = await api(`/attempts/${encodeURIComponent(id)}`);
-      document.title = `${attempt.skill_name} result · FirstShift`;
-      const job = attempt.job;
-      if (job && job.status !== "done") {
-        app.innerHTML = headerHtml(attempt) + progressHtml(attempt) + (job.status === "error" ? actionsHtml(attempt) : "");
-        if (job.status === "error") return;
-        await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-        continue;
-      }
-      render(attempt);
-      return;
+  // While the job runs, a failed request is retried a few times before giving up, so one
+  // dropped connection does not replace the progress card with an error.
+  let failures = 0;
+  for (;;) {
+    let attempt;
+    try {
+      attempt = await api(`/attempts/${encodeURIComponent(id)}`);
+      failures = 0;
+    } catch (err) {
+      failures += 1;
+      if (!app.querySelector(".progress") || failures >= 4) return showError(app, err);
+      await new Promise((resolve) => setTimeout(resolve, POLL_MS * (failures + 1)));
+      continue;
     }
-  } catch (err) {
-    showError(app, err);
+    document.title = `${attempt.skill_name} result · FirstShift`;
+    const job = attempt.job;
+    if (job && job.status !== "done") {
+      app.innerHTML = headerHtml(attempt) + progressHtml(attempt) + (job.status === "error" ? actionsHtml(attempt) : "");
+      if (job.status === "error") return;
+      await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+      continue;
+    }
+    render(attempt);
+    return;
   }
 }
 

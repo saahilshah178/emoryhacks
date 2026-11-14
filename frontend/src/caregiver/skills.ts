@@ -15,10 +15,12 @@ export function outOfAttempts(skill: Pick<MySkill, "attempts_left">) {
 }
 
 /**
- * A skill card's link: a recording that is ready to send first, then the result behind the
- * skill's state once there is one, otherwise the practice flow.
+ * A skill card's link: a recording still being checked (its progress) first, then one that is
+ * ready to send, then the result behind the skill's state once there is one, otherwise the
+ * practice flow.
  */
 export function skillHref(skill: MySkill) {
+  if (skill.checking_attempt_id) return resultsHref(skill.id, skill.checking_attempt_id);
   if (skill.ready_attempt_id) return resultsHref(skill.id, skill.ready_attempt_id);
   return skill.state === "not_started" || !skill.attempt_id
     ? practiceHref(skill.id)
@@ -26,10 +28,13 @@ export function skillHref(skill: MySkill) {
 }
 
 /**
- * What the caregiver should do next on a skill they are working on: send a recording that is
- * ready, otherwise record (or, with no attempts left, read their result).
+ * What the caregiver should do next on a skill they are working on: follow a recording being
+ * checked, send one that is ready, otherwise record (or, with no attempts left, read their result).
  */
 export function nextStep(skill: MySkill): { href: string; label: string } {
+  if (skill.checking_attempt_id) {
+    return { href: resultsHref(skill.id, skill.checking_attempt_id), label: `Follow your ${skill.name} check` };
+  }
   if (skill.ready_attempt_id) {
     return { href: resultsHref(skill.id, skill.ready_attempt_id), label: `Send ${skill.name} to your nurse` };
   }

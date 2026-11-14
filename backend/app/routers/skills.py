@@ -7,16 +7,34 @@ PATCH  /api/skills/{id}/steps/{step_id}    edit a step's text, flags, times or e
 POST   /api/skills/{id}/regenerate         rebuild the rubric from the reference video as a NEW version;
                                            returns {job_id}; when done, the job's skill_id is the new version
 DELETE /api/skills/{id}
+GET    /api/skills/{id}/policy             the nurse's rules for the skill and where each caregiver stands (nurse)
+PUT    /api/skills/{id}/policy             body {max_attempts, submit_pct, force_pct, assign_all, assigned_ids?}
+                                           -> the same shape as GET (nurse)
+
+A policy belongs to the skill's slug, so it carries over to every version of the skill. Its
+fields: max_attempts (1..50, or null for unlimited, the default), submit_pct (default 80: the
+score at which a caregiver can send an attempt), force_pct (default 50: from here up to
+submit_pct they can send it anyway with a note), assign_all (default true: every caregiver of
+the agency has the skill; false: only the caregivers picked). 0 <= force_pct <= submit_pct <= 100.
+Fields left out of a PUT keep their value. assigned_ids replaces the picked caregivers when
+assign_all is false; switching assign_all off without it keeps whoever was picked before.
+One caregiver's assignment and limit are changed with PATCH /api/caregivers/{id}/skills/{skill_id}.
+
+Lists include each skill's policy {max_attempts, submit_pct, force_pct, assign_all, assigned_count}
+and submission_count (attempts at this version sent to a nurse). A caregiver sees only the skills
+assigned to them: any other is a 404.
 """
 from __future__ import annotations
 
 import threading
 import traceback
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
-from .. import auth, builtin, config, gemini, jobs, media, repo
+from .. import auth, builtin, config, gemini, jobs, media, progress, repo
 from ..models import Classification, SkillPatch, StepPatch
 from ..stages import rubric
 
@@ -30,15 +48,84 @@ _rebuilding: dict[str, object] = {}
 _rebuilding_lock = threading.Lock()
 
 
+class PolicyUpdate(BaseModel):
+    max_attempts: int | None = None
+    submit_pct: float | None = None
+    force_pct: float | None = None
+    assign_all: bool | None = None
+    assigned_ids: list[uuid.UUID] | None = None
+
+
 @router.get("")
 def list_skills(all: bool = False, user: dict = Depends(auth.current_user)):
-    """The newest version of each of the agency's skills, or every version with ?all=1."""
-    return repo.list_skills(all_versions=all, org_id=user["org_id"])
+    """The newest version of each of the agency's skills, or every version with ?all=1.
+    A caregiver gets only the skills assigned to them."""
+    skills = repo.list_skills(all_versions=all, org_id=user["org_id"])
+    if user["role"] == "caregiver":
+        assigned = repo.assigned_slugs(user["org_id"], user["id"])
+        skills = [s for s in skills if s["slug"] in assigned]
+    return skills
 
 
 @router.get("/{skill_id}")
 def get_skill(skill_id: str, user: dict = Depends(auth.current_user)):
-    return repo.public(_skill_or_404(skill_id, user))
+    skill = _skill_or_404(skill_id, user)
+    pol = repo.get_policy(skill["org_id"], skill["slug"])
+    skill["policy"] = {k: pol[k] for k in ("max_attempts", "submit_pct", "force_pct", "assign_all")}
+    return repo.public(skill)
+
+
+@router.get("/{skill_id}/policy")
+def get_policy(skill_id: str, user: dict = Depends(auth.nurse)):
+    return _policy_view(_skill_or_404(skill_id, user))
+
+
+@router.put("/{skill_id}/policy")
+def put_policy(skill_id: str, body: PolicyUpdate, user: dict = Depends(auth.nurse)):
+    skill = _skill_or_404(skill_id, user)
+    org, slug = skill["org_id"], skill["slug"]
+    pol = repo.get_policy(org, slug)
+    given = body.model_fields_set
+    if "max_attempts" in given:  # null is unlimited
+        pol["max_attempts"] = body.max_attempts
+    for key in ("submit_pct", "force_pct", "assign_all"):
+        if key in given and getattr(body, key) is not None:
+            pol[key] = getattr(body, key)
+    limit = progress.MAX_ATTEMPTS
+    if pol["max_attempts"] is not None and not 1 <= pol["max_attempts"] <= limit:
+        raise HTTPException(422, f"Attempts allowed must be a whole number from 1 to {limit}, or unlimited.")
+    if not 0 <= pol["submit_pct"] <= 100:
+        raise HTTPException(422, "The score needed to send a recording must be between 0% and 100%.")
+    if not 0 <= pol["force_pct"] <= pol["submit_pct"]:
+        raise HTTPException(422, "The score needed to send a recording anyway must be between 0% and the "
+                                 "score needed to send it normally.")
+    caregivers = {c["id"] for c in repo.list_caregivers(org)}
+    picked = set(body.assigned_ids or [])
+    if picked - caregivers:
+        raise HTTPException(422, "Some of the chosen caregivers are not caregivers in this agency.")
+    repo.save_policy(org, slug, pol, updated_by=user["id"])
+    if not pol["assign_all"] and body.assigned_ids is not None:
+        for person_id in caregivers:
+            repo.set_assignment(org, slug, person_id, assigned=person_id in picked)
+    return _policy_view(skill)
+
+
+def _policy_view(skill: dict) -> dict:
+    """The skill's policy and, for every caregiver of the agency, their assignment, limit,
+    attempts used / allowed / left and standing on the skill."""
+    org, slug = skill["org_id"], skill["slug"]
+    pol = repo.get_policy(org, slug)
+    assignments = repo.get_assignments(org, slug=slug)
+    attempts: dict = {}
+    for a in sorted(repo.list_attempts(org_id=org, slug=slug), key=lambda a: a["created_at"]):
+        attempts.setdefault(a["caregiver_id"], []).append(a)
+    caregivers = []
+    for person in repo.list_caregivers(org):
+        standing = progress.caregiver_skill(pol, assignments.get((slug, person["id"])), attempts.get(person["id"], []))
+        caregivers.append({"id": person["id"], "name": person["name"], "title": person["title"],
+                           **{k: standing[k] for k in ("assigned", "limit_mode", "max_attempts", "attempts_used",
+                                                      "attempts_allowed", "attempts_left", "state")}})
+    return {"skill_id": skill["id"], "slug": slug, **pol, "caregivers": caregivers}
 
 
 @router.patch("/{skill_id}")
@@ -159,5 +246,7 @@ def _skill_or_404(skill_id: str, user: dict) -> dict:
     except Exception:
         skill = None
     if not skill or skill["org_id"] != user["org_id"]:
+        raise HTTPException(404, "Skill not found")
+    if user["role"] == "caregiver" and skill["slug"] not in repo.assigned_slugs(user["org_id"], user["id"]):
         raise HTTPException(404, "Skill not found")
     return skill

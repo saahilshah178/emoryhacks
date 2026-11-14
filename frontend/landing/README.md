@@ -1,10 +1,17 @@
 # Landing
 
-Public site for the product: marketing page, log in, and sign up.
+The full product on one port: marketing, login, caregiver portal, and nurse dashboard.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Opens on [http://localhost:3000](http://localhost:3000). After login, caregivers go to port 3002 and nurses to port 3001.
+Opens on [http://localhost:3000](http://localhost:3000).
+
+- `/` marketing
+- `/login` and `/signup`
+- `/portal` caregiver portal
+- `/dashboard` nurse dashboard
+
+Demo access and sign out stay on this origin.

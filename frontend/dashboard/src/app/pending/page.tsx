@@ -25,13 +25,10 @@ export default function PendingPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
-      <div>
-        <h2 className="text-xl font-semibold text-navy">Queue for nurse review</h2>
-        <p className="mt-1 text-sm text-ink-secondary">
-          AI assessments sort the work. Certification happens only after you approve or request
-          retraining.
-        </p>
-      </div>
+      <p className="text-sm text-ink-secondary">
+        AI assessments sort the work. Certification happens only after you approve or request
+        retraining.
+      </p>
 
       <div className="flex flex-wrap gap-2">
         {filters.map((item) => (

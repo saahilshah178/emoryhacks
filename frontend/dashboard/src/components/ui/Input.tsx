@@ -8,7 +8,7 @@ export function Input({
   return (
     <input
       className={cn(
-        "h-10 w-full rounded-[12px] border border-border bg-white px-3 text-sm text-ink placeholder:text-ink-muted outline-none transition-shadow focus:border-teal focus:ring-2 focus:ring-teal/20",
+        "h-10 w-full rounded-[12px] border border-border bg-white px-3 text-sm text-ink placeholder:text-ink-secondary outline-none transition-shadow focus:border-teal focus:ring-2 focus:ring-teal/20",
         className,
       )}
       {...props}
@@ -23,7 +23,7 @@ export function Textarea({
   return (
     <textarea
       className={cn(
-        "w-full rounded-[12px] border border-border bg-white px-3 py-2.5 text-sm text-ink placeholder:text-ink-muted outline-none transition-shadow focus:border-teal focus:ring-2 focus:ring-teal/20",
+        "w-full rounded-[12px] border border-border bg-white px-3 py-2.5 text-sm text-ink placeholder:text-ink-secondary outline-none transition-shadow focus:border-teal focus:ring-2 focus:ring-teal/20",
         className,
       )}
       {...props}

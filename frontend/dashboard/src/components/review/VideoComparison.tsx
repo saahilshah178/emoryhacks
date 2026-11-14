@@ -134,6 +134,8 @@ export function VideoComparison({
                 step={0.1}
                 value={currentTime}
                 onChange={(event) => onSeek(Number(event.target.value))}
+                aria-label="Playback time"
+                aria-valuetext={formatClock(currentTime)}
                 className="absolute inset-0 z-10 h-8 w-full cursor-pointer appearance-none bg-transparent"
               />
               <div className="absolute top-1/2 h-2 w-full -translate-y-1/2 rounded-full bg-secondary">
@@ -147,9 +149,10 @@ export function VideoComparison({
                   key={step.id}
                   type="button"
                   title={`${step.label} · ${formatClock(step.timestamp)}`}
+                  aria-label={`${step.label} at ${formatClock(step.timestamp)}, ${step.status.replace("_", " ")}`}
                   onClick={() => onSeek(step.timestamp)}
                   className={cn(
-                    "absolute top-1/2 z-20 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white",
+                    "absolute top-1/2 z-20 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white",
                     step.status === "failed" && "bg-danger",
                     step.status === "needs_review" && "bg-warning",
                     step.status === "passed" && "bg-success",
@@ -158,8 +161,8 @@ export function VideoComparison({
                 />
               ))}
             </div>
-            <p className="mt-1 text-xs text-ink-muted">
-              Shared timeline · markers show AI-detected steps on both recordings
+            <p className="mt-1 text-xs text-ink-secondary">
+              Shared timeline. Markers: green passed, amber needs review, red failed.
             </p>
           </div>
         </div>

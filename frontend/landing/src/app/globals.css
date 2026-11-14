@@ -3,30 +3,30 @@
 :root {
   color-scheme: light;
   --navy: #17324d;
-  --teal: #238c91;
+  --teal: #17656a;
   --teal-soft: #e6f3f2;
   --bg: #f7f9fb;
   --card: #ffffff;
   --bg-secondary: #eef3f6;
   --border: #e1e8ed;
   --text: #243746;
-  --text-secondary: #718096;
-  --text-muted: #a0acb8;
-  --success: #21966b;
+  --text-secondary: #4a5f72;
+  --text-muted: #4a5f72;
+  --success: #0f6b45;
   --success-bg: #e8f5ef;
-  --warning: #d99a32;
+  --warning: #8a5808;
   --warning-bg: #fff5e3;
-  --error: #d9534f;
+  --error: #b42318;
   --error-bg: #fcedec;
   --info: #3979b9;
   --info-bg: #eaf2fa;
-  --teal-hover: #1c7478;
+  --teal-hover: #134e52;
   --ink: #243746;
-  --ink-secondary: #718096;
-  --ink-muted: #a0acb8;
+  --ink-secondary: #4a5f72;
+  --ink-muted: #4a5f72;
   --page: #f7f9fb;
   --secondary: #eef3f6;
-  --danger: #d9534f;
+  --danger: #b42318;
   --danger-bg: #fcedec;
   --shadow-card: 0 1px 2px rgba(23, 50, 77, 0.05), 0 8px 24px rgba(23, 50, 77, 0.04);
 }
@@ -64,7 +64,7 @@
 }
 
 html {
-  scroll-padding-top: 5.75rem;
+  scroll-padding-top: 5rem;
 }
 
 html,
@@ -93,4 +93,28 @@ a:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--teal);
   outline-offset: 2px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c5d0d8 transparent;
+}
+
+input[type="range"] {
+  accent-color: var(--teal);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: var(--teal);
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px var(--teal);
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 8px;
 }

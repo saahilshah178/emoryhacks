@@ -47,13 +47,13 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       name: isSignup ? name.trim() : role === "nurse" ? "Patricia Chen" : "Sarah Chen",
     };
     writeSession(session);
-    window.location.href = homeUrlFor(session.role);
+    window.location.assign(homeUrlFor(session.role));
   }
 
   return (
     <div className="flex min-h-dvh flex-col bg-page">
-      <header className="border-b border-border bg-white">
-        <div className="mx-auto flex h-[4.25rem] max-w-lg items-center px-5">
+      <header className="sticky top-0 z-30 border-b border-border bg-white">
+        <div className="flex h-16 items-center px-6">
           <Logo />
         </div>
       </header>
@@ -91,8 +91,13 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
                       onChange={() => setRole(item.id)}
                       className="sr-only"
                     />
-                    <Icon className={`h-5 w-5 ${selected ? "text-teal" : "text-ink-muted"}`} />
-                    <p className="mt-3 text-sm font-semibold text-navy">{item.title}</p>
+                    <div className="flex items-center gap-2">
+                      <Icon
+                        className={`h-4 w-4 shrink-0 ${selected ? "text-teal" : "text-ink-muted"}`}
+                        aria-hidden
+                      />
+                      <p className="text-sm font-semibold text-navy">{item.title}</p>
+                    </div>
                     <p className="mt-1 text-xs leading-relaxed text-ink-secondary">{item.subtitle}</p>
                   </label>
                 );
@@ -106,7 +111,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                className="h-11 w-full rounded-[12px] border border-border bg-white px-3 text-sm text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal/20"
+                className="h-11 w-full rounded-[12px] border border-border bg-white px-3 text-sm text-ink outline-none placeholder:text-ink-secondary focus:border-teal focus:ring-2 focus:ring-teal/20"
                 placeholder="Your name"
               />
             </label>
@@ -118,7 +123,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="h-11 w-full rounded-[12px] border border-border bg-white px-3 text-sm text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal/20"
+              className="h-11 w-full rounded-[12px] border border-border bg-white px-3 text-sm text-ink outline-none placeholder:text-ink-secondary focus:border-teal focus:ring-2 focus:ring-teal/20"
               placeholder="you@agency.example"
             />
           </label>
@@ -129,7 +134,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="h-11 w-full rounded-[12px] border border-border bg-white px-3 text-sm text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal/20"
+              className="h-11 w-full rounded-[12px] border border-border bg-white px-3 text-sm text-ink outline-none placeholder:text-ink-secondary focus:border-teal focus:ring-2 focus:ring-teal/20"
               placeholder="At least 4 characters"
             />
           </label>
@@ -149,14 +154,14 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         </form>
 
         <div className="mt-6 rounded-[12px] border border-border bg-white p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-ink-muted">Demo access</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-secondary">Demo access</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => {
                 const session = demoUser("caregiver");
                 writeSession(session);
-                window.location.href = homeUrlFor(session.role);
+                window.location.assign(homeUrlFor(session.role));
               }}
               className="h-11 rounded-[12px] border border-border text-sm font-medium text-navy transition-colors hover:bg-teal-soft"
             >
@@ -167,7 +172,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
               onClick={() => {
                 const session = demoUser("nurse");
                 writeSession(session);
-                window.location.href = homeUrlFor(session.role);
+                window.location.assign(homeUrlFor(session.role));
               }}
               className="h-11 rounded-[12px] border border-border text-sm font-medium text-navy transition-colors hover:bg-teal-soft"
             >
@@ -182,7 +187,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
             href={isSignup ? LOGIN_PATH : SIGNUP_PATH}
             className="font-semibold text-teal hover:underline"
           >
-            {isSignup ? "Log in" : "Sign up"}
+            {isSignup ? "Log in" : "Create account"}
           </a>
         </p>
       </main>

@@ -2,7 +2,7 @@ import { Video } from "lucide-react";
 import { APP_NAME } from "@/config/branding";
 import { Button } from "@/components/ui/Button";
 
-export function StartSkillCta({ href }: { href: string }) {
+export function StartSkillCta({ href, skillName }: { href: string; skillName?: string }) {
   return (
     <section className="rounded-[12px] bg-navy p-5 text-white shadow-[0_1px_3px_rgba(23,50,77,0.10)]">
       <div className="flex items-start gap-3">
@@ -11,11 +11,10 @@ export function StartSkillCta({ href }: { href: string }) {
         </span>
         <div className="min-w-0">
           <h2 className="text-lg font-semibold leading-snug">
-            Ready to demonstrate a skill?
+            {skillName ? `Next: ${skillName}` : "Ready to demonstrate a skill?"}
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-white/80">
-            Record yourself performing a caregiving skill and get feedback from{" "}
-            {APP_NAME}.
+            Record yourself performing this skill and get feedback from {APP_NAME}.
           </p>
         </div>
       </div>

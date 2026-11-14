@@ -10,7 +10,6 @@ import {
   ShieldAlert,
   Users,
 } from "lucide-react";
-import { APP_NAME } from "@/lib/branding";
 import { cn } from "@/lib/cn";
 import { useDashboard } from "@/context/DashboardContext";
 
@@ -33,18 +32,8 @@ export function Sidebar() {
   const { pendingCount, safetyFlagCount } = useDashboard();
 
   return (
-    <aside className="flex h-full w-[72px] shrink-0 flex-col bg-navy text-white lg:w-[248px]">
-      <div className="flex h-16 items-center gap-3 px-4">
-        <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-teal text-sm font-semibold">
-          {APP_NAME.charAt(0)}
-        </span>
-        <div className="hidden min-w-0 lg:block">
-          <p className="truncate text-sm font-semibold tracking-tight">{APP_NAME}</p>
-          <p className="text-[11px] text-white/55">Clinical operations</p>
-        </div>
-      </div>
-
-      <nav className="mt-2 flex flex-1 flex-col gap-1 px-2">
+    <aside className="flex h-full w-[72px] shrink-0 flex-col overflow-y-auto bg-navy text-white lg:w-[248px]">
+      <nav className="mt-3 flex flex-1 flex-col gap-1 px-2" aria-label="Clinical">
         {nav.map((item) => {
           const active = isActive(pathname, item.href);
           const count =

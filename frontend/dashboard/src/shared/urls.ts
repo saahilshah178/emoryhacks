@@ -1,36 +1,32 @@
 export type Role = "caregiver" | "nurse";
 
-function hostname() {
-  return typeof window === "undefined" ? "localhost" : window.location.hostname;
-}
-
 export const LOGIN_PATH = "/login";
 export const SIGNUP_PATH = "/signup";
 
 export function loginUrl() {
-  return `http://${hostname()}:3000${LOGIN_PATH}`;
+  return LOGIN_PATH;
 }
 
 export function signupUrl() {
-  return `http://${hostname()}:3000${SIGNUP_PATH}`;
+  return SIGNUP_PATH;
 }
 
 export function landingUrl() {
-  return `http://${hostname()}:3000/`;
+  return "/";
 }
 
 export function landingAfterSignOutUrl() {
-  return `${landingUrl()}?signedout=1`;
+  return "/";
 }
 
 export function caregiverHomeUrl() {
-  return `http://${hostname()}:3002/`;
+  return "/";
 }
 
 export function dashboardHomeUrl() {
-  return `http://${hostname()}:3001/`;
+  return "/";
 }
 
-export function homeUrlFor(role: Role) {
-  return role === "nurse" ? dashboardHomeUrl() : caregiverHomeUrl();
+export function homeUrlFor(_role: Role) {
+  return "/";
 }

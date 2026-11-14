@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { homeUrlFor, landingAfterSignOutUrl } from "./urls";
+import { homeUrlFor, landingUrl } from "./urls";
 import { clearSession, readSession, writeSession, type Session } from "./session";
 import type { Role } from "./urls";
 
@@ -45,11 +45,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn: (next) => {
         writeSession(next);
         setSession(next);
-        window.location.href = homeUrlFor(next.role);
+        window.location.assign(homeUrlFor(next.role));
       },
       signOut: () => {
         clearSession();
-        window.location.assign(landingAfterSignOutUrl());
+        window.location.assign(landingUrl());
       },
     }),
     [ready, session],

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { Logo } from "@/components/layout/Logo";
 import { AvatarButton } from "@/components/layout/AvatarButton";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -11,7 +10,6 @@ import { cn } from "@/lib/cn";
 const desktopNav = [
   { href: "/", label: "Home" },
   { href: "/skills", label: "My Skills" },
-  { href: "/progress", label: "My Progress" },
   { href: "/profile", label: "Profile" },
 ];
 
@@ -22,23 +20,12 @@ function isImmersivePath(pathname: string) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const immersive = isImmersivePath(pathname);
-  const isHome = pathname === "/";
 
   return (
     <div className="min-h-dvh w-full bg-page">
-      <header className="sticky top-0 z-20 w-full bg-navy">
-        <div className="mx-auto flex h-16 w-full max-w-lg items-center justify-between gap-3 px-4 md:max-w-3xl">
-          {immersive && !isHome ? (
-            <Link
-              href="/"
-              className="flex min-h-11 items-center gap-1.5 text-sm font-medium text-white/90"
-            >
-              <ArrowLeft className="h-4 w-4" aria-hidden />
-              Home
-            </Link>
-          ) : (
-            <Logo light />
-          )}
+      <header className="sticky top-0 z-30 w-full border-b border-border bg-white">
+        <div className="flex h-16 w-full items-center justify-between gap-3 px-6">
+          <Logo />
           {!immersive ? (
             <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
               {desktopNav.map((item) => {
@@ -52,7 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     href={item.href}
                     className={cn(
                       "rounded-[12px] px-3 py-2 text-sm font-medium transition-colors",
-                      active ? "bg-teal text-white" : "text-white/80 hover:bg-white/10",
+                      active ? "bg-teal-soft text-teal" : "text-navy hover:bg-secondary",
                     )}
                   >
                     {item.label}

@@ -6,7 +6,7 @@ export function AvatarButton() {
     <Link
       href="/profile"
       aria-label="Open profile"
-      className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-sm font-semibold text-white ring-1 ring-white/20 transition-colors hover:bg-white/25"
+      className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-soft text-sm font-semibold text-teal ring-1 ring-border transition-colors hover:bg-teal/15"
     >
       {caregiver.avatarInitials}
     </Link>

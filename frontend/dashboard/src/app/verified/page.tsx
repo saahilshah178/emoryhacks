@@ -28,12 +28,9 @@ export default function VerifiedPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
-      <div>
-        <h2 className="text-xl font-semibold text-navy">Verified skills</h2>
-        <p className="mt-1 text-sm text-ink-secondary">
-          Competencies signed off by a registered nurse. AI recommendations are recorded for audit.
-        </p>
-      </div>
+      <p className="text-sm text-ink-secondary">
+        Competencies signed off by a registered nurse. AI recommendations are recorded for audit.
+      </p>
       <Card>
         <CardHeader>
           <CardTitle>{records.length} approved competencies</CardTitle>

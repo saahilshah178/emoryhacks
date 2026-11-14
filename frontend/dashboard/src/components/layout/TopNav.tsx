@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Search, Settings } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { Logo } from "@/components/layout/Logo";
 import { Avatar } from "@/components/ui/Avatar";
 import { useDashboard } from "@/context/DashboardContext";
 import { CURRENT_NURSE, notifications } from "@/lib/mock-data";
@@ -28,9 +29,8 @@ export function TopNav() {
   const accountRef = useRef<HTMLDivElement>(null);
   const accountMenuId = useId();
   const unread = notifications.filter((item) => item.unread).length;
-  const title = pathname.startsWith("/reviews/")
-    ? "Skill Review"
-    : (titles[pathname] ?? "Clinical Dashboard");
+  const onReview = pathname.startsWith("/reviews/");
+  const title = onReview ? "Skill Review" : (titles[pathname] ?? "Clinical Dashboard");
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -51,38 +51,37 @@ export function TopNav() {
   }, []);
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-white px-4 md:px-6">
-      <div className="shrink-0">
-        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted">
-          Nurse workspace
-        </p>
-        <h1 className="text-lg font-semibold text-navy">{title}</h1>
-      </div>
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 border-b border-border bg-white px-6">
+      <Logo />
+      <span className="hidden h-6 w-px shrink-0 bg-border sm:block" aria-hidden />
+      <h1 className="min-w-0 truncate text-lg font-semibold text-navy">{title}</h1>
 
-      <label className="relative ml-auto hidden w-64 lg:w-96 sm:block">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search caregivers, skills, or submissions"
-          className="h-10 w-full rounded-[12px] border border-border bg-secondary pl-9 pr-3 text-sm text-ink outline-none placeholder:text-ink-muted focus:border-teal focus:bg-white focus:ring-2 focus:ring-teal/20"
-        />
-      </label>
+      {!onReview ? (
+        <label className="relative ml-auto hidden w-64 lg:w-96 sm:block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-secondary" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search caregivers, skills, or submissions"
+            className="h-10 w-full rounded-[12px] border border-border bg-secondary pl-9 pr-3 text-sm text-ink outline-none placeholder:text-ink-secondary focus:border-teal focus:bg-white focus:ring-2 focus:ring-teal/20"
+          />
+        </label>
+      ) : null}
 
-      <div className="relative ml-auto sm:ml-0" ref={notificationsRef}>
+      <div className={cn("relative", onReview ? "ml-auto" : "ml-auto sm:ml-0")} ref={notificationsRef}>
         <button
           type="button"
           onClick={() =>
             setMenu((current) => (current === "notifications" ? null : "notifications"))
           }
-          className="relative flex h-10 w-10 items-center justify-center rounded-[12px] border border-border text-ink-secondary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30"
-          aria-label="Notifications"
+          className="relative flex h-10 min-w-10 items-center justify-center rounded-[12px] border border-border px-2 text-ink-secondary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30"
+          aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
           aria-expanded={menu === "notifications"}
           aria-haspopup="menu"
         >
           <Bell className="h-4 w-4" />
           {unread > 0 && (
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger" />
+            <span className="ml-1 text-xs font-semibold text-danger">{unread}</span>
           )}
         </button>
         {menu === "notifications" && (
@@ -104,7 +103,7 @@ export function TopNav() {
                   >
                     <p className="text-sm font-medium text-ink">{item.title}</p>
                     <p className="mt-0.5 text-xs text-ink-secondary">{item.body}</p>
-                    <p className="mt-1 text-[11px] text-ink-muted">{item.relativeLabel}</p>
+                    <p className="mt-1 text-[11px] text-ink-secondary">{item.relativeLabel}</p>
                   </Link>
                 </li>
               ))}
@@ -134,7 +133,7 @@ export function TopNav() {
           <Avatar name={CURRENT_NURSE.name} initials="PC" />
           <ChevronDown
             className={cn(
-              "hidden h-4 w-4 shrink-0 text-ink-muted transition-transform duration-150 md:block",
+              "hidden h-4 w-4 shrink-0 text-ink-secondary transition-transform duration-150 md:block",
               menu === "account" && "rotate-180",
             )}
           />
@@ -151,7 +150,7 @@ export function TopNav() {
               <p className="text-xs text-ink-secondary">
                 {CURRENT_NURSE.credentials} · {CURRENT_NURSE.title}
               </p>
-              <p className="mt-0.5 truncate text-xs text-ink-muted">{CURRENT_NURSE.email}</p>
+              <p className="mt-0.5 truncate text-xs text-ink-secondary">{CURRENT_NURSE.email}</p>
             </div>
             <Link
               role="menuitem"

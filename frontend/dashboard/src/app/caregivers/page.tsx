@@ -24,12 +24,9 @@ export default function CaregiversPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
-      <div>
-        <h2 className="text-xl font-semibold text-navy">Caregiver roster</h2>
-        <p className="mt-1 text-sm text-ink-secondary">
-          Competency progress across Harbor Home Care. Restricted caregivers have open safety flags.
-        </p>
-      </div>
+      <p className="text-sm text-ink-secondary">
+        Competency progress across Harbor Home Care. Restricted caregivers have open safety flags.
+      </p>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {rows.map((person) => {

@@ -6,11 +6,9 @@ import { ArrowLeft, Info } from "lucide-react";
 import { MovementPanel } from "@/components/review/MovementPanel";
 import { ReviewActions } from "@/components/review/ReviewActions";
 import { SafetyPanel } from "@/components/review/SafetyPanel";
-import { StepChecklist } from "@/components/review/StepChecklist";
 import { StepTimeline } from "@/components/review/StepTimeline";
 import { VideoComparison } from "@/components/review/VideoComparison";
 import { Avatar } from "@/components/ui/Avatar";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useDashboard } from "@/context/DashboardContext";
 import { formatDateTime } from "@/lib/format";
@@ -55,9 +53,17 @@ export default function SkillReviewPage({ params }: { params: Promise<{ id: stri
   const skill = getSkill(submission.skillId);
   const resolved = submission.reviewStatus !== "pending";
 
+  function seek(value: number) {
+    setPlaying(false);
+    setTime(value);
+  }
+
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
-      <Link href="/pending" className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-teal">
+      <Link
+        href="/pending"
+        className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-teal"
+      >
         <ArrowLeft className="h-4 w-4" />
         Back to pending reviews
       </Link>
@@ -91,90 +97,55 @@ export default function SkillReviewPage({ params }: { params: Promise<{ id: stri
         duration={submission.durationSeconds}
         playing={playing}
         onToggle={() => setPlaying((value) => !value)}
-        onSeek={(value) => {
-          setPlaying(false);
-          setTime(value);
-        }}
+        onSeek={seek}
         steps={submission.detectedSteps}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <div className="space-y-6">
-          <SafetyPanel
-            issues={submission.safetyIssues}
-            onSeek={(value) => {
-              setPlaying(false);
-              setTime(value);
-            }}
-          />
-
-          <Card>
-            <CardHeader>
-              <div>
-                <CardTitle>Detected steps</CardTitle>
-                <p className="mt-1 text-sm text-ink-secondary">
-                  Select a timestamp to scrub both recordings to that moment.
-                </p>
-              </div>
-            </CardHeader>
-            <CardBody>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)] xl:items-start">
+        <div className="space-y-5">
+          <SafetyPanel issues={submission.safetyIssues} onSeek={seek} />
+          <section>
+            <h3 className="text-base font-semibold text-navy">Detected steps</h3>
+            <p className="mt-1 text-sm text-ink-secondary">
+              Jump both recordings to a timestamp. Status is the AI reading — you still decide.
+            </p>
+            <div className="mt-3">
               <StepTimeline
                 steps={submission.detectedSteps}
                 currentTime={time}
-                onSelect={(value) => {
-                  setPlaying(false);
-                  setTime(value);
-                }}
+                onSelect={seek}
               />
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div>
-                <CardTitle>AI step-by-step assessment</CardTitle>
-                <p className="mt-1 text-sm text-ink-secondary">{submission.aiSummary}</p>
-              </div>
-            </CardHeader>
-            <CardBody>
-              <StepChecklist items={submission.checklist} />
-            </CardBody>
-          </Card>
+            </div>
+          </section>
         </div>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Movement and balance</CardTitle>
-            </CardHeader>
-            <CardBody>
-              <MovementPanel
-                balance={submission.balance}
-                movement={submission.movement}
-                duration={submission.durationSeconds}
-              />
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div>
-                <CardTitle>Nurse decision</CardTitle>
-                <p className="mt-1 text-sm text-ink-secondary">
-                  Only a registered nurse can approve this skill for independent work.
-                </p>
-              </div>
-            </CardHeader>
-            <CardBody>
+        <aside className="xl:sticky xl:top-20">
+          <div className="rounded-[12px] border border-border bg-white p-4 shadow-[var(--shadow-card)]">
+            <h3 className="text-base font-semibold text-navy">Nurse decision</h3>
+            <p className="mt-1 text-sm text-ink-secondary">
+              Only a registered nurse can approve this skill for independent work.
+            </p>
+            <div className="mt-4">
               <ReviewActions
                 submissionId={submission.id}
                 initialNotes={submission.notes}
                 alreadyResolved={resolved}
               />
-            </CardBody>
-          </Card>
-        </div>
+            </div>
+          </div>
+        </aside>
       </div>
+
+      <section>
+        <h3 className="text-base font-semibold text-navy">Movement and balance</h3>
+        <div className="mt-3">
+          <MovementPanel
+            balance={submission.balance}
+            movement={submission.movement}
+            duration={submission.durationSeconds}
+          />
+        </div>
+      </section>
     </div>
   );
 }

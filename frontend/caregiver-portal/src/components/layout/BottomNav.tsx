@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartNoAxesColumn, CircleUserRound, Home, ListChecks } from "lucide-react";
+import { CircleUserRound, Home, ListChecks } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const items = [
   { href: "/", label: "Home", icon: Home },
   { href: "/skills", label: "My Skills", icon: ListChecks },
-  { href: "/progress", label: "My Progress", icon: ChartNoAxesColumn },
   { href: "/profile", label: "Profile", icon: CircleUserRound },
 ];
 

@@ -20,12 +20,9 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
-      <div>
-        <h2 className="text-xl font-semibold text-navy">Settings</h2>
-        <p className="mt-1 text-sm text-ink-secondary">
-          Workspace preferences for {APP_NAME}. Branding is stored in one shared configuration file.
-        </p>
-      </div>
+      <p className="text-sm text-ink-secondary">
+        Workspace preferences for {APP_NAME}.
+      </p>
 
       <Card>
         <CardHeader>
@@ -47,9 +44,6 @@ export default function SettingsPage() {
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-ink">Product name</span>
             <Input defaultValue={APP_NAME} readOnly />
-            <span className="mt-1 block text-xs text-ink-muted">
-              Change APP_NAME in src/lib/branding.ts to rename the product everywhere.
-            </span>
           </label>
         </CardBody>
       </Card>

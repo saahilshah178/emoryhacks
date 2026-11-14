@@ -6,13 +6,13 @@ export function Logo({ light = false }: { light?: boolean }) {
     <Link
       href="/"
       aria-label={APP_NAME}
-      className="flex min-h-11 items-center gap-2.5"
+      className="flex min-h-11 shrink-0 items-center gap-2.5"
     >
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] bg-teal text-sm font-semibold text-white">
         {APP_NAME.charAt(0)}
       </span>
       <span
-        className={`text-[15px] font-semibold tracking-tight ${
+        className={`truncate text-[15px] font-semibold tracking-tight ${
           light ? "text-white" : "text-navy"
         }`}
       >

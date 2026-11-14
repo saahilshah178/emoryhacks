@@ -16,12 +16,9 @@ export default function SafetyPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-navy">Safety reports</h2>
-        <p className="mt-1 text-sm text-ink-secondary">
-          Critical misses stay visible until a nurse closes them with approval or retraining.
-        </p>
-      </div>
+      <p className="text-sm text-ink-secondary">
+        Critical misses stay visible until a nurse closes them with approval or retraining.
+      </p>
 
       <SafetyOverview />
 

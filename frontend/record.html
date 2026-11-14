@@ -7,14 +7,66 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/css/style.css">
+<style>
+  .tips { margin: 0.25rem 0 0; }
+  #progress[hidden], #retry[hidden] { display: none; }
+</style>
 </head>
 <body>
 <main class="page" id="app">
-<div class="header"><h1>Record reference</h1></div><div class="notice">This screen is built on branch feat/recording.</div>
+<div class="header">
+  <div>
+    <h1>Record reference</h1>
+    <p class="muted">Perform the skill once, start to finish. FirstShift names it, splits it into steps and writes what a good attempt looks like.</p>
+  </div>
+</div>
+
+<div class="card">
+  <ul class="tight muted small tips">
+    <li>Keep the caregiver and the patient fully in frame the whole time.</li>
+    <li>Say each step out loud as you do it: the audio helps with step boundaries.</li>
+    <li>Up to 10 minutes. You can also upload an existing video.</li>
+  </ul>
+  <label for="skill-name">Skill name (optional, leave blank to let FirstShift name it)</label>
+  <input type="text" id="skill-name" maxlength="120" placeholder="e.g. Wheelchair to bed transfer">
+</div>
+
+<div class="card"><div id="recorder"></div></div>
+
+<div class="card" id="progress" hidden></div>
+<div id="error"></div>
+<button class="btn" id="retry" hidden>Try the upload again</button>
 </main>
 <script type="module">
-import { mountNav } from "/js/common.js";
+import { mountNav, showError } from "/js/common.js";
+import { createRecorder, uploadAndWait } from "/js/recorder.js";
+
 mountNav("record");
+const progress = document.querySelector("#progress");
+const errorBox = document.querySelector("#error");
+const retry = document.querySelector("#retry");
+let lastFile = null;
+
+async function submit(file) {
+  lastFile = file;
+  errorBox.innerHTML = "";
+  retry.hidden = true;
+  const form = new FormData();
+  form.append("file", file, file.name);
+  form.append("kind", "reference");
+  const name = document.querySelector("#skill-name").value.trim();
+  if (name) form.append("expected_name", name);
+  try {
+    const { job } = await uploadAndWait(form, progress);
+    location.href = `/skill.html?id=${job.skill_id}`;
+  } catch (err) {
+    showError(errorBox, err);
+    retry.hidden = !err.retryable;
+  }
+}
+
+createRecorder(document.querySelector("#recorder"), { onVideo: submit });
+retry.addEventListener("click", () => lastFile && submit(lastFile));
 </script>
 </body>
 </html>

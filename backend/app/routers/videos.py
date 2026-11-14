@@ -6,18 +6,27 @@ POST /api/videos            multipart: file, kind=reference|attempt, skill_id (a
 GET  /api/videos/{id}       video row
 GET  /api/videos/{id}/file  the MP4, with HTTP Range support for seeking
 GET  /api/videos/{id}/thumb?t=12.5   JPEG frame at t seconds (cached on disk)
+
+Upload errors come back as {"detail": "<sentence for the user>"}: 400 for a bad
+request or empty file, 413 for a file over the size limit, 422 for a file that
+is not a readable video.
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from .. import config, jobs, media, repo
 
 router = APIRouter(prefix="/videos", tags=["videos"])
+log = logging.getLogger(__name__)
+
+MAX_NAME_CHARS = 120
 
 
 @router.post("")
@@ -31,39 +40,56 @@ async def upload_video(
 ):
     if kind not in ("reference", "attempt"):
         raise HTTPException(400, "kind must be 'reference' or 'attempt'")
-    if kind == "attempt":
-        if not skill_id or not repo.get_skill(skill_id):
-            raise HTTPException(400, "An attempt needs the skill_id of an existing skill")
+    if kind == "attempt" and not _skill_exists(skill_id):
+        raise HTTPException(400, "An attempt needs the skill_id of an existing skill")
 
-    config.ensure_dirs()
-    suffix = Path(file.filename or "upload").suffix or ".bin"
-    tmp = config.TMP_DIR / f"{uuid.uuid4()}{suffix}"
-    size = 0
-    with tmp.open("wb") as out:
-        while chunk := await file.read(1 << 20):
-            size += len(chunk)
-            if size > config.MAX_UPLOAD_MB * (1 << 20):
-                out.close()
-                tmp.unlink(missing_ok=True)
-                raise HTTPException(413, f"Video is larger than {config.MAX_UPLOAD_MB} MB")
-            out.write(chunk)
-    if size == 0:
-        tmp.unlink(missing_ok=True)
-        raise HTTPException(400, "The uploaded file is empty")
-
+    tmp = await _save_upload(file)
     try:
-        video = jobs.ingest(str(tmp), kind, file.filename or "")
+        # Converting can take a minute for a long recording; keep the event loop free.
+        video = await run_in_threadpool(jobs.ingest, str(tmp), kind, file.filename or "")
     except media.MediaError as exc:
-        raise HTTPException(422, f"Could not read that video: {exc}") from exc
+        log.warning("Upload %r could not be converted: %s", file.filename, exc)
+        raise HTTPException(422, "Could not read that video. The file may be damaged or not a video; "
+                                 "try recording again or choose a different file.") from exc
     finally:
         tmp.unlink(missing_ok=True)
 
     if kind == "reference":
         job_id = jobs.submit_reference(video["id"], slug=expected_slug or None, name=expected_name or None)
         return {"video_id": video["id"], "job_id": job_id, "attempt_id": None}
-    attempt_id = repo.create_attempt(skill_id, video["id"], caregiver_name)
+    attempt_id = repo.create_attempt(skill_id, video["id"], caregiver_name.strip()[:MAX_NAME_CHARS])
     job_id = jobs.submit_attempt(attempt_id, video["id"], skill_id)
     return {"video_id": video["id"], "job_id": job_id, "attempt_id": attempt_id}
+
+
+async def _save_upload(file: UploadFile) -> Path:
+    """Copy the upload to a temp file, enforcing the size limit and rejecting empty files."""
+    config.ensure_dirs()
+    suffix = Path(file.filename or "upload").suffix or ".bin"
+    tmp = config.TMP_DIR / f"{uuid.uuid4()}{suffix}"
+    limit = config.MAX_UPLOAD_MB * (1 << 20)
+    size = 0
+    with tmp.open("wb") as out:
+        while chunk := await file.read(1 << 20):
+            size += len(chunk)
+            if size > limit:
+                break
+            out.write(chunk)
+    if size > limit:
+        tmp.unlink(missing_ok=True)
+        raise HTTPException(413, f"That video is larger than the {config.MAX_UPLOAD_MB} MB limit. "
+                                 "Record a shorter clip or trim the file first.")
+    if size == 0:
+        tmp.unlink(missing_ok=True)
+        raise HTTPException(400, "The uploaded file is empty. Record again or choose a different file.")
+    return tmp
+
+
+def _skill_exists(skill_id: str | None) -> bool:
+    try:
+        return bool(skill_id) and repo.get_skill(uuid.UUID(skill_id)) is not None
+    except ValueError:
+        return False
 
 
 def _video_or_404(video_id: str) -> dict:
@@ -83,6 +109,7 @@ def get_video(video_id: str):
 
 @router.get("/{video_id}/file")
 def get_video_file(video_id: str):
+    """The stored MP4. FileResponse answers Range requests with 206, which <video> needs to seek."""
     video = _video_or_404(video_id)
     if not Path(video["path"]).exists():
         raise HTTPException(404, "Video file is missing on disk")

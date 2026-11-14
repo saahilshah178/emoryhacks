@@ -1,12 +1,15 @@
 """Video handling with the ffmpeg binary bundled by imageio-ffmpeg (no system install).
 
 Every upload is normalised to a seekable H.264 MP4 so that the browser can seek,
-OpenCV can read it, and Gemini accepts it. Browser recordings (fragmented MP4 or
-WebM) have no usable duration until this is done.
+OpenCV can read it, and Gemini accepts it. Browser recordings need this most:
+Chrome and Safari write fragmented MP4 whose header says the duration is zero, and
+WebM recordings carry no duration or seek index at all, often with a variable frame
+rate and a single keyframe at the very start.
 """
 from __future__ import annotations
 
 import re
+import struct
 import subprocess
 from pathlib import Path
 
@@ -15,6 +18,15 @@ import imageio_ffmpeg
 from . import config
 
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
+
+# Transcoded output: frame rate cap, longest side cap, and one keyframe every
+# KEYFRAME_S seconds so that a <video> element (and OpenCV) can seek quickly.
+MAX_FPS = 30
+MAX_SIDE = 1280
+KEYFRAME_S = 2
+# An H.264 file is only copied as-is when its keyframes are at most this far apart
+# (the reference videos reach about 9 s; browser recordings often have one keyframe).
+MAX_COPY_KEYFRAME_GAP_S = 10.0
 
 
 class MediaError(RuntimeError):
@@ -25,10 +37,14 @@ def _run(args: list[str], timeout: int = 900) -> subprocess.CompletedProcess:
     return subprocess.run([FFMPEG, "-hide_banner", "-nostdin", *args], capture_output=True, text=True, timeout=timeout)
 
 
+def _ffmpeg_header(path: str | Path) -> str:
+    """ffmpeg's description of the input's container and streams (its stderr for `-i path`)."""
+    return _run(["-i", str(path)], timeout=60).stderr
+
+
 def probe(path: str | Path) -> dict:
     """Return duration_s, width, height, fps, vcodec for a media file."""
-    proc = _run(["-i", str(path)], timeout=60)
-    err = proc.stderr
+    err = _ffmpeg_header(path)
     info = {"duration_s": 0.0, "width": 0, "height": 0, "fps": 0.0, "vcodec": ""}
     m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", err)
     if m:
@@ -44,35 +60,123 @@ def probe(path: str | Path) -> dict:
         if fps:
             info["fps"] = float(fps.group(1))
     if not v:
-        raise MediaError(f"No video stream found in {path}")
+        raise MediaError(f"No video stream found in {Path(path).name}")
     return info
+
+
+def mp4_boxes(path: str | Path) -> list[str]:
+    """Names of the top-level boxes of an MP4/MOV file in file order ([] for other formats).
+
+    'moof' means the file is fragmented; 'moov' before 'mdat' means faststart."""
+    names: list[str] = []
+    with open(path, "rb") as f:
+        size_total = f.seek(0, 2)
+        pos = 0
+        while pos + 8 <= size_total:
+            f.seek(pos)
+            size, name = struct.unpack(">I4s", f.read(8))
+            if size == 1:
+                size = struct.unpack(">Q", f.read(8))[0]
+            elif size == 0:
+                size = size_total - pos
+            if size < 8 or not name.isascii() or not name.decode("ascii").isprintable():
+                break
+            names.append(name.decode("ascii"))
+            pos += size
+    return names if names[:1] == ["ftyp"] else []
+
+
+def keyframe_times(path: str | Path) -> tuple[list[float], float]:
+    """Presentation times of the video keyframes, and the time just after the last frame.
+
+    Reads packets without decoding (ffmpeg's framecrc muxer marks non-key packets with F=)."""
+    proc = _run(["-loglevel", "error", "-i", str(path), "-map", "0:v:0", "-c", "copy", "-f", "framecrc", "-"], timeout=300)
+    timebase = 1.0
+    keys: list[float] = []
+    end = 0.0
+    for line in proc.stdout.splitlines():
+        if line.startswith("#tb 0:"):
+            num, den = line.split(":", 1)[1].strip().split("/")
+            timebase = int(num) / int(den)
+        elif line and not line.startswith("#"):
+            fields = [x.strip() for x in line.split(",")]
+            pts, duration = int(fields[2]) * timebase, int(fields[3]) * timebase
+            end = max(end, pts + duration)
+            if not any(x.startswith("F=") for x in fields[6:]):
+                keys.append(pts)
+    return sorted(keys), end
+
+
+def transcode_reason(path: str | Path, info: dict | None = None) -> str | None:
+    """Why this file cannot simply be remuxed into the output MP4, or None if it can.
+
+    Remuxing is only safe for a well-formed, upright H.264 file with regular keyframes;
+    everything else (browser recordings in particular) is re-encoded."""
+    info = info or probe(path)
+    header = _ffmpeg_header(path)
+    if info["vcodec"] != "h264":
+        return f"video codec is {info['vcodec']}"
+    if info["duration_s"] <= 0:
+        return "container reports no duration"
+    if "moof" in mp4_boxes(path):
+        return "fragmented MP4"
+    if not re.search(r"Video:.*\byuv420p\b", header):
+        return "pixel format is not yuv420p"
+    if re.search(r"rotation of -?[1-9]", header):
+        return "has rotation metadata"
+    if info["width"] % 2 or info["height"] % 2:
+        return "odd frame size"
+    keys, end = keyframe_times(path)
+    if not keys:
+        return "no keyframes found"
+    gap = max(b - a for a, b in zip([0.0, *keys], [*keys, end]))
+    if gap > MAX_COPY_KEYFRAME_GAP_S:
+        return f"keyframes are up to {gap:.1f}s apart"
+    return None
+
+
+def _output_fps(info: dict) -> int:
+    fps = info.get("fps") or 0
+    return int(round(fps)) if 5 <= fps <= MAX_FPS else MAX_FPS
+
+
+def _transcode_args(src: Path, dst: Path, info: dict) -> list[str]:
+    """Re-encode to constant-frame-rate H.264 with regular keyframes, upright and even-sized."""
+    fps = _output_fps(info)
+    vf = (f"fps={fps},scale='min(iw,{MAX_SIDE})':'min(ih,{MAX_SIDE})':force_original_aspect_ratio=decrease"
+          f":force_divisible_by=2,setsar=1,format=yuv420p")
+    return ["-i", str(src), "-map", "0:v:0", "-map", "0:a:0?", "-vf", vf,
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-g", str(fps * KEYFRAME_S),
+            "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-y", str(dst)]
+
+
+def _remux_args(src: Path, dst: Path) -> list[str]:
+    return ["-i", str(src), "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy", "-c:a", "aac",
+            "-movflags", "+faststart", "-y", str(dst)]
 
 
 def normalize(src: str | Path, dst: str | Path) -> dict:
     """Write a seekable H.264/AAC MP4 at dst and return its probe info.
 
-    H.264 input is remuxed without re-encoding; anything else is transcoded."""
+    A well-formed H.264 file is remuxed without re-encoding (fast, lossless); anything
+    else is transcoded. The result always has its index at the front (faststart) and a
+    real duration. Raises MediaError if the input has no readable video."""
     src, dst = Path(src), Path(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        info = probe(src)
-    except MediaError:
-        raise
+    info = probe(src)
     attempts = []
-    if info["vcodec"] == "h264":
-        attempts.append(["-i", str(src), "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy", "-c:a", "aac",
-                         "-movflags", "+faststart", "-y", str(dst)])
-    attempts.append(["-i", str(src), "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "libx264", "-preset", "veryfast",
-                     "-crf", "23", "-pix_fmt", "yuv420p", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
-                     "-c:a", "aac", "-movflags", "+faststart", "-y", str(dst)])
+    if transcode_reason(src, info) is None:
+        attempts.append(_remux_args(src, dst))
+    attempts.append(_transcode_args(src, dst, info))
     last = ""
     for args in attempts:
         proc = _run(args)
         if proc.returncode == 0 and dst.exists() and dst.stat().st_size > 0:
             out = probe(dst)
-            if out["duration_s"] > 0:
+            if out["duration_s"] > 0 and out["width"] > 0:
                 return out
         last = proc.stderr[-600:]
+    dst.unlink(missing_ok=True)
     raise MediaError(f"Could not convert {src.name} to MP4: {last}")
 
 

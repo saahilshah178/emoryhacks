@@ -5,7 +5,7 @@ import type { MySkills } from "@/lib/types";
 function waitingLine(counts: MySkills["counts"], ready: number) {
   const parts: string[] = [];
   if (ready > 0) {
-    parts.push(ready === 1 ? "1 recording is ready to send to your nurse." : `${ready} recordings are ready to send to your nurse.`);
+    parts.push(ready === 1 ? "1 recording is good enough to send to your nurse." : `${ready} recordings are good enough to send to your nurse.`);
   }
   if (counts.in_review > 0) {
     parts.push(

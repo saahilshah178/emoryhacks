@@ -23,7 +23,7 @@ function afterRecording(attempt: AttemptSummary): string {
     case "error":
       return "It couldn't be checked, so it didn't use an attempt. Please record it again.";
     case "unsubmitted":
-      if (attempt.submission.can_submit) return `${score}It's ready to send to your nurse.`;
+      if (attempt.submission.can_submit) return `${score}That's good enough to send to your nurse, if you choose to.`;
       if (attempt.submission.can_force) return `${score}You can record it again, or send it anyway with a note.`;
       return `${score}That's under what can be sent, so give it another try.`;
     default:

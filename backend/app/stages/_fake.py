@@ -10,17 +10,21 @@ from ..models import (
     Classification, Evaluation, OrderViolation, PersonObs, PoseSummary, Rubric, RubricStep, SafetyFlag,
     StepEval, StepResult, Timeline, TimelineStep,
 )
+from .evaluate_prompts import HEARD_NOTE, heard_only
 
 PEOPLE = [
     PersonObs(label="P1", role="caregiver", description="Standing adult in dark scrubs who guides the movement"),
     PersonObs(label="P2", role="patient", description="Seated older adult in a light top who is being assisted"),
 ]
 
+# (title, description, critical, applies_when). Sight-only like a real rubric: a recording is
+# graded without sound. The last step is only sometimes needed, to show applies_when.
 _STEPS = [
-    ("Prepare and explain", "Position yourself in front of the person and explain what will happen.", False),
-    ("Position feet and hands", "Feet flat and under the knees; hands on the armrests or thighs.", True),
-    ("Assist to stand", "Cue the person to lean forward and rise, supporting at the waist.", True),
-    ("Check balance", "Pause upright and confirm the person is steady before moving on.", False),
+    ("Face the person", "Stand in front of the person, within arm's reach, before they move.", False, ""),
+    ("Position feet and hands", "Feet flat and under the knees; hands on the armrests or thighs.", True, ""),
+    ("Assist to stand", "The person leans forward and rises while you support them at the waist.", True, ""),
+    ("Steady the person", "Keep both hands at the person's waist until they stop swaying.", False,
+     "the person sways or looks unsteady once standing"),
 ]
 
 
@@ -36,11 +40,11 @@ def rubric(ctx, classification=None) -> Rubric:
     duration = max(ctx.duration, 8.0)
     span = duration / len(_STEPS)
     steps = []
-    for i, (title, description, critical) in enumerate(_STEPS):
+    for i, (title, description, critical, applies_when) in enumerate(_STEPS):
         steps.append(RubricStep(
             step_id=f"s{i + 1}", order=i + 1, title=title, description=description,
             start_s=round(i * span, 1), end_s=round((i + 1) * span, 1), critical=critical,
-            order_dependent=True, must_follow=[f"s{i}"] if i else [],
+            order_dependent=True, must_follow=[f"s{i}"] if i else [], applies_when=applies_when,
             evals=StepEval(
                 pass_criteria=[f"The caregiver visibly completes: {title.lower()}."],
                 fail_criteria=[f"The step is skipped or done unsafely: {title.lower()}."],
@@ -52,41 +56,66 @@ def rubric(ctx, classification=None) -> Rubric:
                   order_matters=True, notes="Placeholder rubric (fake AI mode).")
 
 
+def _not_needed(step: RubricStep) -> bool:
+    """In fake AI mode a step with an applies_when condition is never needed: its situation
+    does not come up, so it is not performed and comes back not_applicable. A test that wants
+    a "not needed" result gives a step a condition. A step that can only be heard is left out
+    too, as the real grader leaves it out (evaluate_prompts.heard_only)."""
+    return bool(step.applies_when.strip()) or heard_only(step)
+
+
 def timeline(ctx, rubric: Rubric) -> Timeline:
+    """Every step is performed, in turn, except those not needed (_not_needed), with the second
+    and third performed steps swapped so the order check has something to show."""
     duration = max(ctx.duration, 8.0)
-    n = max(len(rubric.steps), 1)
+    performed = [s for s in rubric.steps if not _not_needed(s)]
+    n = max(len(performed), 1)
     span = duration / n
     steps, violations = [], []
-    order = list(range(n))
-    if n >= 3:  # perform step 3 before step 2 so the order check has something to show
+    order = list(range(len(performed)))
+    if len(order) >= 3:  # perform step 3 before step 2 so the order check has something to show
         order[1], order[2] = order[2], order[1]
     for slot, idx in enumerate(order):
-        s = rubric.steps[idx]
+        s = performed[idx]
         steps.append(TimelineStep(step_id=s.step_id, found=True, start_s=round(slot * span, 1),
                                   end_s=round((slot + 1) * span, 1), performed_index=slot + 1, confidence=0.6,
                                   note="Placeholder timing (fake AI mode)."))
-    if n >= 3:
-        early, late = rubric.steps[2], rubric.steps[1]
+    if len(order) >= 3:
+        early, late = performed[2], performed[1]
         violations.append(OrderViolation(step_id=early.step_id, expected_after=late.step_id,
                                          message=f'"{early.title}" was performed before "{late.title}".',
                                          at_s=round(span, 1)))
+    steps += [TimelineStep(step_id=s.step_id, found=False,
+                           note=HEARD_NOTE if heard_only(s) else "Not needed in this recording (fake AI mode).")
+              for s in rubric.steps if _not_needed(s)]
     steps.sort(key=lambda t: [s.step_id for s in rubric.steps].index(t.step_id))
     return Timeline(steps=steps, order_violations=violations, missing_step_ids=[])
 
 
 def evaluation(ctx, rubric: Rubric, tl: Timeline) -> Evaluation:
+    """Statuses cycle passed, failed, unverified, passed by the step's place in the rubric;
+    a step with an applies_when condition is not_applicable (_not_needed), with the feedback
+    the real grader gives a step it finds not needed, and one that can only be heard gets the
+    real grader's result for it."""
+    from .evaluate import heard_result, settled_feedback  # evaluate imports this module
+
     cycle = ["passed", "failed", "unverified", "passed"]
     by_id = {t.step_id: t for t in tl.steps}
     results = []
     for i, s in enumerate(rubric.steps):
         t = by_id.get(s.step_id)
-        status = cycle[i % len(cycle)]
+        status = "not_applicable" if _not_needed(s) else cycle[i % len(cycle)]
+        seen = t is not None and t.found
+        if heard_only(s):
+            results.append(heard_result(s))
+            continue
         results.append(StepResult(
             step_id=s.step_id, status=status, confidence=0.6,
             feedback={"passed": "Done correctly.", "failed": "This step did not meet the criteria.",
-                      "unverified": "The camera could not show this clearly."}[status],
+                      "unverified": "The camera could not show this clearly.",
+                      "not_applicable": settled_feedback(s, "not_applicable") if _not_needed(s) else ""}[status],
             evidence="Placeholder evidence (fake AI mode).",
-            evidence_start_s=t.start_s if t else None, evidence_end_s=t.end_s if t else None,
+            evidence_start_s=t.start_s if seen else None, evidence_end_s=t.end_s if seen else None,
         ))
     flags = [SafetyFlag(kind="patient_off_center", severity="medium", start_s=round(max(ctx.duration, 8.0) * 0.6, 1),
                         end_s=round(max(ctx.duration, 8.0) * 0.7, 1), person_label="P2",

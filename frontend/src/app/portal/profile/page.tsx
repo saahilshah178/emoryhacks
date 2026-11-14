@@ -130,7 +130,7 @@ export default function ProfilePage() {
                   <p className="text-sm font-medium tabular-nums text-navy">
                     {counts.verified} of {counts.total}
                     {counts.in_review > 0 ? ` · ${counts.in_review} with a nurse` : ""}
-                    {ready > 0 ? ` · ${ready} ready to send` : ""}
+                    {ready > 0 ? ` · ${ready} good enough to send` : ""}
                   </p>
                   <ProgressBar className="mt-2" value={counts.verified} max={counts.total} label="Skills verified" />
                 </>

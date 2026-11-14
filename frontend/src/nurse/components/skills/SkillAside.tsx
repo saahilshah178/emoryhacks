@@ -71,6 +71,19 @@ export function PeopleCard({ people }: { people: Person[] }) {
   );
 }
 
+/**
+ * What was left out or rewritten when the steps were written (for example, text that could only
+ * be heard), or what a revision of a standard skill changed. Nothing when there are no notes.
+ */
+export function BuildNotesCard({ notes }: { notes: string }) {
+  if (!notes.trim()) return null;
+  return (
+    <Section title="Notes from building these steps">
+      <p className="whitespace-pre-line break-words text-sm text-ink-secondary">{notes.trim()}</p>
+    </Section>
+  );
+}
+
 export function SafetyCard({ points }: { points: string[] }) {
   return (
     <Section title="Safety points">

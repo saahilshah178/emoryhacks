@@ -7,11 +7,19 @@ identify the people, flag patient-safety problems, and double-check unclear step
       closer second look (main model, a denser clip of just the step) at up to
       MAX_DOUBLE_CHECKS steps that came back unverified, below MIN_CONFIDENCE, or failed while
       critical, as optional spending: only as many as fit in the job's allowance, keeping
-      RESERVE_USD for the later stages. A step the recording stopped before is failed in code
-      (see apply_recording_end) rather than re-examined.
+      RESERVE_USD for the later stages. A step every attempt must show that the recording
+      stopped before is failed in code (see apply_recording_end) rather than re-examined. A
+      step done before the recording began is left to the prompt's rule for the start of a
+      recording: nothing in the reply tells code that a step failed as not done could not
+      have been seen, so code never overrides that verdict.
   confirm_pose_flags(ctx, rubric, flags) -> list[SafetyFlag]
       Pose readings are noisy, so a pose-derived flag only counts once Gemini sees the
       same problem on the clip around it (optional spending too).
+
+The recording Gemini sees has no sound, so it is graded by sight alone. A step with an
+applies_when condition may not have been needed in this recording (not_applicable): code
+settles a conditional step the caregiver did not do by whether its situation came up, and
+keeps a not_applicable verdict only where it is allowed (settle_status).
 
 Owned by branch feat/evaluate.
 """
@@ -25,10 +33,12 @@ from pydantic import BaseModel, Field
 
 from .. import config, gemini
 from ..models import (
-    Evaluation, FlagKind, PersonObs, Rubric, RubricStep, SafetyFlag, Severity, Status, StepResult, Timeline,
+    NOT_APPLICABLE, Evaluation, FlagKind, PersonObs, Rubric, RubricStep, SafetyFlag, Severity, StepResult,
+    StepStatus, Timeline,
 )
 from . import _budget, _fake, assess
 from . import evaluate_prompts as prompts
+from .evaluate_prompts import heard_only
 from .assess import FlagObservation
 
 MIN_CONFIDENCE = 0.7          # below this a step gets a second look
@@ -54,11 +64,16 @@ class StepJudgement(BaseModel):
     """One graded step. Evidence comes before the verdict so the model describes first."""
 
     step_id: str
-    evidence: str = Field(description="what was actually seen or heard")
+    performed: bool = Field(description="whether the caregiver does this step in what you are shown")
+    # Answered before the status (see assess.StepAssessment.situation_came_up).
+    situation_came_up: assess.Situation | None = Field(
+        description='only for a step with an "Only needed when" line, on the whole video: whether that situation '
+                    "is seen to come up; null otherwise")
+    evidence: str = Field(description="what was actually seen")
     # No default, so the schema keeps them required; null says the step was not seen at all.
     evidence_start_s: int | None = Field(description="whole seconds from the start of the video; null when not seen")
     evidence_end_s: int | None = Field(description="whole seconds from the start of the video; null when not seen")
-    status: Status
+    status: StepStatus
     confidence_pct: int = Field(description="0 to 100: how sure you are of the status")
     feedback: str = Field(description="one or two sentences to the caregiver")
 
@@ -93,7 +108,8 @@ def grade_reply_from(reply: assess.AssessReply) -> GradeReply:
 
     return GradeReply(
         people=reply.people, skill_match=reply.skill_match, skill_match_note=reply.skill_match_note,
-        steps=[StepJudgement(step_id=s.step_id, evidence=s.evidence, evidence_start_s=outward(s)[0],
+        steps=[StepJudgement(step_id=s.step_id, performed=s.performed, situation_came_up=s.situation_came_up,
+                             evidence=s.evidence, evidence_start_s=outward(s)[0],
                              evidence_end_s=outward(s)[1], status=s.status,
                              confidence_pct=s.confidence_pct, feedback=s.feedback) for s in reply.steps],
         safety_flags=reply.safety_flags, overall_feedback=reply.overall_feedback,
@@ -171,8 +187,94 @@ def to_step_result(j: StepJudgement, duration: float, double_checked: bool = Fal
     )
 
 
+def _situation(step: RubricStep) -> str:
+    """A step's applies_when as part of a sentence: no full stop, lowercase first letter."""
+    when = step.applies_when.strip().rstrip(".")
+    return when[:1].lower() + when[1:] if when[1:2].islower() else when
+
+
+# What a caregiver and a nurse read when code settles a conditional step that was not done
+# by its situation (assess.conditional_status): (feedback, sentence added to the evidence).
+_SETTLED_TEXT = {
+    NOT_APPLICABLE: ('Not needed this time: "{title}" is only needed when {when}, and that did not happen.',
+                     "That situation was not seen to come up, so the step was not needed."),
+    "failed": ('"{title}" was needed this time, because {when}, and it was not done.',
+               "That situation was seen to come up, and the step was not done."),
+    "unverified": ('We could not tell from this recording whether "{title}" was needed, so a nurse will check.',
+                   "Whether that situation came up could not be told."),
+}
+
+
+def settled_feedback(step: RubricStep, status: str) -> str:
+    """The feedback code writes for a conditional step it settled to status (not_applicable,
+    failed or unverified) by its situation."""
+    return _SETTLED_TEXT[status][0].format(title=step.title, when=_situation(step))
+
+
+def settle_status(result: StepResult, step: RubricStep, performed: bool, situation: str | None = None) -> StepResult:
+    """The step's result once code has settled what the model may not decide alone.
+
+    A step with an applies_when condition that the caregiver did not do takes its status from
+    its situation (assess.conditional_status): not seen to come up -> not_applicable, seen ->
+    failed, cannot tell -> unverified, whatever status the model gave. When that changes the
+    status, the feedback and a sentence of evidence say why, in code's words.
+
+    Then a not_applicable verdict only stands for a step with an applies_when condition that
+    the caregiver did not do (assess.not_needed). Any other one is replaced, by what the reply
+    says about whether the step was performed:
+      * a step every attempt must show, not performed: failed, since a step not done is failed
+      * performed (a step done anyway is graded as usual, but this verdict gave no grade):
+        unverified at confidence 0, so it gets a second look and a nurse sees it
+    Every other verdict is returned unchanged."""
+    status = assess.conditional_status(step, result.status, performed, situation)
+    if status != result.status:
+        why = _SETTLED_TEXT[status][1]
+        result = result.model_copy(update={
+            "status": status, "evidence_start_s": None, "evidence_end_s": None,
+            "feedback": settled_feedback(step, status),
+            "evidence": f"{result.evidence} {why}".strip(),
+        })
+    if result.status != NOT_APPLICABLE or assess.not_needed(step, result.status, performed):
+        return result
+    if not performed and not step.applies_when.strip():
+        return result.model_copy(update={
+            "status": "failed", "evidence_start_s": None, "evidence_end_s": None,
+            "evidence": (result.evidence + " The assessment called this step not needed, but it is needed "
+                         "every time.").strip(),
+            "feedback": f'"{step.title}" is needed every time, and it was not done in this recording.',
+        })
+    return result.model_copy(update={
+        "status": "unverified", "confidence": 0.0,
+        "evidence": (result.evidence + " The assessment said this step was done but called it not needed, "
+                     "so how well it was done was not judged.").strip(),
+        "feedback": f'We could not check how well you did "{step.title}" in this recording.',
+    })
+
+
+def heard_result(step: RubricStep) -> StepResult:
+    """The result of a step that can only be heard (evaluate_prompts.heard_only): not checked,
+    so left out of the score (scoring says why), for the nurse to hear when reviewing."""
+    return StepResult(
+        step_id=step.step_id, status=NOT_APPLICABLE, confidence=1.0,
+        evidence="This step is about something said. The automatic check watches the recording without sound, "
+                 "so it did not check this step; the nurse will hear it when reviewing.",
+        feedback="This step is about something you say. The automatic check watches without sound, so the "
+                 "nurse will listen for it when they review your recording.",
+    )
+
+
+def not_shown_result(step: RubricStep) -> StepResult:
+    """A step of a recording that does not show the skill at all: failed, as not seen."""
+    return StepResult(
+        step_id=step.step_id, status="failed", confidence=0.9,
+        evidence="The recording does not show this skill, so this step was not seen.",
+        feedback=f'"{step.title}" was not seen, because this recording does not show this skill.',
+    )
+
+
 def missing_result(step: RubricStep) -> StepResult:
-    """Placeholder for a step the model did not grade: unverified, so a nurse looks at it."""
+    """Placeholder for a step the model did not grade: unverified, so a nurse looks at it. That
+    holds for a step with an applies_when condition too: nothing says whether it was needed."""
     return StepResult(
         step_id=step.step_id, status="unverified", confidence=0.0,
         feedback=f'We could not assess "{step.title}" from this recording. '
@@ -184,13 +286,23 @@ def missing_result(step: RubricStep) -> StepResult:
 def build_evaluation(reply: GradeReply, rubric: Rubric, duration: float) -> Evaluation:
     """Turn the model's reply into an Evaluation with exactly one result per rubric step,
     in rubric order. Unknown step ids are dropped, duplicates keep the first, omitted steps
-    become unverified, and every time and confidence is clamped."""
+    become unverified, every time and confidence is clamped, and code settles the statuses
+    the model may not decide alone (settle_status). A step that can only be heard was not
+    asked about and gets heard_result, whatever the reply says.
+
+    When the recording does not show the skill (skill_match false) no situation can be
+    judged, so no step is left out: one that would be not_applicable is failed as not seen,
+    like the rest of such a reply, whatever the model said."""
     steps = sorted(rubric.steps, key=lambda s: s.order)
     judged: dict[str, StepJudgement] = {}
     for j in reply.steps:
         judged.setdefault(j.step_id.strip(), j)
-    results = [to_step_result(judged[s.step_id], duration) if s.step_id in judged else missing_result(s)
-               for s in steps]
+    results = [heard_result(s) if heard_only(s)
+               else settle_status(to_step_result(judged[s.step_id], duration), s, judged[s.step_id].performed,
+                                  judged[s.step_id].situation_came_up)
+               if s.step_id in judged else missing_result(s) for s in steps]
+    if not reply.skill_match:
+        results = [not_shown_result(s) if r.status == NOT_APPLICABLE else r for s, r in zip(steps, results)]
 
     people: list[PersonObs] = []
     for p in reply.people:
@@ -230,13 +342,21 @@ def steps_after_recording_end(rubric: Rubric, timeline: Timeline, duration: floa
     return order[max(positions) + 1:]
 
 
+def _conditional(rubric: Rubric) -> set[str]:
+    """Steps with an applies_when condition."""
+    return {s.step_id for s in rubric.steps if s.applies_when.strip()}
+
+
 def apply_recording_end(rubric: Rubric, timeline: Timeline, evaluation: Evaluation, duration: float) -> list[str]:
     """A step not performed in this attempt is failed, and that includes a recording that
     stops before it; unverified is only for a step that may have happened out of view. So an
     unverified step the recording stopped before (see steps_after_recording_end) becomes
-    failed. Changes evaluation in place and returns the ids it changed."""
+    failed. Not so a step with an applies_when condition: the recording ending before it is not
+    a failure, because what matters is whether its situation had come up by then, and
+    settle_status has already settled it by that (not needed, failed, or unverified when that
+    could not be told). Changes evaluation in place and returns the ids it changed."""
     titles = {s.step_id: s.title for s in rubric.steps}
-    tail = set(steps_after_recording_end(rubric, timeline, duration))
+    tail = set(steps_after_recording_end(rubric, timeline, duration)) - _conditional(rubric)
     changed = []
     for i, r in enumerate(evaluation.steps):
         if r.step_id in tail and r.status == "unverified":
@@ -252,18 +372,25 @@ def apply_recording_end(rubric: Rubric, timeline: Timeline, evaluation: Evaluati
 
 def settled_by_recording_end(rubric: Rubric, timeline: Timeline, evaluation: Evaluation,
                              duration: float) -> set[str]:
-    """Steps the recording stopped before that are failed with nothing seen: a second look at
-    the last seconds of the video cannot change them, so they are not double-checked."""
+    """Steps the recording stopped before with nothing seen that are failed, not needed, or
+    (with an applies_when condition) unverified: a second look at the last seconds of the
+    video cannot change them, so they are not double-checked."""
     tail = set(steps_after_recording_end(rubric, timeline, duration))
+    conditional = _conditional(rubric)
     return {r.step_id for r in evaluation.steps
-            if r.step_id in tail and r.status == "failed" and r.evidence_start_s is None}
+            if r.step_id in tail and r.evidence_start_s is None
+            and (r.status in ("failed", NOT_APPLICABLE) or (r.status == "unverified" and r.step_id in conditional))}
 
 
 # --- double-check ----------------------------------------------------------------
 def needs_double_check(result: StepResult, step: RubricStep) -> bool:
     """Unclear steps: low confidence, unverified (unless the first look was sure it could not be
     seen, as when it is out of frame), or failed while critical. A second look at a step the
-    first look was sure it could not see has been seen to invent a pass for it."""
+    first look was sure it could not see has been seen to invent a pass for it. A step judged
+    not needed gets one only for low confidence (a nurse confirms a critical one), and one that
+    can only be heard never does: no video can show it."""
+    if heard_only(step):
+        return False
     return ((result.status == "unverified" and result.confidence < CONFIDENT_UNSEEN)
             or result.confidence < MIN_CONFIDENCE or (result.status == "failed" and step.critical))
 
@@ -342,9 +469,14 @@ def _double_check_one(ctx, step: RubricStep, start: float, end: float) -> StepRe
         # thinking "medium" on an ambiguous clip has used 20k thought tokens (about $0.40 a step)
         StepJudgement, model="main", thinking="low", max_output_tokens=DOUBLE_CHECK_MAX_TOKENS,
         optional=True, expect_output_tokens=DOUBLE_CHECK_EXPECTED_TOKENS,
+        timeout=assess.WHOLE_VIDEO_TIMEOUT_S if whole else assess.CLIP_TIMEOUT_S,
     )
     j.step_id = step.step_id
-    return to_step_result(j, ctx.duration, double_checked=True)
+    result = to_step_result(j, ctx.duration, double_checked=True)
+    # Not doing a step in a partial clip says nothing about the rest of the video, so only a
+    # look at the whole video settles a not_applicable verdict; better_supported never keeps
+    # one from a clip.
+    return settle_status(result, step, j.performed, j.situation_came_up) if whole else result
 
 
 def double_check_estimate(ctx, start: float, end: float) -> float:
@@ -354,16 +486,26 @@ def double_check_estimate(ctx, start: float, end: float) -> float:
                                  "medium", 4000, DOUBLE_CHECK_EXPECTED_TOKENS)
 
 
-def better_supported(before: StepResult, after: StepResult, whole_video: bool) -> StepResult:
+def better_supported(before: StepResult, after: StepResult, whole_video: bool,
+                     conditional: bool = False) -> StepResult:
     """Which of two looks at a step to keep. The result is marked double_checked either way.
 
     The second look wins when it agrees, or when the first could not settle the step. A
     second look that could not see the step on a partial clip says nothing about the rest of
-    the video, so it never overturns a passed or failed first verdict. Otherwise, when they
-    disagree, the more confident one is kept (the second look on a tie)."""
-    if after.status == before.status or before.status == "unverified":
+    the video, so it never overturns a passed, failed or not-needed first verdict. Nor can a
+    partial clip show whether a situation came up: its not_applicable is never kept, and a
+    step with an applies_when condition (conditional) or that the first look found not needed
+    is not failed by a clip that saw nothing of it.
+    Otherwise, when they disagree, the more confident one is kept (the second look on a tie)."""
+    if after.status == before.status:
         return after
-    if (after.status == "unverified" and not whole_video) or after.confidence < before.confidence:
+    clip_says_nothing = not whole_video and (
+        after.status in ("unverified", NOT_APPLICABLE)
+        or ((conditional or before.status == NOT_APPLICABLE) and after.status == "failed"
+            and after.evidence_start_s is None))
+    if before.status == "unverified" and not clip_says_nothing:
+        return after
+    if clip_says_nothing or after.confidence < before.confidence:
         note = f' A closer second look said "{after.status}" ({round(after.confidence * 100)}% sure) and was not kept.'
         return before.model_copy(update={"double_checked": True, "evidence": (before.evidence + note).strip()})
     return after
@@ -395,7 +537,8 @@ def _double_check(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evaluatio
         except Exception as exc:
             ctx.log(f"double-check of {step_id} failed, keeping first result: {type(exc).__name__}: {exc}")
             continue
-        kept = better_supported(before, after, is_whole_video(*windows[step_id], ctx.duration))
+        kept = better_supported(before, after, is_whole_video(*windows[step_id], ctx.duration),
+                                conditional=bool(steps[step_id].applies_when.strip()))
         evaluation.steps[index[step_id]] = kept
         changed = changed or kept.status != before.status
         ctx.log(f"double-check {step_id}: {before.status} ({before.confidence}) -> {after.status} "
@@ -408,7 +551,14 @@ def _rewrite_feedback(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evalu
     again from the final step results, the order problems and the safety flags. Text only: no
     video is sent."""
     titles = {s.step_id: s.title for s in rubric.steps}
-    lines = "\n".join(f"- {titles.get(r.step_id, r.step_id)}: {r.status}. {r.feedback}" for r in evaluation.steps)
+    heard = {s.step_id for s in rubric.steps if heard_only(s)}
+    shown = {NOT_APPLICABLE: "not needed this time, so not counted"}
+
+    def outcome(r: StepResult) -> str:
+        if r.step_id in heard:
+            return "not checked, because it is about something said; a nurse will listen for it"
+        return shown.get(r.status, r.status)
+    lines = "\n".join(f"- {titles.get(r.step_id, r.step_id)}: {outcome(r)}. {r.feedback}" for r in evaluation.steps)
     problems = [f"- Order: {v.message}" for v in timeline.order_violations]
     problems += [f"- Safety ({f.severity}): {f.description}" for f in evaluation.safety_flags if f.severity != "low"]
     prompt = (
@@ -417,12 +567,14 @@ def _rewrite_feedback(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evalu
         f"Other problems seen:\n{chr(10).join(problems) or '- none'}\n\n"
         "Write two or three plain, encouraging sentences addressed to the caregiver as \"you\": what went well, "
         "then the one or two most important things to fix or to record again so they can be seen. If other "
-        "problems are listed, mention the most important one. "
+        "problems are listed, mention the most important one. Do not ask them to practise a step that was "
+        "not needed. "
         "Use only what is listed above. Do not mention scores, step numbers or AI. Reply with the sentences only."
     )
     try:
         text = ctx.generate_text("evaluate_summary", [{"type": "text", "text": prompt}], thinking="low",
-                                 max_output_tokens=1500, optional=True, expect_output_tokens=600)
+                                 max_output_tokens=1500, optional=True, expect_output_tokens=600,
+                                 timeout=assess.TEXT_TIMEOUT_S)
     except gemini.GeminiError as exc:
         ctx.log(f"could not rewrite the overall feedback: {exc}")
         return evaluation.overall_feedback
@@ -446,7 +598,7 @@ def _confirm_one(ctx, rubric: Rubric, flag: SafetyFlag) -> SafetyFlag:
          {"type": "text", "text": prompts.confirm_flag_prompt(ctx.skill or {}, flag, start, end, ctx.duration,
                                                               rubric.safety_criteria)}],
         FlagCheckReply, model="main", thinking="low", max_output_tokens=2000,
-        optional=True, expect_output_tokens=500,
+        optional=True, expect_output_tokens=500, timeout=assess.CLIP_TIMEOUT_S,
     )
     if not reply.observed:
         return flag

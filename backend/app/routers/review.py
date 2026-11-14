@@ -3,7 +3,9 @@
 POST /api/attempts/{id}/review   body: ReviewRequest {overall, note, steps:[{step_id, status, note}]}
 
 overall "passed" approves the skill for that caregiver; "failed" or "unverified" asks for
-retraining, which also gives the caregiver a fresh set of attempts (app/progress.py). The
+retraining, which also gives the caregiver a fresh set of attempts (app/progress.py). A step's
+status may also be "not_applicable" (not needed in this recording), for any step: the nurse
+decides, whether or not the rubric gives the step an applies_when condition. The
 nurse who decided is recorded on the attempt. Only an attempt that was sent to a nurse can be
 reviewed (409 otherwise); an older submission the caregiver has since replaced still can.
 """

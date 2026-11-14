@@ -376,9 +376,10 @@ def notifications_seen(user: dict = Depends(auth.current_user)):
 @router.get("/my/skills")
 def my_skills(user: dict = Depends(auth.current_user)):
     """The skills assigned to the signed-in caregiver, with their standing on each one, their
-    attempts used / allowed / left, the score bars for sending, and ready_attempt_id: the
+    attempts used / allowed / left, the score bars for sending, ready_attempt_id: the
     best-scoring attempt since the nurse's last decision that is not sent yet and can be sent
-    normally (null if none)."""
+    normally (null if none), and checking_attempt_id: the newest attempt while it is still
+    being checked (null otherwise)."""
     if user["role"] != "caregiver":
         raise HTTPException(403, "This list is for caregivers.")
     org, me = user["org_id"], user["id"]
@@ -392,6 +393,8 @@ def my_skills(user: dict = Depends(auth.current_user)):
         s.update(progress.skill_state(rows))
         s.update({"attempts_used": allow["used"], "attempts_allowed": allow["allowed"],
                   "attempts_left": allow["left"], "ready_attempt_id": progress.ready_attempt_id(rows),
+                  # The newest recording while it is still being checked, so the portal can say so.
+                  "checking_attempt_id": rows[-1]["id"] if rows and rows[-1]["review_state"] == "processing" else None,
                   "policy": {"submit_pct": s["policy"]["submit_pct"], "force_pct": s["policy"]["force_pct"]}})
     counts = {state: sum(1 for s in skills if s["state"] == state) for state in progress.SKILL_STATES}
     return {"skills": skills, "counts": {**counts, "total": len(skills)}}

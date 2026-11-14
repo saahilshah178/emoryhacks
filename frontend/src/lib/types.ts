@@ -5,6 +5,13 @@
 export type Role = "nurse" | "caregiver";
 export type Status = "passed" | "failed" | "unverified";
 /**
+ * The result of one step of an attempt. not_applicable: the step is only needed in a certain
+ * situation (its applies_when), that situation did not come up in this recording, and the
+ * caregiver did not do it. Such a step is left out of the score. An attempt's overall result
+ * is always a plain Status.
+ */
+export type StepStatus = Status | "not_applicable";
+/**
  * unsubmitted: graded, the caregiver has not sent it to a nurse.
  * pending: sent, waiting for a nurse, and the caregiver's latest submission for the skill.
  * superseded: sent and not reviewed, but the caregiver has sent a newer one for the same skill.
@@ -141,7 +148,18 @@ export type SkillStep = {
   critical: boolean;
   order_dependent: boolean;
   must_follow: string[];
+  /**
+   * The situation this step is needed in, as something visible in a recording. Empty for a
+   * step every attempt must show. Absent from an API that predates the field.
+   */
+  applies_when?: string;
   evals: StepEvals;
+  /**
+   * Criteria the automatic check leaves out because they depend on speech (it grades without
+   * sound): which list, the item's place in it, and the words. Only on GET /skills/{id}; absent
+   * from an older API.
+   */
+  unheard?: Array<{ field: keyof StepEvals; index: number; words: string[] }>;
 };
 
 export type SkillGuide = {
@@ -208,6 +226,8 @@ export type MySkill = Omit<SkillSummary, "policy"> & {
   policy: Pick<SkillPolicy, "submit_pct" | "force_pct">;
   /** Best-scoring attempt since the last decision that is not sent yet and can be sent normally. */
   ready_attempt_id: string | null;
+  /** The newest attempt while it is still being checked; null otherwise. Absent from an older API. */
+  checking_attempt_id?: string | null;
 };
 
 export type MySkills = {
@@ -285,7 +305,7 @@ export type AttemptHistoryItem = Pick<
   | "skill_version"
 >;
 
-export type AttemptStep = Omit<SkillStep, "start_s" | "end_s"> & {
+export type AttemptStep = Omit<SkillStep, "start_s" | "end_s" | "unheard"> & {
   /** Where the step is in the reference video. */
   ref_start_s: number;
   ref_end_s: number;
@@ -296,7 +316,7 @@ export type AttemptStep = Omit<SkillStep, "start_s" | "end_s"> & {
   /** 1-based order in which the caregiver actually did the step. */
   performed_index: number | null;
   timeline_note: string;
-  status: Status | null;
+  status: StepStatus | null;
   confidence: number | null;
   /** Written for the caregiver. */
   feedback: string;
@@ -306,9 +326,15 @@ export type AttemptStep = Omit<SkillStep, "start_s" | "end_s"> & {
   evidence_end_s: number | null;
   /** The stronger model looked at this step a second time. */
   double_checked: boolean;
-  nurse_status: Status | null;
+  nurse_status: StepStatus | null;
   nurse_note: string;
 };
+
+/** The nurse's reading of one step, sent with a decision. status null: back to the AI's. */
+export type StepReview = { step_id: string; status: StepStatus | null; note: string };
+
+/** POST /attempts/{id}/review. steps: only the steps whose reading or note the nurse changed. */
+export type ReviewRequest = { overall: Status; note: string; steps: StepReview[] };
 
 export type OrderViolation = { step_id: string; expected_after: string; message: string; at_s: number | null };
 
@@ -346,6 +372,8 @@ export type Attempt = AttemptSummary & {
   history: AttemptHistoryItem[];
   order_matters: boolean;
   reference_video_id: string | null;
+  /** The newest version of the skill; compare with skill_version. Absent from an older API. */
+  skill_latest_version?: number;
   steps: AttemptStep[];
   order_violations: OrderViolation[];
   safety_flags: SafetyFlag[];

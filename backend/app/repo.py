@@ -147,10 +147,11 @@ def _insert_steps(conn, skill_id, steps: list[RubricStep]) -> None:
     for s in steps:
         conn.execute(
             """INSERT INTO skill_steps (id, skill_id, step_id, ord, title, description, start_s, end_s,
-                                        critical, order_dependent, must_follow, evals)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                                        critical, order_dependent, must_follow, evals, applies_when)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (uuid.uuid4(), skill_id, s.step_id, s.order, s.title, s.description, s.start_s, s.end_s,
-             s.critical, s.order_dependent, db.J(s.must_follow), db.J(s.evals.model_dump())),
+             s.critical, s.order_dependent, db.J(s.must_follow), db.J(s.evals.model_dump()),
+             s.applies_when.strip()),
         )
 
 
@@ -215,6 +216,14 @@ def get_skill(skill_id) -> dict | None:
     if not skill:
         return None
     skill["steps"] = db.fetch_all("SELECT * FROM skill_steps WHERE skill_id=%s ORDER BY ord", (skill_id,))
+    # The criteria the automatic check leaves out because they depend on speech (it grades
+    # without sound, evaluate_prompts.sight_only), so the nurse's screens can say so by each one.
+    from .stages import sight
+    for st in skill["steps"]:
+        st["unheard"] = [
+            {"field": where.split("[")[0], "index": int(where.split("[")[1].rstrip("]")), "words": words}
+            for where, text in sight.step_texts(st) if "[" in where and (words := sight.spoken_words(text))
+        ]
     skill["video"] = _with_availability(get_video(skill["reference_video_id"])) if skill["reference_video_id"] else None
     newest = db.fetch_one("SELECT id FROM skills WHERE slug=%s AND org_id=%s ORDER BY version DESC LIMIT 1",
                           (skill["slug"], skill["org_id"]))
@@ -259,7 +268,8 @@ def get_rubric(skill_id) -> Rubric:
         RubricStep(
             step_id=s["step_id"], order=s["ord"], title=s["title"], description=s["description"],
             start_s=s["start_s"], end_s=s["end_s"], critical=s["critical"], order_dependent=s["order_dependent"],
-            must_follow=s["must_follow"] or [], evals=StepEval(**(s["evals"] or {"pass_criteria": [], "fail_criteria": [], "unverified_when": []})),
+            must_follow=s["must_follow"] or [], applies_when=(s.get("applies_when") or "").strip(),
+            evals=StepEval(**(s["evals"] or {"pass_criteria": [], "fail_criteria": [], "unverified_when": []})),
         )
         for s in skill["steps"]
     ]
@@ -279,11 +289,16 @@ def patch_skill(skill_id, fields: dict[str, Any]) -> None:
 
 
 def patch_step(skill_id, step_id: str, fields: dict[str, Any]) -> int:
-    allowed = {"title", "description", "critical", "order_dependent", "must_follow", "start_s", "end_s", "evals"}
+    allowed = {"title", "description", "critical", "order_dependent", "must_follow", "applies_when", "start_s",
+               "end_s", "evals"}
     sets, params = [], []
     for key, value in fields.items():
-        if key in allowed and value is not None:  # an empty must_follow list clears the prerequisites
+        # An empty must_follow list clears the prerequisites; an empty applies_when makes the
+        # step always needed.
+        if key in allowed and value is not None:
             sets.append(f"{key}=%s")
+            if key == "applies_when":
+                value = value.strip()
             params.append(db.J(value) if key in ("evals", "must_follow") else value)
     if not sets:
         return 0
@@ -463,9 +478,13 @@ def get_attempt(attempt_id) -> dict | None:
     if not attempt:
         return None
     attempt["caregiver_name"] = attempt.pop("caregiver_account_name") or attempt["caregiver_name"]
+    # The skill's newest version, so a screen can say when this was graded against an older one.
+    attempt["skill_latest_version"] = db.fetch_one(
+        "SELECT max(version) AS v FROM skills WHERE slug=%s AND org_id=%s",
+        (attempt["skill_slug"], attempt["org_id"]))["v"]
     attempt["steps"] = db.fetch_all(
         """SELECT st.step_id, st.ord, st.title, st.description, st.critical, st.order_dependent, st.must_follow,
-                  st.evals, st.start_s AS ref_start_s, st.end_s AS ref_end_s,
+                  st.applies_when, st.evals, st.start_s AS ref_start_s, st.end_s AS ref_end_s,
                   x.found, x.start_s, x.end_s, x.performed_index, x.timeline_confidence, x.timeline_note,
                   x.status, x.confidence, x.feedback, x.evidence, x.evidence_start_s, x.evidence_end_s,
                   x.double_checked, x.nurse_status, x.nurse_note
@@ -780,7 +799,8 @@ def load_timeline(attempt_id) -> Timeline:
     from .models import OrderViolation, TimelineStep
 
     rows = db.fetch_all(
-        """SELECT x.step_id, x.found, x.start_s, x.end_s, x.performed_index, x.timeline_confidence, x.timeline_note
+        """SELECT x.step_id, x.found, x.start_s, x.end_s, x.performed_index, x.timeline_confidence, x.timeline_note,
+                  x.status
            FROM attempt_steps x JOIN attempts a ON a.id = x.attempt_id
            LEFT JOIN skill_steps st ON st.skill_id = a.skill_id AND st.step_id = x.step_id
            WHERE x.attempt_id=%s ORDER BY st.ord NULLS LAST, x.step_id""", (attempt_id,))
@@ -790,8 +810,10 @@ def load_timeline(attempt_id) -> Timeline:
     violations = db.fetch_all(
         "SELECT step_id, expected_after, message, at_s FROM order_violations WHERE attempt_id=%s "
         "ORDER BY at_s NULLS LAST, step_id", (attempt_id,))
+    # A step judged not needed was not found but is not missing (timeline.build_timeline).
+    not_needed = {r["step_id"] for r in rows if r["status"] == "not_applicable"}
     return Timeline(steps=steps, order_violations=[OrderViolation(**v) for v in violations],
-                    missing_step_ids=[s.step_id for s in steps if not s.found])
+                    missing_step_ids=[s.step_id for s in steps if not s.found and s.step_id not in not_needed])
 
 
 def load_evaluation(attempt_id) -> Evaluation:

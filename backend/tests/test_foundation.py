@@ -42,8 +42,9 @@ def test_fake_pipelines_end_to_end(migrated, sample_video):
     assert done["status"] == "done", done["error"]
     attempt = repo.get_attempt(attempt_id)
     assert attempt["status"] == "failed"  # canned data has a failed critical step and an order violation
-    assert [s["status"] for s in attempt["steps"]] == ["passed", "failed", "unverified", "passed"]
-    assert all(s["start_s"] is not None for s in attempt["steps"])
+    # the canned rubric's last step is only sometimes needed, and canned grading finds it not needed
+    assert [s["status"] for s in attempt["steps"]] == ["passed", "failed", "unverified", "not_applicable"]
+    assert all(s["start_s"] is not None for s in attempt["steps"][:3]) and attempt["steps"][3]["start_s"] is None
     assert len(attempt["order_violations"]) == 1
     assert {f["source"] for f in attempt["safety_flags"]} == {"gemini", "pose"}
     assert db.fetch_one("SELECT count(*) AS n FROM pose_frames WHERE video_id=%s", (video["id"],))["n"] > 100
@@ -141,3 +142,15 @@ def test_scoring_rules():
     advisory = high.model_copy(update={"source": "pose", "counts_toward_score": False})
     assert scoring.score(rb, _timeline(), _evaluation(["passed"] * 4), [advisory]).overall == "passed"
     assert scoring.score(rb, _timeline(), _evaluation(["passed"] * 4, skill_match=False), []).overall == "failed"
+
+
+def test_several_servers_can_apply_the_schema_at_once(migrated):
+    """Servers that start together on one database take turns applying the schema, so none of
+    them fails on a statement another is running."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app import db
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for future in [pool.submit(db.migrate) for _ in range(4)]:
+            future.result()

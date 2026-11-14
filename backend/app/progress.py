@@ -24,7 +24,7 @@ ai_assessment of an attempt (None until it is graded)
   safety_concern  the AI failed it and raised a safety flag that counts
 
 submission of an attempt: whether the caregiver may send it, and a sentence saying why
-  score_pct >= submit_pct (default 80)               can_submit: sent normally
+  score_pct >= submit_pct (default 80)               can_submit: may be sent normally; never sent by itself
   force_pct (default 50) <= score_pct < submit_pct   can_force: "send anyway" with a note of
                                                      at least FORCE_NOTE_MIN characters
   below force_pct, or skill_match false              neither: record it again
@@ -161,7 +161,7 @@ def submission(row: dict, pol: dict) -> dict:
     state = row["review_state"]
     score = float(row.get("score_pct") or 0)
     if state == "processing":
-        reason = "This recording is still being checked. You can send it once the check has finished."
+        reason = "This recording is still being checked. You can choose whether to send it once the check has finished."
     elif state == "error":
         reason = "This recording could not be checked, so it cannot be sent."
     elif state in ("approved", "retraining"):
@@ -174,8 +174,8 @@ def submission(row: dict, pol: dict) -> dict:
         reason = "The automatic check could not find this skill in the video, so it cannot be sent."
     elif score >= pol["submit_pct"]:
         out["can_submit"] = True
-        reason = (f"You scored {pct(score)}, which meets the {pct(pol['submit_pct'])} your nurse asks for. "
-                  "You can send it for review.")
+        reason = (f"You scored {pct(score)}. That is good enough to send to your nurse, who asks for "
+                  f"{pct(pol['submit_pct'])}.")
     elif score >= pol["force_pct"]:
         out["can_force"] = True
         reason = (f"You scored {pct(score)}. Your nurse asks for {pct(pol['submit_pct'])} before a recording is "

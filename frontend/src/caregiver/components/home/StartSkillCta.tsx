@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle2, Repeat, RotateCcw, Send, Video, type LucideIcon } from "lucide-react";
+import { CheckCircle2, Hourglass, Repeat, RotateCcw, Send, Video, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui";
 import { outOfAttempts, practiceHref, resultsHref } from "@/caregiver/skills";
 import { attemptsLeftLine, skillAllowance } from "@/caregiver/status";
@@ -15,12 +15,20 @@ type Cta = {
 
 function ctaFor(skill: MySkill): Cta {
   const result = skill.attempt_id ? resultsHref(skill.id, skill.attempt_id) : null;
+  if (skill.checking_attempt_id) {
+    return {
+      icon: Hourglass,
+      title: `Being checked: ${skill.name}`,
+      body: "Your newest recording is still being checked. This usually takes a minute or two, and the result shows up by itself.",
+      primary: { href: resultsHref(skill.id, skill.checking_attempt_id), label: "See its progress" },
+    };
+  }
   if (skill.ready_attempt_id) {
     return {
       icon: Send,
-      title: `Ready to send: ${skill.name}`,
-      body: "Your recording passed the automatic check. Send it to your nurse so they can make the final decision.",
-      primary: { href: resultsHref(skill.id, skill.ready_attempt_id), label: "Review and send" },
+      title: `Good enough to send: ${skill.name}`,
+      body: "Your recording scored high enough to send to your nurse. You can send it, or record again to do better.",
+      primary: { href: resultsHref(skill.id, skill.ready_attempt_id), label: "See your result" },
     };
   }
   if (skill.state === "needs_practice") {
@@ -58,13 +66,13 @@ function ctaFor(skill: MySkill): Cta {
 }
 
 /**
- * The one thing to do next: send a recording that is ready, practise a skill the nurse sent
+ * The one thing to do next: follow a recording being checked, send one that is ready, practise a skill the nurse sent
  * back, keep going on one partway through, or start a new one.
  */
 export function StartSkillCta({ skill }: { skill: MySkill }) {
   const cta = ctaFor(skill);
   const Icon = cta.icon;
-  const left = skill.ready_attempt_id ? null : attemptsLeftLine(skillAllowance(skill));
+  const left = skill.ready_attempt_id || skill.checking_attempt_id ? null : attemptsLeftLine(skillAllowance(skill));
   return (
     <section className="rounded-[12px] bg-navy p-5 text-white shadow-[var(--shadow-card)]">
       <div className="flex items-start gap-3">

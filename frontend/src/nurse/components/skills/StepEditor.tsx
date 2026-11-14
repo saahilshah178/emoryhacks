@@ -1,17 +1,21 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Badge, Button, Field, Input, Textarea } from "@/components/ui";
 import { TimeChip } from "@/components/media/TimeChip";
 import { api, errorMessage } from "@/lib/api";
 import { formatClock } from "@/lib/format";
+import { appliesWhen } from "@/lib/steps";
 import type { Skill, SkillStep, StepEvals, Video } from "@/lib/types";
 import { isTimed, sameList, tenth, toLines, toList } from "./text";
+import { UnheardNote, unheardIn } from "./Unheard";
 
 type Draft = {
   title: string;
   description: string;
+  /** The situation the step is needed in; empty for a step every recording must show. */
+  appliesWhen: string;
   critical: boolean;
   start: string;
   end: string;
@@ -22,7 +26,9 @@ type Draft = {
   cues: string;
 };
 
-type StepPatch = Partial<Pick<SkillStep, "title" | "description" | "critical" | "start_s" | "end_s" | "must_follow">> & {
+type StepPatch = Partial<
+  Pick<SkillStep, "title" | "description" | "applies_when" | "critical" | "start_s" | "end_s" | "must_follow">
+> & {
   evals?: StepEvals;
 };
 
@@ -35,6 +41,7 @@ function fromStep(step: SkillStep, steps: SkillStep[]): Draft {
   return {
     title: step.title,
     description: step.description,
+    appliesWhen: appliesWhen(step),
     critical: step.critical,
     start: tenth(step.start_s),
     end: tenth(step.end_s),
@@ -50,6 +57,7 @@ function sameDraft(a: Draft, b: Draft) {
   return (
     a.title === b.title &&
     a.description === b.description &&
+    a.appliesWhen === b.appliesWhen &&
     a.critical === b.critical &&
     a.start === b.start &&
     a.end === b.end &&
@@ -61,6 +69,23 @@ function sameDraft(a: Draft, b: Draft) {
   );
 }
 
+/**
+ * The field's hint, then a warning by each saved criterion the automatic check skips because it
+ * is about something said. Warnings show only while the box still holds what was saved.
+ */
+function criteriaHint(hint: string, step: SkillStep, field: keyof StepEvals, edited: boolean): ReactNode {
+  const items = step.evals?.[field] ?? [];
+  const unheard = edited ? [] : [...unheardIn(step, field)];
+  return (
+    <>
+      {hint}
+      {unheard.map(([index, words]) => (
+        <UnheardNote key={index} words={words} text={items[index]} />
+      ))}
+    </>
+  );
+}
+
 /** Only what changed, or a sentence saying what to fix first. */
 function buildPatch(step: SkillStep, draft: Draft, original: Draft): { patch: StepPatch } | { error: string } {
   const patch: StepPatch = {};
@@ -69,6 +94,9 @@ function buildPatch(step: SkillStep, draft: Draft, original: Draft): { patch: St
   if (title !== step.title) patch.title = title;
   const description = draft.description.trim();
   if (description !== step.description) patch.description = description;
+  // An empty condition is sent as "", which makes the step always needed again.
+  const condition = draft.appliesWhen.trim();
+  if (condition !== appliesWhen(step)) patch.applies_when = condition;
   if (draft.critical !== step.critical) patch.critical = draft.critical;
 
   if (draft.start !== original.start || draft.end !== original.end) {
@@ -200,6 +228,17 @@ export function StepEditor({
             onChange={(event) => change({ description: event.target.value })}
           />
         </Field>
+        <Field
+          label="Only needed when"
+          hint="Leave empty if every recording must show this step. Otherwise write something that can be seen in the recording."
+          className="md:col-span-2"
+        >
+          <Input
+            value={draft.appliesWhen}
+            onChange={(event) => change({ appliesWhen: event.target.value })}
+            placeholder="For example: the wheelchair has footrests"
+          />
+        </Field>
 
         <div className="md:col-span-2">
           <p className="mb-1.5 text-sm font-medium text-ink">Where it happens in the reference video</p>
@@ -281,20 +320,39 @@ export function StepEditor({
           )}
         </fieldset>
 
-        <Field label="Passes when" hint="One item per line.">
+        <p className="text-xs text-ink-secondary md:col-span-2">
+          The automatic check watches recordings without sound, so write criteria that can be seen.
+        </p>
+        <Field label="Passes when" hint={criteriaHint("One item per line.", step, "pass_criteria", draft.pass !== original.pass)}>
           <Textarea rows={3} value={draft.pass} onChange={(event) => change({ pass: event.target.value })} />
         </Field>
-        <Field label="Fails when" hint="One item per line.">
+        <Field label="Fails when" hint={criteriaHint("One item per line.", step, "fail_criteria", draft.fail !== original.fail)}>
           <Textarea rows={3} value={draft.fail} onChange={(event) => change({ fail: event.target.value })} />
         </Field>
-        <Field label="Cannot be verified when" hint="When the camera can't show the step. One per line.">
+        <Field
+          label="Cannot be verified when"
+          hint={criteriaHint(
+            "When the camera can't show the step. One per line.",
+            step,
+            "unverified_when",
+            draft.unverified !== original.unverified,
+          )}
+        >
           <Textarea
             rows={3}
             value={draft.unverified}
             onChange={(event) => change({ unverified: event.target.value })}
           />
         </Field>
-        <Field label="What to look for" hint="What shows the step is happening. One per line.">
+        <Field
+          label="What to look for"
+          hint={criteriaHint(
+            "What shows the step is happening. One per line.",
+            step,
+            "visual_cues",
+            draft.cues !== original.cues,
+          )}
+        >
           <Textarea rows={3} value={draft.cues} onChange={(event) => change({ cues: event.target.value })} />
         </Field>
       </div>

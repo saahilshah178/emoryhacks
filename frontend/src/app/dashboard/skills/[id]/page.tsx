@@ -19,7 +19,14 @@ import { BackLink } from "@/shared/layout/BackLink";
 import { PageHeading } from "@/shared/layout/PageHeading";
 import { ConfirmDialog } from "@/nurse/components/skills/ConfirmDialog";
 import { AttemptsSection } from "@/nurse/components/skills/AttemptsSection";
-import { ActionsCard, PeopleCard, SafetyCard, SkillFacts, VersionList } from "@/nurse/components/skills/SkillAside";
+import {
+  ActionsCard,
+  BuildNotesCard,
+  PeopleCard,
+  SafetyCard,
+  SkillFacts,
+  VersionList,
+} from "@/nurse/components/skills/SkillAside";
 import { CaregiverCopyForm, SkillDetailsForm } from "@/nurse/components/skills/SkillForms";
 import { StepCard } from "@/nurse/components/skills/StepCard";
 import { StepEditor } from "@/nurse/components/skills/StepEditor";
@@ -332,6 +339,7 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
           <SkillFacts skill={skill} />
           <PeopleCard people={skill.people ?? []} />
           <SafetyCard points={skill.safety_criteria ?? []} />
+          {!editing ? <BuildNotesCard notes={skill.notes ?? ""} /> : null}
           {skill.versions.length > 0 ? <VersionList skill={skill} /> : null}
           <ActionsCard
             skill={skill}

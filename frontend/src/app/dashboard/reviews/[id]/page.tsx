@@ -123,6 +123,12 @@ function ReviewHeader({ attempt }: { attempt: Attempt }) {
                   ? " · Not sent to you"
                   : ""}
             </p>
+            {attempt.skill_latest_version !== undefined && attempt.skill_latest_version !== attempt.skill_version ? (
+              <p className="text-xs">
+                Graded against version {attempt.skill_version} of this skill. The newest is version{" "}
+                {attempt.skill_latest_version}.
+              </p>
+            ) : null}
           </div>
         </div>
       }

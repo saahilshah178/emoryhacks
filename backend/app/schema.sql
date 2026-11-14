@@ -86,14 +86,14 @@ CREATE TABLE IF NOT EXISTS attempt_steps (
   performed_index      integer,
   timeline_confidence  real,
   timeline_note        text NOT NULL DEFAULT '',
-  status               text CHECK (status IN ('passed', 'failed', 'unverified')),
+  status               text CHECK (status IN ('passed', 'failed', 'unverified', 'not_applicable')),
   confidence           real,
   feedback             text NOT NULL DEFAULT '',
   evidence             text NOT NULL DEFAULT '',
   evidence_start_s     real,
   evidence_end_s       real,
   double_checked       boolean NOT NULL DEFAULT false,
-  nurse_status         text CHECK (nurse_status IN ('passed', 'failed', 'unverified')),
+  nurse_status         text CHECK (nurse_status IN ('passed', 'failed', 'unverified', 'not_applicable')),
   nurse_note           text NOT NULL DEFAULT '',
   UNIQUE (attempt_id, step_id)
 );
@@ -391,3 +391,45 @@ ALTER TABLE attempts ADD COLUMN IF NOT EXISTS submit_note text NOT NULL DEFAULT 
 -- NULL for an ordinary login. 'upload' marks a short-lived ticket that may only send videos
 -- (auth.create_upload_ticket), used when the browser uploads straight to the API's address.
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS scope text;
+-- @@
+-- The situation a step is needed in, as something that can be seen in a recording. Empty for
+-- a step every attempt must show (models.RubricStep.applies_when).
+ALTER TABLE skill_steps ADD COLUMN IF NOT EXISTS applies_when text NOT NULL DEFAULT '';
+-- @@
+-- A step with an applies_when condition can be "not_applicable" for an attempt (the AI's
+-- result or the nurse's): the situation did not come up, so the step is left out of the score.
+-- Databases made before that status existed have the narrower checks; widen them once.
+DO $$
+DECLARE
+  col text;
+BEGIN
+  FOREACH col IN ARRAY ARRAY['status', 'nurse_status'] LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conrelid = 'attempt_steps'::regclass AND conname = 'attempt_steps_' || col || '_check'
+        AND pg_get_constraintdef(oid) LIKE '%not_applicable%'
+    ) THEN
+      EXECUTE format('ALTER TABLE attempt_steps DROP CONSTRAINT IF EXISTS %I', 'attempt_steps_' || col || '_check');
+      EXECUTE format(
+        'ALTER TABLE attempt_steps ADD CONSTRAINT %I CHECK (%I IN (''passed'', ''failed'', ''unverified'', ''not_applicable''))',
+        'attempt_steps_' || col || '_check', col);
+    END IF;
+  END LOOP;
+END $$;
+-- @@
+-- Whether the copy of the video that Gemini holds (gemini_file_uri) has its sound. A
+-- caregiver's attempt is uploaded without sound, because grading is by sight only; NULL is a
+-- handle made before that, which had sound.
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS gemini_file_audio boolean;
+-- @@
+-- Which revision of builtin_skills.json an agency was given for each standard skill
+-- (builtin.ensure). A revision is installed once: a version of it that a nurse deletes is not
+-- put back at the next start.
+CREATE TABLE IF NOT EXISTS builtin_installs (
+  org_id        uuid NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  slug          text NOT NULL,
+  revision      integer NOT NULL,
+  skill_id      uuid,
+  installed_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (org_id, slug, revision)
+);

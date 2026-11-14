@@ -5,7 +5,8 @@ these shapes are the interface between stages, the database and the frontend.
 
 Conventions used everywhere:
   * times are float seconds from the start of the video
-  * statuses are the lowercase strings "passed", "failed", "unverified"
+  * statuses are the lowercase strings "passed", "failed", "unverified"; one step of an
+    attempt may also be "not_applicable" (see StepStatus)
   * step_id is a stable id ("s1", "s2", ...) assigned when the rubric is created;
     the timeline and evaluation stages must reuse those ids exactly
 """
@@ -16,6 +17,12 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 Status = Literal["passed", "failed", "unverified"]
+# The result of one step. "not_applicable" is only for a step that has an applies_when
+# condition (RubricStep) when the situation it is for did not come up in the recording and the
+# caregiver did not do it: the step was not needed, so it is left out of the score. An
+# attempt's overall result is always a plain Status.
+StepStatus = Literal["passed", "failed", "unverified", "not_applicable"]
+NOT_APPLICABLE = "not_applicable"
 Role = Literal["caregiver", "patient", "other"]
 Severity = Literal["low", "medium", "high"]
 FlagKind = Literal[
@@ -70,6 +77,10 @@ class RubricStep(BaseModel):
     critical: bool = Field(description="failing this step fails the whole skill")
     order_dependent: bool = Field(description="must be performed in sequence relative to must_follow")
     must_follow: list[str] = Field(default_factory=list, description="step_ids that must be completed before this one")
+    # Empty for a step every attempt must show. Otherwise the situation the step is for, as a
+    # condition that can be seen in a recording ("the patient cannot get up unaided after being
+    # lowered"); when it does not come up and the step is not done, the step is not_applicable.
+    applies_when: str = Field(default="", description="the visible situation this step is needed in; empty when it is always needed")
     evals: StepEval
 
 
@@ -110,7 +121,7 @@ class Timeline(BaseModel):
 
 class StepResult(BaseModel):
     step_id: str
-    status: Status
+    status: StepStatus
     confidence: float = Field(description="0 to 1")
     feedback: str = Field(description="addressed to the caregiver")
     evidence: str = Field(default="", description="what was actually seen")
@@ -175,6 +186,7 @@ class StepPatch(BaseModel):
     critical: bool | None = None
     order_dependent: bool | None = None
     must_follow: list[str] | None = None
+    applies_when: str | None = None   # "" makes the step always needed again
     start_s: float | None = None
     end_s: float | None = None
     evals: StepEval | None = None
@@ -182,7 +194,7 @@ class StepPatch(BaseModel):
 
 class StepReview(BaseModel):
     step_id: str
-    status: Status | None = None
+    status: StepStatus | None = None
     note: str = ""
 
 

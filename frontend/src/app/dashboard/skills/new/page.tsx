@@ -38,6 +38,7 @@ const guidance = [
   "Keep the whole body of both the caregiver and the patient in frame, from head to feet.",
   "Perform the skill once, at normal speed, the way you want caregivers to do it.",
   "Set the camera still at about waist height, with good light and a clear floor.",
+  "Make each step easy to see: caregivers' recordings are checked without sound.",
   "Stop recording as soon as the skill is finished.",
 ];
 

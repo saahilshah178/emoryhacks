@@ -21,7 +21,7 @@ export function ProgressTiles({ counts, ready = 0, className }: { counts: MySkil
       {tiles.map((tile) => {
         const Icon = tile.icon;
         let hint: string = "hint" in tile ? tile.hint : `Of ${counts.total} in all`;
-        if (tile.key === "practicing" && ready > 0) hint = ready === 1 ? "1 is ready to send" : `${ready} are ready to send`;
+        if (tile.key === "practicing" && ready > 0) hint = ready === 1 ? "1 is good enough to send" : `${ready} are good enough to send`;
         return (
           <Card key={tile.key} className="px-5 py-4">
             <div className="flex items-start justify-between gap-2">

@@ -135,7 +135,7 @@ export function SkillCheckClient({ skill, standing }: { skill: Skill; standing: 
   // After a refusal, their results are the way on (the one ready to send, if any).
   const resultId = standing ? (standing.ready_attempt_id ?? standing.attempt_id ?? standing.latest_attempt_id) : null;
   const refusedWayOn = resultId
-    ? { href: resultsHref(skill.id, resultId), label: standing?.ready_attempt_id ? "Review and send your recording" : "See your results" }
+    ? { href: resultsHref(skill.id, resultId), label: standing?.ready_attempt_id ? "See your result" : "See your results" }
     : { href: "/portal/skills", label: "Back to my skills" };
 
   let body;

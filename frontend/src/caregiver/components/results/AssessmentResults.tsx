@@ -278,8 +278,8 @@ function Graded({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
     title = "This recording was replaced";
     line = "It stays here for you to look back on, with what the automatic check saw.";
   } else if (attempt.submission.can_submit) {
-    title = "Your recording is ready to send";
-    line = "Look over what the automatic check saw, then send it to your nurse. Only your nurse can verify a skill.";
+    title = "Your score is good enough to send";
+    line = "Look over what the automatic check saw. You can send it to your nurse, or record again. Only your nurse can verify a skill.";
   } else {
     title = "Your result is ready";
     line = "Look over what the automatic check saw. Your nurse only sees a recording once you send it.";

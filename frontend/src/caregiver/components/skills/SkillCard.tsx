@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Send } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Card, StateBadge } from "@/components/ui";
 import { skillHref } from "@/caregiver/skills";
 import { attemptsLeftLine, readyToSend, skillAllowance, skillStateForCaregiver } from "@/caregiver/status";
@@ -40,7 +40,6 @@ export function SkillCard({ skill }: { skill: MySkill }) {
           <p className={cn("mt-1 text-xs font-medium", skill.attempts_left === 0 && skill.state !== "in_review" ? "text-danger" : "text-ink-secondary")}>{left}</p>
         ) : null}
         <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-teal">
-          {ready ? <Send className="h-4 w-4" aria-hidden /> : null}
           {action}
           <ArrowRight className="h-4 w-4" aria-hidden />
         </span>

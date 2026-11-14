@@ -79,7 +79,7 @@ export function ReviewScreen({
               <p className="font-medium text-navy">{attemptLine(allowance)}</p>
               <p>
                 Your result shows a score and where each step is in your video, so you can compare it with the
-                demonstration. If the score is high enough, you can then send it to your nurse, who makes the final
+                demonstration. If the score is high enough, you can then choose to send it to your nurse, who makes the final
                 decision.
               </p>
             </div>

@@ -25,8 +25,8 @@ export const skillStateForCaregiver: Record<SkillState, Entry & { action: string
   verified: { label: "Verified", tone: "success", action: "View results" },
 };
 
-/** A recording that passed the automatic check and has not been sent yet. */
-export const readyToSend: Entry & { action: string } = { label: "Ready to send", tone: "success", action: "Send to my nurse" };
+/** A recording that scored high enough to send and has not been sent. It is only sent if the caregiver sends it. */
+export const readyToSend: Entry & { action: string } = { label: "Good enough to send", tone: "success", action: "See your result" };
 
 /** 64 -> "64%", 79.6 -> "79.6%", like the API's sentences: never rounded across a mark. */
 export function formatScore(value: number | null | undefined) {

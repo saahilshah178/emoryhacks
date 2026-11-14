@@ -70,7 +70,7 @@ export function ScoreMeter({ score, submitPct, forcePct }: { score: number; subm
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={score}
-        aria-valuetext={`${formatScore(score)}. ${formatScore(submitPct)} to send${hasAnyway ? `, ${formatScore(forcePct)} to send anyway` : ""}.`}
+        aria-valuetext={`${formatScore(score)}. ${formatScore(submitPct)} good enough to send${hasAnyway ? `, ${formatScore(forcePct)} to send anyway` : ""}.`}
         aria-label="Your score"
       >
         <div className="h-2.5 overflow-hidden rounded-full bg-secondary">
@@ -103,7 +103,7 @@ export function ScoreMeter({ score, submitPct, forcePct }: { score: number; subm
         <li className="flex items-center gap-2">
           <span className="h-3.5 w-[3px] shrink-0 rounded-full bg-navy" aria-hidden />
           <span>
-            <span className="font-semibold text-navy">{formatScore(submitPct)}</span> or more: send it to your nurse
+            <span className="font-semibold text-navy">{formatScore(submitPct)}</span> or more: good enough to send to your nurse
           </span>
         </li>
         {hasAnyway ? (
@@ -228,8 +228,23 @@ function Decide({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
           Send to my nurse
         </Button>
         <p className="text-sm text-ink-secondary">
-          Your nurse watches it and makes the final decision. The automatic check is only a suggestion.
+          Your nurse watches it and makes the final decision. The automatic check is only a suggestion. Nothing is
+          sent until you press the button.
         </p>
+        {canRecord ? (
+          <>
+            <Button href={practiceHref(skillId)} variant="secondary" size="lg" className="w-full">
+              <RotateCcw className="h-4 w-4" aria-hidden />
+              Record again instead
+            </Button>
+            <p className="text-sm text-ink-secondary">
+              If you record again, this recording is kept and you can still send it later.
+              {attempt.attempts.allowed !== null ? " A new recording uses one of your attempts." : ""}
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-ink">{noAttemptsLeft(attempt.attempts.allowed ?? 0)}</p>
+        )}
       </>
     );
   } else if (submission.can_force) {

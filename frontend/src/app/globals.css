@@ -74,6 +74,17 @@
 
 html {
   scroll-padding-top: 5rem;
+  /* Keep the scrollbar's strip of width on every page, long or short. Without it a page
+     too short to scroll is wider than the others, and a page that grows as its data
+     arrives jumps sideways the moment the scrollbar appears. */
+  scrollbar-gutter: stable;
+}
+
+/* Browsers without scrollbar-gutter: always show the scrollbar's track instead. */
+@supports not (scrollbar-gutter: stable) {
+  html {
+    overflow-y: scroll;
+  }
 }
 
 html,

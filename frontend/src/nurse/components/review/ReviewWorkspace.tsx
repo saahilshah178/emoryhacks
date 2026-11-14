@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Info } from "lucide-react";
+import { attemptReferenceChapters } from "@/components/media/chapters";
+import { StepChapters } from "@/components/media/StepChapters";
 import { formatRange, hasSpan } from "@/lib/format";
 import { useVideoSegments } from "@/lib/segment";
 import type { Attempt, AttemptStep } from "@/lib/types";
@@ -27,6 +29,7 @@ export function ReviewWorkspace({ attempt }: { attempt: Attempt }) {
   const referenceAvailable = Boolean(attempt.reference_video?.available);
   const editing = attempt.review_state === "pending" || reopened;
   const located = locatedSteps(attempt.steps);
+  const referenceChapters = useMemo(() => attemptReferenceChapters(attempt.steps), [attempt.steps]);
   const duration =
     attempt.video.duration_s || attempt.duration_s || Math.max(1, ...located.map(({ span }) => span.end));
 
@@ -137,6 +140,23 @@ export function ReviewWorkspace({ attempt }: { attempt: Attempt }) {
         reference={attempt.reference_video}
         referenceRef={reference.ref}
         referenceCaption={comparing}
+        referenceTimeline={
+          attempt.reference_video ? (
+            <StepChapters
+              chapters={referenceChapters}
+              duration={attempt.reference_video.duration_s}
+              time={reference.playhead}
+              onSelect={(chapter) => {
+                // The caption names a step chosen with "Compare"; the bar names its own.
+                setComparing(null);
+                reference.play(Number(chapter.start), chapter.end);
+              }}
+              label="Steps in the approved reference"
+              emptyText="The steps have no times in the reference video."
+              missingText="No time in the reference"
+            />
+          ) : null
+        }
         timeline={
           <>
             <StepTimeline

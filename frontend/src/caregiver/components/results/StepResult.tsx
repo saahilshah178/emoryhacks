@@ -1,43 +1,51 @@
-import { ArrowDownUp, Stethoscope } from "lucide-react";
+import { ArrowDownUp, EyeOff, Stethoscope } from "lucide-react";
 import { Badge, StateBadge } from "@/components/ui";
+import { attemptStepSpan } from "@/components/media/chapters";
 import { TimeChip } from "@/components/media/TimeChip";
 import { cn } from "@/lib/cn";
 import { hasSpan } from "@/lib/format";
 import { stepStatusForCaregiver, toneClass } from "@/lib/status";
 import type { AttemptStep, OrderViolation } from "@/lib/types";
 
-/** Where the step happens in the caregiver's video: where it was found, else what the check looked at. */
-export function stepSpan(step: AttemptStep): [number | null, number | null] {
-  if (step.start_s !== null && step.start_s !== undefined) return [step.start_s, step.end_s];
-  return [step.evidence_start_s, step.evidence_end_s];
-}
-
 /**
  * One step of a graded attempt in the caregiver's words. Where a nurse changed the
  * result, the nurse's result and note come first and the automatic check's reading
- * follows, marked as replaced.
+ * follows, marked as replaced. Under it: where the step is in the caregiver's recording
+ * (or that it was not seen) and, when the reference can be played, the same step in the
+ * nurse's demonstration, so the two can be compared.
  */
 export function StepResult({
   step,
   number,
   violations,
   onPlay,
+  onPlayDemo,
+  active = false,
 }: {
   step: AttemptStep;
   number: number;
   violations: OrderViolation[];
   /** Plays a stretch of the caregiver's video; absent when the video can't be played here. */
   onPlay?: (start: number, end?: number | null) => void;
+  /** Plays a stretch of the reference video; absent when there is none to play. */
+  onPlayDemo?: (start: number, end?: number | null) => void;
+  /** The caregiver's recording is showing this step. */
+  active?: boolean;
 }) {
   const effective = step.nurse_status ?? step.status;
   const entry = effective ? stepStatusForCaregiver[effective] : null;
   const changed = step.nurse_status !== null && step.status !== null && step.nurse_status !== step.status;
   const aiEntry = step.status ? stepStatusForCaregiver[step.status] : null;
-  const [start, end] = stepSpan(step);
+  const span = attemptStepSpan(step);
+  const demo = Boolean(onPlayDemo) && hasSpan(step.ref_start_s, step.ref_end_s);
   const notes = violations.filter((violation) => violation.step_id === step.step_id);
 
   return (
-    <li className="flex items-start gap-3 px-4 py-4">
+    <li
+      data-step-id={step.step_id}
+      aria-current={active ? "step" : undefined}
+      className={cn("flex items-start gap-3 px-4 py-4 transition-colors", active && "bg-teal-soft/60")}
+    >
       <span
         className={cn(
           "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
@@ -91,14 +99,37 @@ export function StepResult({
           </p>
         ))}
 
-        {hasSpan(start, end) ? (
-          <TimeChip
-            start={start}
-            end={end}
-            onPlay={onPlay}
-            title={onPlay ? undefined : "Where this step is in your recording"}
-          />
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {span ? (
+            <TimeChip
+              start={span.start}
+              end={span.end}
+              onPlay={onPlay}
+              prefix="Your recording"
+              title={
+                onPlay
+                  ? undefined
+                  : span.byGrader
+                    ? "Where the check looked in your recording"
+                    : "Where this step is in your recording"
+              }
+            />
+          ) : (
+            <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-secondary px-2.5 text-xs font-medium text-ink-secondary">
+              <EyeOff className="h-3.5 w-3.5" aria-hidden />
+              Not seen in your recording
+            </span>
+          )}
+          {demo ? (
+            <TimeChip
+              start={step.ref_start_s}
+              end={step.ref_end_s}
+              onPlay={onPlayDemo}
+              prefix="Demonstration"
+              className="bg-info-bg text-info hover:bg-info hover:text-white"
+            />
+          ) : null}
+        </div>
       </div>
     </li>
   );

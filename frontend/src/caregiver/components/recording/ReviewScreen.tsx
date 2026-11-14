@@ -67,11 +67,24 @@ export function ReviewScreen({
         <div className="space-y-5">
           <Card className="flex gap-3 p-4">
             <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-info" aria-hidden />
-            <p className="text-sm leading-relaxed text-ink-secondary">
-              Submitting does not certify this skill. A nurse will review the recording and let you know what&apos;s
-              next.
-            </p>
+            <div className="space-y-2 text-sm leading-relaxed text-ink-secondary">
+              <p>
+                Step-by-step times appear once your recording has been checked. Your result will show where each step
+                is in your video, so you can jump straight to it and compare it with the demonstration.
+              </p>
+              <p>
+                Submitting does not certify this skill. A nurse will review the recording and let you know what&apos;s
+                next.
+              </p>
+            </div>
           </Card>
+
+          {recording.stoppedAtLimit ? (
+            <p role="status" className="rounded-[12px] bg-warning-bg px-4 py-3 text-sm text-warning">
+              The recording stopped by itself at {formatClock(recording.seconds)}, the longest a recording can be. If
+              it cut off before you finished, retake it and leave out any waiting around.
+            </p>
+          ) : null}
 
           {error ? <ErrorNote message={`Your video wasn't sent. ${error}`} /> : null}
 

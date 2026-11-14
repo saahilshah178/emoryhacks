@@ -1,8 +1,8 @@
 // How the review screen reads an attempt's steps.
-import { hasSpan } from "@/lib/format";
+import { attemptStepSpan, type AttemptSpan } from "@/components/media/chapters";
 import type { Attempt, AttemptStep, OrderViolation, Status } from "@/lib/types";
 
-export type Span = { start: number; end: number; byGrader: boolean };
+export type Span = AttemptSpan;
 
 /** The nurse's per-step choice while the decision form is open. */
 export type Override = { status: Status | null; note: string };
@@ -13,13 +13,7 @@ export type Overrides = Record<string, Override>;
  * cited as evidence (the grader looks for steps the timeline missed). Null when neither.
  */
 export function stepSpan(step: AttemptStep): Span | null {
-  if (step.found && hasSpan(step.start_s, step.end_s)) {
-    return { start: step.start_s as number, end: step.end_s as number, byGrader: false };
-  }
-  if (hasSpan(step.evidence_start_s, step.evidence_end_s)) {
-    return { start: step.evidence_start_s as number, end: step.evidence_end_s as number, byGrader: true };
-  }
-  return null;
+  return attemptStepSpan(step);
 }
 
 /** Steps that have a place in the video, in video order. */

@@ -24,7 +24,7 @@ export function OverviewPage() {
   const pendingCount = overview?.counts.pending;
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-6">
+    <div className="space-y-5">
       <PageHeading
         title="Clinical dashboard"
         description={

@@ -12,7 +12,7 @@ export default function SafetyPage() {
   useTitle("Safety reports");
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-6">
+    <div className="space-y-5">
       <PageHeading
         title="Safety reports"
         description="Critical misses stay visible until a nurse closes them with approval or retraining."

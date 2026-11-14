@@ -54,7 +54,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           id="main"
           className={cn("min-h-0 flex-1 bg-page py-6 pr-4 md:pr-6 lg:pr-8", SCREEN_CORNER, SCREEN_INSET)}
         >
-          <div className={brand.contentClassName}>{children}</div>
+          {/* The one column every page sits in, so each page's content starts and stops in the same place. */}
+          <div className={cn("mx-auto w-full max-w-[1400px]", brand.contentClassName)}>{children}</div>
         </main>
       </div>
     </div>

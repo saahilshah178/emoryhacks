@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, CircleAlert } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 import { JobProgress } from "@/components/media/JobProgress";
 import { Avatar, Button, Card, CardBody, ErrorNote, Loadable, Skeleton, StateBadge } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import { useApi, useJob, useTitle } from "@/lib/hooks";
 import { aiAssessment, reviewState } from "@/lib/status";
 import type { Attempt } from "@/lib/types";
+import { BackLink } from "@/nurse/components/layout/BackLink";
+import { PageHeading } from "@/nurse/components/layout/PageHeading";
 import { ReviewWorkspace } from "@/nurse/components/review/ReviewWorkspace";
 
 export default function SkillReviewPage() {
@@ -20,11 +22,8 @@ export default function SkillReviewPage() {
   useTitle(data ? `Review: ${data.skill_name}` : "Skill review");
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5">
-      <Link href="/dashboard/pending" className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-teal">
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        Back to pending reviews
-      </Link>
+    <div className="space-y-5">
+      <BackLink href="/dashboard/pending">Back to pending reviews</BackLink>
 
       <Loadable
         data={data}
@@ -33,7 +32,7 @@ export default function SkillReviewPage() {
         reload={reload}
         skeleton={
           <div className="space-y-5">
-            <Skeleton className="h-14 w-2/3" />
+            <Skeleton className="h-12 w-72" />
             <Skeleton className="h-20" />
             <div className="grid gap-4 xl:grid-cols-2">
               <Skeleton className="aspect-video" />
@@ -93,16 +92,16 @@ export default function SkillReviewPage() {
 function ReviewHeader({ attempt }: { attempt: Attempt }) {
   const caregiver = attempt.caregiver_name || "Unnamed caregiver";
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
-      <div className="flex min-w-0 items-start gap-3">
-        <Avatar name={caregiver} size="lg" />
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold text-navy">
-            <Link href={`/dashboard/skills/${attempt.skill_id}`} className="hover:text-teal hover:underline">
-              {attempt.skill_name}
-            </Link>
-          </h1>
-          <p className="mt-1 text-sm text-ink-secondary">
+    <PageHeading
+      title={
+        <Link href={`/dashboard/skills/${attempt.skill_id}`} className="hover:text-teal hover:underline">
+          {attempt.skill_name}
+        </Link>
+      }
+      description={
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Avatar name={caregiver} size="sm" />
+          <span>
             {attempt.caregiver_id ? (
               <Link href={`/dashboard/caregivers/${attempt.caregiver_id}`} className="font-medium text-ink hover:text-teal hover:underline">
                 {caregiver}
@@ -111,18 +110,20 @@ function ReviewHeader({ attempt }: { attempt: Attempt }) {
               <span className="font-medium text-ink">{caregiver}</span>
             )}
             {attempt.caregiver_title ? ` · ${attempt.caregiver_title}` : ""} · Submitted {formatDateTime(attempt.created_at)}
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {attempt.score_pct !== null ? (
-          <span className="mr-1 text-sm text-ink-secondary">
-            AI score <span className="text-base font-semibold text-navy tabular-nums">{Math.round(attempt.score_pct)}</span> / 100
           </span>
-        ) : null}
-        <StateBadge entry={attempt.ai_assessment ? aiAssessment[attempt.ai_assessment] : null} />
-        <StateBadge entry={reviewState[attempt.review_state]} />
-      </div>
-    </div>
+        </p>
+      }
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {attempt.score_pct !== null ? (
+            <span className="mr-1 text-sm text-ink-secondary">
+              AI score <span className="text-base font-semibold text-navy tabular-nums">{Math.round(attempt.score_pct)}</span> / 100
+            </span>
+          ) : null}
+          <StateBadge entry={attempt.ai_assessment ? aiAssessment[attempt.ai_assessment] : null} />
+          <StateBadge entry={reviewState[attempt.review_state]} />
+        </div>
+      }
+    />
   );
 }

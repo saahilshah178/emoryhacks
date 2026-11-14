@@ -3,9 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
 import {
-  Avatar,
   Card,
   CardBody,
   CardDescription,
@@ -24,6 +22,8 @@ import { firstName, formatDate, formatDateTime, plural, relativeTime } from "@/l
 import { useApi, useTitle } from "@/lib/hooks";
 import { aiAssessment, caregiverStatus, categoryLabel, reviewState, skillState } from "@/lib/status";
 import type { CaregiverDetail } from "@/lib/types";
+import { BackLink } from "@/nurse/components/layout/BackLink";
+import { PageHeading } from "@/nurse/components/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 
 export default function CaregiverPage() {
@@ -32,14 +32,8 @@ export default function CaregiverPage() {
   useTitle(detail.data?.name ?? "Caregiver");
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5">
-      <Link
-        href="/dashboard/caregivers"
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-teal hover:underline"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        All caregivers
-      </Link>
+    <div className="space-y-5">
+      <BackLink href="/dashboard/caregivers">Back to caregivers</BackLink>
       <Loadable
         data={detail.data}
         error={detail.error}
@@ -47,6 +41,7 @@ export default function CaregiverPage() {
         reload={detail.reload}
         skeleton={
           <div className="space-y-5">
+            <Skeleton className="h-12 w-72" />
             <Skeleton className="h-44" />
             <Skeleton className="h-56" />
             <Skeleton className="h-64" />
@@ -55,6 +50,11 @@ export default function CaregiverPage() {
       >
         {(person) => (
           <>
+            <PageHeading
+              title={person.name}
+              description={person.title || "Caregiver"}
+              actions={<StateBadge entry={caregiverStatus[person.status]} />}
+            />
             <Profile person={person} onSaved={detail.setData} />
             <SkillsCard person={person} />
             <HistoryCard person={person} />
@@ -100,17 +100,7 @@ function Profile({ person, onSaved }: { person: CaregiverDetail; onSaved: (next:
     <Card>
       <CardBody className="grid gap-6 pt-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-4">
-            <Avatar name={person.name} size="xl" />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-semibold text-navy">{person.name}</h1>
-                <StateBadge entry={caregiverStatus[person.status]} />
-              </div>
-              <p className="mt-0.5 text-sm text-ink-secondary">{person.title || "Caregiver"}</p>
-            </div>
-          </div>
-          <dl className="mt-5 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
+          <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
             {facts.map((fact) => (
               <div key={fact.label} className="min-w-0">
                 <dt className="text-xs text-ink-muted">{fact.label}</dt>

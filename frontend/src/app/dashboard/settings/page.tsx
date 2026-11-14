@@ -58,12 +58,19 @@ export default function SettingsPage() {
   const { signOut } = useAuth();
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="space-y-5">
       <PageHeading title="Settings" description={`Your profile, your agency and how ${APP_NAME} is running.`} />
-      <ProfileCard />
-      <AgencyCard />
-      <NotificationsCard />
-      <SystemCard />
+      {/* Two columns of cards on wide screens, so the forms span the page without stretching. */}
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
+        <div className="space-y-5">
+          <ProfileCard />
+          <AgencyCard />
+        </div>
+        <div className="space-y-5">
+          <NotificationsCard />
+          <SystemCard />
+        </div>
+      </div>
       <Card>
         <CardBody className="flex flex-wrap items-center justify-between gap-3 pt-5">
           <div>

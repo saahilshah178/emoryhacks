@@ -18,7 +18,7 @@ export default function CaregiversPage() {
   const agency = overview?.agency ?? user.org.name;
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5">
+    <div className="space-y-5">
       <PageHeading
         title="Caregivers"
         description={`Competency progress across ${agency}. A caregiver is restricted while a safety concern from one of their submissions is waiting for review.`}

@@ -18,7 +18,7 @@ export default function VerifiedPage() {
   const approved = useApi<AttemptSummary[]>("/attempts?state=approved");
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5">
+    <div className="space-y-5">
       <PageHeading
         title="Verified skills"
         description="Competencies signed off by a nurse. The AI's original assessment is kept alongside for the record."

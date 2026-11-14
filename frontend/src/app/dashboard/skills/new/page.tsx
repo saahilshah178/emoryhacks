@@ -1,8 +1,6 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { JobProgress } from "@/components/media/JobProgress";
 import {
@@ -23,12 +21,14 @@ import { errorMessage, uploadVideo } from "@/lib/api";
 import { useApi, useJob, useTitle } from "@/lib/hooks";
 import { useRecorder } from "@/lib/recorder";
 import type { Job, Skill } from "@/lib/types";
+import { BackLink } from "@/nurse/components/layout/BackLink";
+import { PageHeading } from "@/nurse/components/layout/PageHeading";
 import { ReferenceRecorder } from "@/nurse/components/skills/ReferenceRecorder";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 
 export default function NewSkillPage() {
   return (
-    <Suspense fallback={<Skeleton className="mx-auto h-96 max-w-[1100px]" />}>
+    <Suspense fallback={<Skeleton className="h-96" />}>
       <NewSkill />
     </Suspense>
   );
@@ -110,7 +110,8 @@ function NewSkill() {
   if (skillId && !target) {
     if (existing.error) {
       return (
-        <div className="mx-auto max-w-xl">
+        <div className="space-y-5">
+          <BackLink href="/dashboard/skills">Back to skills</BackLink>
           {/not found/i.test(existing.error) ? (
             <EmptyState title="Skill not found" action={<Button href="/dashboard/skills">Back to skills</Button>}>
               The skill you wanted to add a reference to may have been deleted.
@@ -121,31 +122,26 @@ function NewSkill() {
         </div>
       );
     }
-    return <Skeleton className="mx-auto h-96 max-w-[1100px]" />;
+    return <Skeleton className="h-96" />;
   }
 
   return (
-    <div className="mx-auto max-w-[1100px] space-y-5">
-      <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-teal">
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        {target ? `Back to ${target.name}` : "Back to skills"}
-      </Link>
+    <div className="space-y-5">
+      <BackLink href={backHref}>{target ? `Back to ${target.name}` : "Back to skills"}</BackLink>
 
-      <div>
-        <h1 className="text-xl font-semibold text-navy">
-          {target ? `New reference for ${target.name}` : "Record a reference video"}
-        </h1>
-        <p className="mt-1 max-w-2xl text-sm text-ink-secondary">
-          {target
+      <PageHeading
+        title={target ? `New reference for ${target.name}` : "Record a reference video"}
+        description={
+          target
             ? `The steps and criteria are written again from this video and saved as version ${
                 Math.max(target.version, ...target.versions.map((version) => version.version)) + 1
               } of ${target.name}. Earlier versions and their graded attempts are kept.`
-            : "Perform the skill once on camera. The AI recognises which skill it is, splits it into timed steps and writes what passes, what fails and when a step can't be verified. You can edit all of it afterwards."}
-        </p>
-      </div>
+            : "Perform the skill once on camera. The AI recognises which skill it is, splits it into timed steps and writes what passes, what fails and when a step can't be verified. You can edit all of it afterwards."
+        }
+      />
 
       {stage === "capture" ? (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start xl:grid-cols-[minmax(0,1fr)_26rem]">
           <div className="min-w-0 space-y-5">
             {!target ? (
               <Card>
@@ -188,7 +184,7 @@ function NewSkill() {
       ) : null}
 
       {stage === "uploading" ? (
-        <Card className="max-w-2xl">
+        <Card>
           <CardHeader>
             <div>
               <CardTitle className="text-navy">Sending your video</CardTitle>
@@ -208,7 +204,7 @@ function NewSkill() {
       ) : null}
 
       {stage === "processing" ? (
-        <Card className="max-w-2xl">
+        <Card>
           <CardHeader>
             <div>
               <CardTitle className="text-navy">

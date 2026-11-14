@@ -13,7 +13,7 @@ export default function SkillsPage() {
   const { data, error, loading, reload } = useApi<SkillSummary[]>("/skills");
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5">
+    <div className="space-y-5">
       <PageHeading
         title="Skills"
         description="A skill is a reference video you record, plus the steps and pass, fail and cannot-verify criteria written from it. Caregivers' recordings are checked against these steps, and you can edit any of them."

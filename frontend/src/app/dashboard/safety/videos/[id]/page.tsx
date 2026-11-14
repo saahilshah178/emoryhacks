@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import type { ReactNode } from "react";
-import { ArrowLeft } from "lucide-react";
 import { VideoFrame } from "@/components/media/VideoFrame";
 import { Badge, Card, CardBody, CardHeader, CardTitle, EmptyState, ErrorNote, Loadable, Skeleton } from "@/components/ui";
 import { formatClock, formatDateTime } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
 import { useVideoSegments } from "@/lib/segment";
 import type { PoseFrames, PoseSeries, PoseSummary, Video } from "@/lib/types";
+import { BackLink } from "@/nurse/components/layout/BackLink";
+import { PageHeading } from "@/nurse/components/layout/PageHeading";
 import { FlagList } from "@/nurse/components/safety/FlagList";
 import { BalanceChart, KneeChart, LeanChart } from "@/nurse/components/safety/MovementCharts";
 import { samplingText, seriesFromBuckets, seriesFromFrames } from "@/nurse/components/safety/movement";
@@ -33,11 +34,8 @@ export default function MovementDetailPage() {
   const onPlay = available ? player.play : undefined;
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5">
-      <Link href="/dashboard/safety" className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-teal">
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        Back to safety reports
-      </Link>
+    <div className="space-y-5">
+      <BackLink href="/dashboard/safety">Back to safety reports</BackLink>
 
       <Loadable
         data={s}
@@ -45,8 +43,8 @@ export default function MovementDetailPage() {
         loading={summary.loading}
         reload={summary.reload}
         skeleton={
-          <div className="space-y-4">
-            <Skeleton className="h-14 w-1/2" />
+          <div className="space-y-5">
+            <Skeleton className="h-12 w-72" />
             <Skeleton className="h-80" />
           </div>
         }
@@ -61,38 +59,42 @@ export default function MovementDetailPage() {
             : seriesFromBuckets(rows, "trunk_tilt_avg");
           return (
             <>
-              <header className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h1 className="text-xl font-semibold text-navy">{skillName ?? (sum.video.original_name || "Video")}</h1>
-                  <p className="mt-1 text-sm text-ink-secondary">
-                    {[
-                      sum.video.kind === "reference"
-                        ? "Reference recording"
-                        : `Attempt by ${sum.attempt?.caregiver_name || "a caregiver"}`,
-                      `Recorded ${formatDateTime(sum.video.recorded_at)}`,
-                      `${formatClock(sum.video.duration_s)} long`,
-                    ].join(" · ")}
-                  </p>
-                  <p className="mt-1 text-xs text-ink-secondary">
-                    {sampling
-                      ? `Body tracking measured ${sampling}${sum.segments > 1 ? ` across ${sum.segments} camera shots` : ""}.`
-                      : "No body-tracking measurements for this video."}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={sum.video.kind === "reference" ? "teal" : "neutral"}>
-                    {sum.video.kind === "reference" ? "Reference" : "Caregiver attempt"}
-                  </Badge>
-                  {sum.attempt ? (
-                    <Link
-                      href={`/dashboard/reviews/${sum.attempt.id}`}
-                      className="inline-flex h-8 items-center rounded-[10px] border border-teal bg-white px-3 text-xs font-semibold text-teal hover:bg-teal-soft"
-                    >
-                      Open skill review
-                    </Link>
-                  ) : null}
-                </div>
-              </header>
+              <PageHeading
+                title={skillName ?? (sum.video.original_name || "Video")}
+                description={
+                  <>
+                    <p>
+                      {[
+                        sum.video.kind === "reference"
+                          ? "Reference recording"
+                          : `Attempt by ${sum.attempt?.caregiver_name || "a caregiver"}`,
+                        `Recorded ${formatDateTime(sum.video.recorded_at)}`,
+                        `${formatClock(sum.video.duration_s)} long`,
+                      ].join(" · ")}
+                    </p>
+                    <p className="mt-1 text-xs">
+                      {sampling
+                        ? `Body tracking measured ${sampling}${sum.segments > 1 ? ` across ${sum.segments} camera shots` : ""}.`
+                        : "No body-tracking measurements for this video."}
+                    </p>
+                  </>
+                }
+                actions={
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone={sum.video.kind === "reference" ? "teal" : "neutral"}>
+                      {sum.video.kind === "reference" ? "Reference" : "Caregiver attempt"}
+                    </Badge>
+                    {sum.attempt ? (
+                      <Link
+                        href={`/dashboard/reviews/${sum.attempt.id}`}
+                        className="inline-flex h-8 items-center rounded-[10px] border border-teal bg-white px-3 text-xs font-semibold text-teal hover:bg-teal-soft"
+                      >
+                        Open skill review
+                      </Link>
+                    ) : null}
+                  </div>
+                }
+              />
 
               {noData ? (
                 <EmptyState title="No movement data for this video">

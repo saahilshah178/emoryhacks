@@ -1,11 +1,15 @@
 import type { ReactNode } from "react";
 
+/**
+ * The heading every dashboard page starts with: the title at the left edge of the page's
+ * column, a line or two under it, and buttons or badges at the right edge.
+ */
 export function PageHeading({
   title,
   description,
   actions,
 }: {
-  title: string;
+  title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
 }) {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Camera, Info, Pencil, RefreshCw } from "lucide-react";
+import { Camera, Info, Pencil, RefreshCw } from "lucide-react";
 import { useCallback, useState } from "react";
 import { JobProgress } from "@/components/media/JobProgress";
 import { VideoFrame } from "@/components/media/VideoFrame";
@@ -12,6 +12,8 @@ import { formatClock, plural } from "@/lib/format";
 import { useApi, useJob, useTitle } from "@/lib/hooks";
 import { useVideoSegments } from "@/lib/segment";
 import type { Job, Skill } from "@/lib/types";
+import { BackLink } from "@/nurse/components/layout/BackLink";
+import { PageHeading } from "@/nurse/components/layout/PageHeading";
 import { ConfirmDialog } from "@/nurse/components/skills/ConfirmDialog";
 import { ActionsCard, PeopleCard, SafetyCard, SkillFacts, VersionList } from "@/nurse/components/skills/SkillAside";
 import { CaregiverCopyForm, SkillDetailsForm } from "@/nurse/components/skills/SkillForms";
@@ -27,19 +29,16 @@ export default function SkillPage() {
 
   if (!data && error && /not found/i.test(error)) {
     return (
-      <div className="mx-auto max-w-xl">
-        <EmptyState
-          title="Skill not found"
-          action={<Button href="/dashboard/skills">Back to skills</Button>}
-        >
-          It may have been deleted, or the link is wrong.
-        </EmptyState>
+      <div className="space-y-5">
+        <BackLink href="/dashboard/skills">Back to skills</BackLink>
+        <EmptyState title="Skill not found">It may have been deleted, or the link is wrong.</EmptyState>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="space-y-5">
+      <BackLink href="/dashboard/skills">Back to skills</BackLink>
       <Loadable
         data={data}
         error={error}
@@ -128,26 +127,20 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold text-navy">{skill.name}</h1>
-          <p className="mt-1 text-sm text-ink-secondary">Version {skill.version}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {editing ? (
+      <PageHeading
+        title={skill.name}
+        description={`Version ${skill.version}`}
+        actions={
+          editing ? (
             <Button onClick={() => setEditing(false)}>Done</Button>
           ) : (
             <Button variant="secondary" onClick={() => setEditing(true)}>
               <Pencil className="h-4 w-4" aria-hidden />
               Edit skill
             </Button>
-          )}
-          <Button variant="ghost" href="/dashboard/skills">
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-            Back
-          </Button>
-        </div>
-      </div>
+          )
+        }
+      />
 
       {isOld ? (
         <div className="flex flex-wrap items-start gap-3 rounded-[12px] border border-info/20 bg-info-bg px-4 py-3 text-sm">

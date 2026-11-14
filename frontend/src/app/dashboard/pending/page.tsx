@@ -29,7 +29,7 @@ export default function PendingPage() {
   const pending = useApi<AttemptSummary[]>("/attempts?state=pending", { refreshMs: REFRESH_MS });
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5">
+    <div className="space-y-5">
       <PageHeading
         title="Pending reviews"
         description="AI assessments sort the work. Certification happens only after you approve or request retraining."

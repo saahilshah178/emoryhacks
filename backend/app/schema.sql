@@ -391,3 +391,8 @@ ALTER TABLE attempts ADD COLUMN IF NOT EXISTS submit_note text NOT NULL DEFAULT 
 -- NULL for an ordinary login. 'upload' marks a short-lived ticket that may only send videos
 -- (auth.create_upload_ticket), used when the browser uploads straight to the API's address.
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS scope text;
+-- @@
+-- How many attempts this caregiver gets on each skill, unless a nurse set a different number
+-- on one skill (skill_assignments.limit_mode). NULL means each skill's own limit.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS skill_attempt_limit integer
+  CHECK (skill_attempt_limit IS NULL OR skill_attempt_limit BETWEEN 1 AND 50);

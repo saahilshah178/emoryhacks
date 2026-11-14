@@ -76,11 +76,13 @@ def new_password() -> str:
 
 
 def _ensure_person(conn, login: Login) -> None:
+    # Caregivers start onboarding. A nurse marks them active once they are cleared for shifts.
+    employment = "onboarding" if login.role == "caregiver" else "active"
     conn.execute(
         "INSERT INTO users (id, org_id, role, name, email, title, credentials, employment) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,'active') ON CONFLICT (id) DO NOTHING",
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
         (login.user_id, auth.DEFAULT_ORG, login.role, login.name, f"{login.username}@firstshift.example",
-         login.title, login.credentials))
+         login.title, login.credentials, employment))
 
 
 def parse_names(text: str) -> list[str]:

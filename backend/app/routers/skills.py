@@ -121,8 +121,10 @@ def _policy_view(skill: dict) -> dict:
         attempts.setdefault(a["caregiver_id"], []).append(a)
     caregivers = []
     for person in repo.list_caregivers(org):
-        standing = progress.caregiver_skill(pol, assignments.get((slug, person["id"])), attempts.get(person["id"], []))
+        standing = progress.caregiver_skill(pol, assignments.get((slug, person["id"])), attempts.get(person["id"], []),
+                                            person["skill_attempt_limit"])
         caregivers.append({"id": person["id"], "name": person["name"], "title": person["title"],
+                           "skill_attempt_limit": person["skill_attempt_limit"],
                            **{k: standing[k] for k in ("assigned", "limit_mode", "max_attempts", "attempts_used",
                                                       "attempts_allowed", "attempts_left", "state")}})
     return {"skill_id": skill["id"], "slug": slug, **pol, "caregivers": caregivers}

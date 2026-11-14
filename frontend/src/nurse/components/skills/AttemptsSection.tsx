@@ -208,7 +208,9 @@ function RulesForm({
         : null;
   const invalid = Boolean(maxError || submitError || forceError);
   const dirty = !sameDraft(draft, saved);
-  const nobody = !draft.assignAll && draft.picked.length === 0;
+  const everyone = view.caregivers.map((person) => person.id);
+  const allSelected = everyone.length > 0 && (draft.assignAll || everyone.every((id) => draft.picked.includes(id)));
+  const nobody = !allSelected && draft.picked.length === 0;
 
   function change(patch: Partial<Draft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -338,50 +340,57 @@ function RulesForm({
 
       <fieldset>
         <legend className="text-sm font-semibold text-ink">Assigned to</legend>
-        <p className="mt-1 text-xs text-ink-secondary">Caregivers only see the skills assigned to them.</p>
-        <div className="mt-3">
-          <Segmented
-            label="Assigned to"
-            value={draft.assignAll ? "all" : "picked"}
-            options={[
-              { value: "all", label: "Every caregiver" },
-              { value: "picked", label: "Only the caregivers I pick" },
-            ]}
-            onChange={(value) => change({ assignAll: value === "all" })}
-          />
-        </div>
-        {draft.assignAll ? null : (
-          <ul className="mt-3 divide-y divide-border overflow-hidden rounded-[12px] border border-border">
-            {view.caregivers.map((person) => {
-              const checked = draft.picked.includes(person.id);
-              return (
-                <li key={person.id}>
-                  <label className="flex cursor-pointer items-center gap-3 bg-white px-3 py-2.5 text-sm hover:bg-page">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-teal"
-                      checked={checked}
-                      onChange={() =>
-                        change({
-                          picked: checked
-                            ? draft.picked.filter((id) => id !== person.id)
-                            : [...draft.picked, person.id],
-                        })
-                      }
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium text-ink">{person.name}</span>
-                      {person.title ? <span className="block truncate text-xs text-ink-secondary">{person.title}</span> : null}
-                    </span>
-                  </label>
-                </li>
-              );
-            })}
-            {view.caregivers.length === 0 ? (
-              <li className="px-3 py-3 text-sm text-ink-secondary">Your agency has no caregivers yet.</li>
-            ) : null}
-          </ul>
-        )}
+        <p className="mt-1 text-xs text-ink-secondary">
+          Pick the caregivers who should have this skill. Assign all selects every caregiver. Click it again when everyone
+          is already selected to clear the list.
+        </p>
+        {view.caregivers.length > 0 ? (
+          <div className="mt-3">
+            <Button
+              type="button"
+              size="sm"
+              variant={allSelected ? "primary" : "secondary"}
+              aria-pressed={allSelected}
+              onClick={() => {
+                const ids = view.caregivers.map((person) => person.id);
+                change(allSelected ? { assignAll: false, picked: [] } : { assignAll: true, picked: ids });
+              }}
+            >
+              Assign all
+            </Button>
+          </div>
+        ) : null}
+        <ul className="mt-3 divide-y divide-border overflow-hidden rounded-[12px] border border-border">
+          {view.caregivers.map((person) => {
+            const checked = draft.assignAll || draft.picked.includes(person.id);
+            return (
+              <li key={person.id}>
+                <label className="flex cursor-pointer items-center gap-3 bg-white px-3 py-2.5 text-sm hover:bg-page">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-teal"
+                    checked={checked}
+                    onChange={() => {
+                      const ids = view.caregivers.map((item) => item.id);
+                      const selected = new Set(draft.assignAll ? ids : draft.picked);
+                      if (selected.has(person.id)) selected.delete(person.id);
+                      else selected.add(person.id);
+                      const picked = ids.filter((id) => selected.has(id));
+                      change({ assignAll: picked.length === ids.length && ids.length > 0, picked });
+                    }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-ink">{person.name}</span>
+                    {person.title ? <span className="block truncate text-xs text-ink-secondary">{person.title}</span> : null}
+                  </span>
+                </label>
+              </li>
+            );
+          })}
+          {view.caregivers.length === 0 ? (
+            <li className="px-3 py-3 text-sm text-ink-secondary">Your agency has no caregivers yet.</li>
+          ) : null}
+        </ul>
         {nobody ? (
           <p className="mt-2 text-xs text-warning">Nobody is picked, so no caregiver will see this skill.</p>
         ) : null}
@@ -490,7 +499,8 @@ function CaregiverStanding({
     <div className="min-w-0">
       <h3 className="text-sm font-semibold text-ink">Where each caregiver stands</h3>
       <p className="mt-1 text-xs text-ink-secondary">
-        Give one caregiver their own number, unlimited attempts, or more attempts when they run out.
+        Give one caregiver their own number on this skill, unlimited attempts, or more when they run out. A number for
+        every skill they have is set on their page.
       </p>
       {people.length === 0 ? (
         <p className="mt-3 text-sm text-ink-secondary">Your agency has no caregivers yet.</p>
@@ -548,6 +558,7 @@ function CaregiverStanding({
                     slug={skill.slug}
                     limits={person}
                     skillMax={view.max_attempts}
+                    caregiverLimit={person.skill_attempt_limit}
                     onSaved={onChanged}
                   />
                 </>

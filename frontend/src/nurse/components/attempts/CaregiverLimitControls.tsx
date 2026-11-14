@@ -34,6 +34,7 @@ export function CaregiverLimitControls({
   slug,
   limits,
   skillMax,
+  caregiverLimit,
   onSaved,
   className,
 }: {
@@ -44,6 +45,8 @@ export function CaregiverLimitControls({
   limits: CaregiverSkillLimits;
   /** The skill's own number, null for unlimited; undefined while it is not known. */
   skillMax: number | null | undefined;
+  /** This caregiver's attempts on each skill, when the skill does not set its own. */
+  caregiverLimit?: number | null;
   onSaved: (caregiver: CaregiverDetail) => void;
   className?: string;
 }) {
@@ -93,7 +96,13 @@ export function CaregiverLimitControls({
   }
 
   const skillLabel =
-    skillMax === undefined ? "The skill's number" : skillMax === null ? "The skill's (unlimited)" : `The skill's (${skillMax})`;
+    caregiverLimit != null
+      ? `Their limit (${caregiverLimit})`
+      : skillMax === undefined
+        ? "The skill's number"
+        : skillMax === null
+          ? "The skill's (unlimited)"
+          : `The skill's (${skillMax})`;
 
   return (
     <div className={cn("min-w-0 space-y-2", className)}>

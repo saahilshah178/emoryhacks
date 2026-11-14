@@ -498,7 +498,8 @@ def get_attempt(attempt_id) -> dict | None:
         assignment = get_assignments(attempt["org_id"], slug=attempt["skill_slug"],
                                      caregiver_id=attempt["caregiver_id"]).get(
                                          (attempt["skill_slug"], attempt["caregiver_id"]))
-        attempt["attempts"] = progress.allowance(pol, assignment, mine)
+        attempt["attempts"] = progress.allowance(
+            pol, assignment, mine, caregiver_attempt_limit(attempt["caregiver_id"]))
         attempt["history"] = [{k: a[k] for k in HISTORY_KEYS} for a in mine if a["id"] != attempt["id"]]
     else:
         attempt["attempts"] = {"used": None, "allowed": None, "left": None}
@@ -575,17 +576,24 @@ def set_assignment(org_id, slug: str, caregiver_id, **fields) -> None:
         (org_id, slug, caregiver_id, *fields.values()))
 
 
+def caregiver_attempt_limit(caregiver_id) -> int | None:
+    """The caregiver's own attempts per skill, or None when each skill's limit applies."""
+    row = db.fetch_one("SELECT skill_attempt_limit FROM users WHERE id=%s", (caregiver_id,))
+    return row["skill_attempt_limit"] if row else None
+
+
 def allowance(org_id, slug: str, caregiver_id) -> dict:
     """{used, allowed, left} for one caregiver on one skill (see progress.allowance)."""
     assignment = get_assignments(org_id, slug=slug, caregiver_id=caregiver_id).get((slug, caregiver_id))
     mine = list_attempts(org_id=org_id, caregiver_id=caregiver_id, slug=slug)
-    return progress.allowance(get_policy(org_id, slug), assignment, mine)
+    return progress.allowance(get_policy(org_id, slug), assignment, mine, caregiver_attempt_limit(caregiver_id))
 
 
 def list_caregivers(org_id) -> list[dict]:
     """The agency's caregivers, by name."""
     return db.fetch_all(
-        """SELECT id, name, email, title, location, hire_date, employment, next_shift, created_at
+        """SELECT id, name, email, title, location, hire_date, employment, skill_attempt_limit,
+                  next_shift, created_at
            FROM users WHERE org_id=%s AND role='caregiver' ORDER BY name""", (org_id,))
 
 

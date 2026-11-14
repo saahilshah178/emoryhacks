@@ -40,8 +40,9 @@ state of a skill for one caregiver, from all their attempts at it (any version)
   not_started     no attempt that counts
 
 Attempts allowed (per caregiver and skill)
-  allowed  the caregiver's own limit when the nurse set one ('limited' or 'unlimited'),
-           otherwise the skill's max_attempts; None means unlimited
+  allowed  the caregiver's own limit on this skill when the nurse set one ('limited' or
+           'unlimited'); otherwise the caregiver's skill_attempt_limit, if they have one;
+           otherwise the skill's max_attempts. None means unlimited.
   used     attempts that did not fail processing, made after the nurse's most recent
            retraining decision for that caregiver and skill (all of them if there is none).
            An attempt still processing counts.
@@ -116,12 +117,19 @@ def limit_mode(assignment: dict | None) -> str:
     return (assignment or {}).get("limit_mode") or "inherit"
 
 
-def attempts_allowed(pol: dict, assignment: dict | None) -> int | None:
+def attempts_allowed(pol: dict, assignment: dict | None, caregiver_limit: int | None = None) -> int | None:
+    """How many attempts this caregiver gets on this skill.
+
+    A limit set on this skill wins. Otherwise the caregiver's own number per skill
+    (caregiver_limit) wins over the skill's number. None means unlimited.
+    """
     mode = limit_mode(assignment)
     if mode == "unlimited":
         return None
     if mode == "limited":
         return assignment["max_attempts"]
+    if caregiver_limit is not None:
+        return caregiver_limit
     return pol["max_attempts"]
 
 
@@ -133,10 +141,11 @@ def attempts_used(attempts: Iterable[dict]) -> int:
     return sum(1 for a in rows if a["review_state"] != "error" and (since is None or a["created_at"] > since))
 
 
-def allowance(pol: dict, assignment: dict | None, attempts: Iterable[dict]) -> dict:
+def allowance(pol: dict, assignment: dict | None, attempts: Iterable[dict],
+               caregiver_limit: int | None = None) -> dict:
     """{used, allowed, left} for one caregiver and skill; allowed and left are None when unlimited."""
     used = attempts_used(attempts)
-    allowed = attempts_allowed(pol, assignment)
+    allowed = attempts_allowed(pol, assignment, caregiver_limit)
     return {"used": used, "allowed": allowed, "left": None if allowed is None else max(allowed - used, 0)}
 
 
@@ -219,13 +228,15 @@ def skill_state(attempts: Iterable[dict]) -> dict:
     return result("not_started", latest_id)
 
 
-def caregiver_skill(pol: dict, assignment: dict | None, attempts: Iterable[dict]) -> dict:
+def caregiver_skill(pol: dict, assignment: dict | None, attempts: Iterable[dict],
+                    caregiver_limit: int | None = None) -> dict:
     """Everything about one caregiver and one skill that the nurse's screens show: assignment,
     limit (max_attempts is the caregiver's own, set only when limit_mode is 'limited'),
-    attempts used / allowed / left, and the skill_state fields. attempts: oldest first."""
+    attempts used / allowed / left, and the skill_state fields. attempts: oldest first.
+    caregiver_limit is their number per skill, used only while this skill inherits."""
     rows = list(attempts)
     mode = limit_mode(assignment)
-    allow = allowance(pol, assignment, rows)
+    allow = allowance(pol, assignment, rows, caregiver_limit)
     return {"assigned": is_assigned(pol, assignment), "limit_mode": mode,
             "max_attempts": assignment["max_attempts"] if mode == "limited" else None,
             "attempts_used": allow["used"], "attempts_allowed": allow["allowed"], "attempts_left": allow["left"],

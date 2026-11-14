@@ -78,6 +78,12 @@ def test_build_rubric_applies_bounds_trims_overlaps_and_derives_order_matters():
     assert rb.order_matters  # a step with a prerequisite means order matters
 
 
+def test_build_rubric_renumbers_repeated_step_numbers_by_position():
+    rb = build_rubric(draft(draft_step(1, 0, 5, "A"), draft_step(1, 5, 9, "B", prerequisites=[1]),
+                            draft_step(1, 9, 12, "C", prerequisites=[2])), duration=20)
+    assert [(s.title, s.must_follow) for s in rb.steps] == [("A", []), ("B", ["s1"]), ("C", ["s2"])]
+
+
 def test_build_rubric_rejects_a_draft_with_no_usable_steps():
     with pytest.raises(ValueError):
         build_rubric(draft(draft_step(1, 0, 5, title="")), duration=10)

@@ -82,12 +82,24 @@ def run(ctx, classification: Classification) -> Rubric:
         DraftRubric, model="main", thinking="medium",
     )
     ctx.log(f"rubric outline: {len(draft.steps)} steps")
+    draft = with_unique_numbers(draft)
     steps = sorted(draft.steps, key=lambda s: (s.start_s, s.number))
     bounds: dict[int, tuple[float, float]] = {}
     with ThreadPoolExecutor(max_workers=3) as pool:
         for found in pool.map(lambda w: _refine(ctx, steps, w, duration), plan_windows(steps, duration)):
             bounds.update(found)
     return build_rubric(draft, duration, bounds)
+
+
+def with_unique_numbers(draft: DraftRubric) -> DraftRubric:
+    """Step numbers key the refined bounds and the prerequisites, so they must be unique.
+    If the model repeated one, number the steps by list position (which is what the
+    prerequisites almost always refer to)."""
+    numbers = [s.number for s in draft.steps]
+    if len(set(numbers)) == len(numbers):
+        return draft
+    steps = [s.model_copy(update={"number": i + 1}) for i, s in enumerate(draft.steps)]
+    return draft.model_copy(update={"steps": steps})
 
 
 def step_padding(duration: float) -> float:
@@ -159,6 +171,7 @@ def build_rubric(draft: DraftRubric, duration: float,
     steps, clamps times to the video, sorts by start time, assigns s1..sN, keeps only
     prerequisites that exist and come earlier, and fills any empty eval list."""
     bounds = bounds or {}
+    draft = with_unique_numbers(draft)
     kept: list[tuple[DraftStep, float, float]] = []
     seen_titles: set[str] = set()
     for step in draft.steps:

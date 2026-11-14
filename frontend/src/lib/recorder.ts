@@ -4,6 +4,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { checkUploadSize } from "./api";
 import { MAX_UPLOAD_BYTES, uploadTooLarge } from "./upload";
 
 export type RecorderPhase = "starting" | "ready" | "recording" | "recorded" | "unavailable";
@@ -274,17 +275,25 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
         setFileProblem("That file isn't a video. Choose an MP4, MOV or WebM file.");
         return;
       }
-      const tooLarge = uploadTooLarge(file.size);
-      if (tooLarge) {
-        setFileProblem(tooLarge);
+      const accept = () => {
+        stop();
+        discard();
+        setProblem(null);
+        setFileProblem(null);
+        setRecording({ blob: file, url: URL.createObjectURL(file), seconds: 0, filename: file.name });
+        setPhase("recorded");
+      };
+      // A file above the cautious limit may still be fine where uploads go straight to the
+      // API, so the API is asked before it is refused.
+      if (!uploadTooLarge(file.size)) {
+        accept();
         return;
       }
-      stop();
-      discard();
-      setProblem(null);
       setFileProblem(null);
-      setRecording({ blob: file, url: URL.createObjectURL(file), seconds: 0, filename: file.name });
-      setPhase("recorded");
+      void checkUploadSize(file.size).then(
+        (tooLarge) => (tooLarge ? setFileProblem(tooLarge) : accept()),
+        () => setFileProblem(uploadTooLarge(file.size)),
+      );
     },
     [discard, stop],
   );

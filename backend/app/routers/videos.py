@@ -1,5 +1,6 @@
 """Upload, playback and thumbnails. Owned by branch feat/recording.
 
+GET  /api/videos/upload-target   {url, token, max_bytes}: where to POST a video (see upload_target)
 POST /api/videos            multipart: file, kind=reference|attempt, skill_id (attempt),
                             caregiver_name, expected_slug, expected_name
                             -> {video_id, job_id, attempt_id}
@@ -43,7 +44,7 @@ async def upload_video(
     caregiver_name: str = Form(""),
     expected_slug: str | None = Form(None),
     expected_name: str | None = Form(None),
-    user: dict = Depends(auth.current_user),
+    user: dict = Depends(auth.uploader),
 ):
     """A reference video (nurses only) starts the rubric pipeline; an attempt starts grading.
     A caregiver's attempt is recorded under their own account, whatever name is sent."""
@@ -79,6 +80,23 @@ async def upload_video(
         attempt_id = repo.create_attempt(skill_id, video["id"], caregiver_name.strip()[:MAX_NAME_CHARS])
     job_id = jobs.submit_attempt(attempt_id, video["id"], skill_id)
     return {"video_id": video["id"], "job_id": job_id, "attempt_id": attempt_id}
+
+
+@router.get("/upload-target")
+def upload_target(user: dict = Depends(auth.current_user)):
+    """Where the browser should send a video, and how large it may be.
+
+    When the API has a public address of its own (config.PUBLIC_API_URL) the answer is that
+    address with an upload ticket to send as "Authorization: Bearer <token>", so the file does
+    not pass through the web app's proxy and its size cap. Otherwise url and token are null and
+    the browser posts to the web app's own /api/videos."""
+    limit = config.MAX_UPLOAD_MB * (1 << 20)
+    if config.PUBLIC_API_URL:
+        return {"url": f"{config.PUBLIC_API_URL}/api/videos", "token": auth.create_upload_ticket(user["id"]),
+                "max_bytes": limit}
+    if config.PROXY_MAX_UPLOAD_MB > 0:
+        limit = min(limit, int(config.PROXY_MAX_UPLOAD_MB * 1_000_000))
+    return {"url": None, "token": None, "max_bytes": limit}
 
 
 async def _save_upload(file: UploadFile) -> Path:

@@ -387,3 +387,7 @@ ALTER TABLE attempts ADD COLUMN IF NOT EXISTS submit_kind text DEFAULT 'standard
 -- @@
 -- The caregiver's reason for sending a recording the automatic check scored under the bar.
 ALTER TABLE attempts ADD COLUMN IF NOT EXISTS submit_note text NOT NULL DEFAULT '';
+-- @@
+-- NULL for an ordinary login. 'upload' marks a short-lived ticket that may only send videos
+-- (auth.create_upload_ticket), used when the browser uploads straight to the API's address.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS scope text;

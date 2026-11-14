@@ -98,6 +98,16 @@ THUMB_DIR = DATA_DIR / "thumbs"
 MODEL_DIR = DATA_DIR / "models"
 TMP_DIR = DATA_DIR / "tmp"
 MAX_UPLOAD_MB = int(_get("FIRSTSHIFT_MAX_UPLOAD_MB", "300"))
+# Where a browser can reach this API directly, e.g. https://api.example.com. Set it when the web
+# app is hosted somewhere whose proxy caps request bodies (Vercel refuses forwarded uploads above
+# about 20 MB): videos are then sent straight here, with a short-lived upload ticket, instead of
+# through the web app's /api. Empty means uploads go through the web app, as on a laptop.
+PUBLIC_API_URL = _get("FIRSTSHIFT_PUBLIC_API_URL").rstrip("/")
+# The web app's origins, comma-separated, which may call this API from a browser (CORS). A "*"
+# stands for one label of letters, digits and dashes: https://myapp-*.vercel.app
+WEB_ORIGINS = [o.strip().rstrip("/") for o in _get("FIRSTSHIFT_WEB_ORIGINS").split(",") if o.strip()]
+# The largest upload the web app's own proxy passes on, when PUBLIC_API_URL is not set. 0: no cap.
+PROXY_MAX_UPLOAD_MB = float(_get("FIRSTSHIFT_PROXY_MAX_UPLOAD_MB", "0"))
 
 # --- pose -----------------------------------------------------------------
 # Pose is measured on every frame up to POSE_FPS, so a webcam attempt of up to about 100 s

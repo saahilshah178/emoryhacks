@@ -7,6 +7,7 @@ in frontend/, which forwards /api to this server.
 """
 from __future__ import annotations
 
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -29,11 +30,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FirstShift", lifespan=lifespan)
 
+def allowed_origin_regex(origins: list[str]) -> str:
+    """A pattern for the origins whose pages may call this API: any local address, plus the web
+    app's own origins from config.WEB_ORIGINS, where "*" stands for one host-name label."""
+    patterns = [r"https?://(localhost|127\.0\.0\.1)(:\d+)?"]
+    patterns += [re.escape(origin).replace(r"\*", "[A-Za-z0-9-]+") for origin in origins]
+    return "|".join(f"(?:{pattern})" for pattern in patterns)
+
+
 # The Next.js app proxies /api to this server, so the browser sees one origin and the session
-# cookie just works. CORS with credentials stays on for calling the API directly in development.
+# cookie just works. Two things call the API from another origin: local development, and video
+# uploads from the hosted web app, which go straight here with an upload ticket (routers/videos.py).
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=allowed_origin_regex(config.WEB_ORIGINS),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

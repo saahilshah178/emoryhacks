@@ -2,7 +2,7 @@
 // forwards to the FastAPI server (see next.config.ts), so the session cookie is sent
 // automatically and <video>/<img> tags can use the same URLs.
 
-import { uploadTooLarge } from "./upload";
+import { MAX_UPLOAD_BYTES, rememberUploadLimit, uploadLimit, uploadTooLarge, type UploadTarget } from "./upload";
 
 export class ApiError extends Error {
   status: number;
@@ -74,8 +74,36 @@ export function thumbUrl(videoId: string, seconds = 0) {
 export type UploadResult = { video_id: string; job_id: string; attempt_id: string | null };
 
 /**
+ * Where a video should be sent and how large it may be. The hosted API answers with its own
+ * address and an upload ticket, so the file skips the web app's proxy and its size cap; on a
+ * laptop url and token are null and the file goes to /api/videos. If the question itself fails
+ * (other than for being signed out) the upload still goes through /api with the cautious limit.
+ */
+export async function uploadTarget(): Promise<UploadTarget> {
+  try {
+    const target = await api<UploadTarget>("/videos/upload-target");
+    rememberUploadLimit(target.max_bytes);
+    return target;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) throw error;
+    return { url: null, token: null, max_bytes: uploadLimit() };
+  }
+}
+
+/** Why a chosen file can't be sent, or null. Asks the API for the limit if it isn't known yet. */
+export async function checkUploadSize(bytes: number): Promise<string | null> {
+  if (bytes <= uploadLimit()) return null;
+  const target = await uploadTarget();
+  return uploadTooLarge(bytes, target.max_bytes);
+}
+
+/**
  * Upload a recording. kind "reference" starts the rubric pipeline (nurses), kind "attempt"
  * starts grading against `skillId`. onProgress gets 0..1 while the file is being sent.
+ *
+ * The file goes wherever uploadTarget says. If sending it straight to the API fails before
+ * any answer comes back (the address is unreachable from this browser, or was restarting) and
+ * the file is small enough for the web app's proxy, it is sent once more through /api.
  */
 export function uploadVideo(
   args: {
@@ -89,36 +117,62 @@ export function uploadVideo(
   },
   onProgress?: (fraction: number) => void,
 ): { promise: Promise<UploadResult>; abort: () => void } {
-  // Refuse before sending rather than after minutes of uploading into the proxy's limit.
-  const tooLarge = uploadTooLarge(args.file.size);
-  if (tooLarge) return { promise: Promise.reject(new ApiError(413, tooLarge)), abort: () => undefined };
+  let current: XMLHttpRequest | null = null;
+  let aborted = false;
 
-  const form = new FormData();
-  form.append("file", args.file, args.filename);
-  form.append("kind", args.kind);
-  if (args.skillId) form.append("skill_id", args.skillId);
-  if (args.expectedSlug) form.append("expected_slug", args.expectedSlug);
-  if (args.expectedName) form.append("expected_name", args.expectedName);
+  const send = (url: string, token: string | null) =>
+    new Promise<UploadResult>((resolve, reject) => {
+      const form = new FormData();
+      form.append("file", args.file, args.filename);
+      form.append("kind", args.kind);
+      if (args.skillId) form.append("skill_id", args.skillId);
+      if (args.expectedSlug) form.append("expected_slug", args.expectedSlug);
+      if (args.expectedName) form.append("expected_name", args.expectedName);
 
-  const xhr = new XMLHttpRequest();
-  const promise = new Promise<UploadResult>((resolve, reject) => {
-    xhr.open("POST", "/api/videos");
-    xhr.responseType = "json";
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress?.(event.loaded / event.total);
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(xhr.response as UploadResult);
-        return;
-      }
-      const detail = (xhr.response as { detail?: unknown } | null)?.detail;
-      reject(new ApiError(xhr.status, messageFrom(detail, "The upload failed. Please try again.")));
-    };
-    xhr.onerror = () =>
-      reject(new ApiError(0, "The upload was interrupted. Check your connection and try again."));
-    xhr.onabort = () => reject(new ApiError(0, "Upload cancelled."));
-    xhr.send(form);
-  });
-  return { promise, abort: () => xhr.abort() };
+      const xhr = new XMLHttpRequest();
+      current = xhr;
+      xhr.open("POST", url);
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.responseType = "json";
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(xhr.response as UploadResult);
+          return;
+        }
+        const detail = (xhr.response as { detail?: unknown } | null)?.detail;
+        reject(new ApiError(xhr.status, messageFrom(detail, "The upload failed. Please try again.")));
+      };
+      xhr.onerror = () =>
+        reject(new ApiError(0, "The upload was interrupted. Check your connection and try again."));
+      xhr.onabort = () => reject(new ApiError(0, "Upload cancelled."));
+      xhr.send(form);
+    });
+
+  const run = async (): Promise<UploadResult> => {
+    const target = await uploadTarget();
+    // Refuse before sending rather than after minutes of uploading into a limit.
+    const tooLarge = uploadTooLarge(args.file.size, target.max_bytes);
+    if (tooLarge) throw new ApiError(413, tooLarge);
+    if (aborted) throw new ApiError(0, "Upload cancelled.");
+    if (!target.url) return send("/api/videos", null);
+    try {
+      return await send(target.url, target.token);
+    } catch (error) {
+      const noAnswer = error instanceof ApiError && error.status === 0;
+      if (!noAnswer || aborted || args.file.size > MAX_UPLOAD_BYTES) throw error;
+      onProgress?.(0);
+      return send("/api/videos", null);
+    }
+  };
+
+  return {
+    promise: run(),
+    abort: () => {
+      aborted = true;
+      current?.abort();
+    },
+  };
 }

@@ -28,7 +28,6 @@ from . import db
 COOKIE = "sid"
 SESSION_DAYS = 7
 DEFAULT_ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
-SAMPLE_ORG = uuid.UUID("00000000-0000-0000-0000-0000000000a1")
 _SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
 
 # token hash -> (user, time read). Saves a database round trip on every request of a page

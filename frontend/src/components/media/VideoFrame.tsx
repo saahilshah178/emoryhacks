@@ -8,7 +8,7 @@ import type { Video } from "@/lib/types";
 
 /**
  * A stored video with the browser's own controls, or a plain notice when the file is not
- * on this server (sample data, or a recording made on another machine).
+ * on this server (a recording made on another machine).
  * Pass the ref from useVideoSegments() to drive it from time chips.
  */
 export function VideoFrame({

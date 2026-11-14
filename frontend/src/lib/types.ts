@@ -39,7 +39,7 @@ export type Video = {
   height: number;
   fps: number;
   recorded_at: string;
-  /** False when the file is not on this server (sample data, or recorded on another machine). */
+  /** False when the file is not on this server (recorded on another machine). */
   available: boolean;
 };
 

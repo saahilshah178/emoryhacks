@@ -50,7 +50,7 @@ export function VideoComparison({
               <VideoOff className="h-7 w-7 text-white/60" aria-hidden />
               <p className="text-sm font-medium text-white">This recording isn&apos;t stored on this server</p>
               <p className="max-w-sm text-xs text-white/70">
-                It is sample data or was recorded on another machine, so there is nothing to play. The steps, times and
+                It was recorded on another machine, so there is nothing to play. The steps, times and
                 AI findings below are still here to review.
               </p>
             </>

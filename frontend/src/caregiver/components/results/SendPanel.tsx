@@ -70,7 +70,7 @@ export function ScoreMeter({ score, submitPct, forcePct }: { score: number; subm
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={score}
-        aria-valuetext={`${formatScore(score)}. ${formatScore(submitPct)} good enough to send${hasAnyway ? `, ${formatScore(forcePct)} to send anyway` : ""}.`}
+        aria-valuetext={`${formatScore(score)}. ${formatScore(submitPct)} or more is good enough to send${hasAnyway ? `, ${formatScore(forcePct)} or more can be sent anyway` : ""}.`}
         aria-label="Your score"
       >
         <div className="h-2.5 overflow-hidden rounded-full bg-secondary">
@@ -222,6 +222,9 @@ function Decide({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
   if (submission.can_submit) {
     actions = (
       <>
+        <p className="text-[15px] leading-relaxed text-ink">
+          We suggest sending this one to your nurse.{canRecord ? " You can record again first if you'd rather." : ""}
+        </p>
         {error ? <ErrorNote message={error} /> : null}
         <Button onClick={() => send({})} loading={sending} size="xl" className="w-full">
           <Send className="h-4 w-4" aria-hidden />

@@ -59,16 +59,11 @@ export function AttemptsSection({ skill }: { skill: Skill }) {
   return (
     <section ref={ref} id={ATTEMPTS_ANCHOR} aria-labelledby="attempts-title" className="scroll-mt-20">
       <Card>
-        <div className="flex items-start justify-between gap-3 px-5 pb-4 pt-5">
-          <div className="min-w-0">
-            <h2 id="attempts-title" className="text-base font-semibold text-navy">
-              Attempts and sending
-            </h2>
-            <p className="mt-1 text-sm text-ink-secondary">
-              How many times caregivers can record {skill.name}, the score they need to send a recording to you, and
-              who has the skill. These apply to every version of it.
-            </p>
-          </div>
+        {/* The description sits under the title and button row, so on a phone it keeps the card's full width. */}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 px-5 pb-4 pt-5">
+          <h2 id="attempts-title" className="self-center text-base font-semibold text-navy">
+            Attempts and sending
+          </h2>
           <Button
             variant={open ? "ghost" : "secondary"}
             size="sm"
@@ -80,6 +75,10 @@ export function AttemptsSection({ skill }: { skill: Skill }) {
             {open ? <ChevronUp className="h-4 w-4" aria-hidden /> : <ChevronDown className="h-4 w-4" aria-hidden />}
             {open ? "Close" : "Change"}
           </Button>
+          <p className="col-span-2 mt-1 max-w-3xl text-sm text-ink-secondary">
+            How many times caregivers can record {skill.name}, the score they need to send a recording to you, and who
+            has the skill. These apply to every version of it.
+          </p>
         </div>
 
         {view ? (

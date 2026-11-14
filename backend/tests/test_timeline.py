@@ -194,8 +194,8 @@ def test_refine_pass_tightens_boundaries_and_ignores_answers_outside_the_clip(mo
     assert (by_id["s2"].start_s, by_id["s2"].end_s) == (100.0, 130.0)  # 22-37.5 is outside s2's clip
 
 
-def test_review_page_and_step_overrides(migrated, sample_video):
-    """The review screen is served, and the decision it posts stores per-step overrides."""
+def test_review_stores_step_overrides(migrated, sample_video):
+    """The decision the review screen posts stores per-step overrides."""
     from fastapi.testclient import TestClient
 
     from app import jobs, repo
@@ -210,8 +210,6 @@ def test_review_page_and_step_overrides(migrated, sample_video):
     jobs.run_attempt(repo.create_job("attempt", video["id"], skill_id=skill_id, attempt_id=attempt_id))
 
     with TestClient(app) as client:
-        assert "/js/review.js" in client.get("/review.html").text
-        assert client.get("/js/review.js").status_code == 200
         body = {"overall": "unverified", "note": "Camera angle hides the feet",
                 "steps": [{"step_id": "s2", "status": "passed", "note": "fine on rewatch"},
                           {"step_id": "s3", "status": None, "note": ""}]}

@@ -12,11 +12,12 @@ Video-based training and verification for caregiver skills such as wheelchair tr
 ```bash
 cp .env.example .env      # add GEMINI_API_KEY and the Tiger Data DATABASE_URL
 uv sync
-make dev                  # the API, http://localhost:8000
-make web                  # in a second terminal: the web app, http://localhost:3000
+make run                  # the API and the web app; open the address it prints (http://localhost:3000)
 ```
 
-Open the web app and create an account as a nurse or as a caregiver. Everyone who signs up joins the same agency, so a nurse account and a caregiver account can work with each other straight away: the caregiver sees the nurse's skills, and the nurse sees the caregiver's submissions.
+`make run` starts both halves and Ctrl-C stops both. The web app is the only thing you open. The API runs behind it on whichever local port is free, so nothing depends on port 8000; the web app forwards `/api` to it.
+
+Create an account as a nurse or as a caregiver. Everyone who signs up joins the same agency, so a nurse account and a caregiver account can work with each other straight away: the caregiver sees the nurse's skills, and the nurse sees the caregiver's submissions.
 
 If port 3000 is taken, the web app starts on the next free port and prints it. If `DATABASE_URL` is empty or is not a `postgres://` URL, the API falls back to a local TimescaleDB container (`make db`).
 
@@ -35,8 +36,9 @@ Set `SAMPLE_PASSWORD` before running `make sample` to use another password. Runn
 
 | Command | What it does |
 | --- | --- |
-| `make dev` | Start the API on port 8000. Do not use `--reload`: a restart interrupts running jobs. |
-| `make web` | Install and start the web app (`PORT=3100 make web` for another port) |
+| `make run` | Start the API and the web app together (`PORT=3100 make run` for another web port, `API_PORT=8000 make run` to pin the API's port) |
+| `make dev` | Start only the API, on port 8000. Do not use `--reload`: a restart interrupts running jobs. |
+| `make web` | Start only the web app. It expects the API from `make dev`; point it elsewhere with `API_URL`. |
 | `make test` | Run the tests (canned AI, local TimescaleDB container, no Gemini calls) |
 | `make sample` | Load or reset the sample agency |
 | `make seed` | Build rubrics from the primary videos in `reference_vids/`, falling back to a backup if a primary fails |
@@ -128,8 +130,7 @@ All routes are under `/api`, return JSON, and need a session (cookie, or `Author
 | `backend/app/gemini.py` | Gemini wrapper: upload cache, structured output, retries, output cap, call log, spend cap |
 | `backend/app/media.py` | ffmpeg-based conversion, thumbnails and cutting (bundled binary, no system install) |
 | `backend/app/routers/` | HTTP API |
-| `backend/scripts/` | Seeding, the sample agency, end-to-end runs, pose re-measurement, spend report |
-| `testui/` | A plain test UI the API serves at `http://localhost:8000`, with the same accounts. Useful for poking at the API; the web app is the product. |
+| `backend/scripts/` | Starting both halves, seeding, the sample agency, end-to-end runs, pose re-measurement, spend report |
 | `reference_vids/` | Reference videos for nine skills |
 
 ## Limits worth knowing

@@ -4,14 +4,22 @@ Marketing page, login, caregiver portal and nurse dashboard in one Next.js app. 
 reads and writes through the API in `backend/`; there is no mock data in the app.
 
 ```bash
-npm install
-npm run dev            # http://localhost:3000 (the next free port if 3000 is taken)
+make run               # in the repo root: starts the API and this app together
 ```
 
-The API must be running too (`make dev` in the repo root, port 8000). The browser only ever
-talks to this app: requests to `/api/...` are forwarded to the API (see `next.config.ts`), so
-the session cookie, video seeking and uploads work on one origin. Point at another API with
-`API_URL=http://127.0.0.1:8001 npm run dev`.
+The app needs the API: every screen is filled from it. `make run` starts the API on a free
+local port and passes its address to this app. The browser only ever talks to this app:
+requests to `/api/...` are forwarded to the API (see `next.config.ts`), so the session
+cookie, video seeking and uploads work on one origin.
+
+To run this app on its own against an API you started yourself:
+
+```bash
+npm install
+API_URL=http://127.0.0.1:8000 npm run dev    # http://localhost:3000, or the next free port
+```
+
+`API_URL` defaults to `http://127.0.0.1:8000`, where `make dev` puts the API.
 
 - `/` marketing
 - `/login` and `/signup`

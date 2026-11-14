@@ -4,7 +4,7 @@
   uv run python -m scripts.try_timeline fall_original fall_backup
   uv run python -m scripts.try_timeline all --refine on      # force the boundary pass (default: auto)
   uv run python -m scripts.try_timeline --list
-  uv run python -m scripts.try_timeline sts_swap_s3_s4 --attempt   # also store it for review.html
+  uv run python -m scripts.try_timeline sts_swap_s3_s4 --attempt   # also store it for the review screen
 
 Cases live in tests/fixtures_timeline.py. Each cut video is built once with media.cut
 and ingested once, so repeat runs reuse the Gemini upload. Prints, per step, the found
@@ -111,7 +111,7 @@ def main() -> None:
     parser.add_argument("cases", nargs="*", default=["sts_original", "sts_swap_s3_s4", "sts_without_s4"])
     parser.add_argument("--refine", choices=["auto", "on", "off"], default="auto", help="per-step boundary pass")
     parser.add_argument("--list", action="store_true")
-    parser.add_argument("--attempt", action="store_true", help="store each case as an attempt for review.html")
+    parser.add_argument("--attempt", action="store_true", help="store each case as an attempt for the review screen")
     args = parser.parse_args()
     if args.list:
         for c in CASES:
@@ -120,7 +120,7 @@ def main() -> None:
     names = [c.name for c in CASES] if args.cases == ["all"] else args.cases
     if args.attempt:
         for name in names:
-            print(f"  review: http://localhost:8000/review.html?id={store_attempt(BY_NAME[name])}")
+            print(f"  review it in the web app at /dashboard/reviews/{store_attempt(BY_NAME[name])}")
         print(f"Recorded spend: ${gemini.spent_usd():.4f} of ${config.GEMINI_BUDGET_USD:.2f}")
         return
     all_errors: list[float] = []

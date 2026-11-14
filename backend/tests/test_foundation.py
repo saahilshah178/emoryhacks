@@ -59,7 +59,9 @@ def test_api_upload_stream_and_results(migrated, sample_video):
 
     with TestClient(app) as client:
         assert client.get("/api/health").json()["ok"] is True
-        assert client.get("/index.html").status_code == 200
+        # The API serves no pages of its own; the web app is the only UI.
+        assert client.get("/index.html").status_code == 404
+        assert client.get("/").json()["health"] == "/api/health"
         with sample_video.open("rb") as f:
             res = client.post("/api/videos", data={"kind": "reference", "expected_slug": "sit_to_stand"},
                               files={"file": (sample_video.name, f, "video/mp4")})

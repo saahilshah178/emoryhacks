@@ -7,8 +7,6 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[2]
-# The built-in test UI: static pages served at /. The Next.js apps live under frontend/.
-FRONTEND_DIR = ROOT / "testui"
 FIXTURES_DIR = ROOT / "fixtures"
 REFERENCE_DIR = ROOT / "reference_vids"
 

@@ -1,10 +1,18 @@
-.PHONY: dev web db migrate test seed sample e2e repose fake-demo cost
+.PHONY: run dev web db migrate test seed sample e2e repose fake-demo cost
 
-# Start the API (and the built-in test UI) at http://localhost:8000
+# Start everything: the API and the web app. Open the address the web app prints
+# (http://localhost:3000, or the next free port). The API takes any free local port and is
+# only used by the web app. Another web port: PORT=3100 make run.
+run:
+	npm install --prefix frontend/landing --no-audit --no-fund
+	cd backend && uv run python -m scripts.run_app
+
+# The two halves on their own, in two terminals, instead of `make run`.
+# The API only, on port 8000. It serves /api and no pages.
 dev:
 	cd backend && uv run uvicorn app.main:app --port 8000
 
-# Start the web app at http://localhost:3000 (it forwards /api to the API above).
+# The web app only. It forwards /api to the API from `make dev`.
 # Another port: PORT=3100 make web. Another API: API_URL=http://127.0.0.1:8001 make web.
 web:
 	npm install --prefix frontend/landing --no-audit --no-fund

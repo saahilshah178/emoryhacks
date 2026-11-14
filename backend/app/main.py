@@ -1,6 +1,8 @@
-"""FirstShift API and the built-in test UI.
+"""The API. It serves JSON and video under /api and nothing else: the only UI is the web app
+in frontend/landing, which forwards /api to this server.
 
-Run from the backend directory:  uv run uvicorn app.main:app --port 8000
+`make run` starts both. On its own, from the backend directory:
+    uv run uvicorn app.main:app --port 8000
 (Do not use --reload while a pipeline is running: a restart interrupts the job.)
 """
 from __future__ import annotations
@@ -9,7 +11,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from . import config, db, gemini, repo
 from .routers import accounts, attempts, jobs, people, review, safety, skills, videos
@@ -59,4 +60,8 @@ def health():
     }
 
 
-app.mount("/", StaticFiles(directory=str(config.FRONTEND_DIR), html=True), name="frontend")
+@app.get("/", include_in_schema=False)
+def root():
+    """For anyone who opens this address in a browser: there are no pages here."""
+    return {"service": "API", "health": "/api/health",
+            "web_app": "This server has no pages. Run `make run` and open the address the web app prints."}

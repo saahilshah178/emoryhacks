@@ -6,6 +6,7 @@ import { matchesQuery, plural } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
 import { categoryLabel } from "@/lib/status";
 import type { SkillSummary } from "@/lib/types";
+import { PageHeading } from "@/nurse/components/layout/PageHeading";
 import { SkillCard } from "@/nurse/components/skills/SkillCard";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 
@@ -16,17 +17,16 @@ export default function SkillsPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <p className="max-w-2xl text-sm text-ink-secondary">
-          A skill is a reference video you record, plus the steps and pass, fail and cannot-verify
-          criteria written from it. Caregivers&apos; recordings are checked against these steps, and you
-          can edit any of them.
-        </p>
-        <Button href="/dashboard/skills/new">
-          <Plus className="h-4 w-4" aria-hidden />
-          New skill
-        </Button>
-      </div>
+      <PageHeading
+        title="Skills"
+        description="A skill is a reference video you record, plus the steps and pass, fail and cannot-verify criteria written from it. Caregivers' recordings are checked against these steps, and you can edit any of them."
+        actions={
+          <Button href="/dashboard/skills/new">
+            <Plus className="h-4 w-4" aria-hidden />
+            New skill
+          </Button>
+        }
+      />
 
       <Loadable
         data={data}

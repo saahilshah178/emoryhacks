@@ -2,6 +2,7 @@
 
 import { useTitle } from "@/lib/hooks";
 import { SafetyOverview } from "@/nurse/components/dashboard/SafetyOverview";
+import { PageHeading } from "@/nurse/components/layout/PageHeading";
 import { MovementTable } from "@/nurse/components/safety/MovementTable";
 import { OpenIssues } from "@/nurse/components/safety/OpenIssues";
 import { StoragePanel } from "@/nurse/components/safety/StoragePanel";
@@ -12,9 +13,10 @@ export default function SafetyPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6">
-      <p className="text-sm text-ink-secondary">
-        Critical misses stay visible until a nurse closes them with approval or retraining.
-      </p>
+      <PageHeading
+        title="Safety reports"
+        description="Critical misses stay visible until a nurse closes them with approval or retraining."
+      />
 
       <SafetyOverview />
 

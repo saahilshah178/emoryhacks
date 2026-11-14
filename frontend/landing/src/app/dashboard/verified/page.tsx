@@ -6,6 +6,7 @@ import { formatDateTime, matchesQuery } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
 import { aiAssessment } from "@/lib/status";
 import type { AttemptSummary } from "@/lib/types";
+import { PageHeading } from "@/nurse/components/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 
 function reviewer(item: AttemptSummary) {
@@ -20,9 +21,10 @@ export default function VerifiedPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
-      <p className="text-sm text-ink-secondary">
-        Competencies signed off by a nurse. The AI&apos;s original assessment is kept alongside for the record.
-      </p>
+      <PageHeading
+        title="Verified skills"
+        description="Competencies signed off by a nurse. The AI's original assessment is kept alongside for the record."
+      />
       <Loadable
         data={approved.data}
         error={approved.error}

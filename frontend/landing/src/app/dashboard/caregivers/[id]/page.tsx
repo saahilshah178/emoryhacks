@@ -104,7 +104,7 @@ function Profile({ person, onSaved }: { person: CaregiverDetail; onSaved: (next:
             <Avatar name={person.name} size="xl" />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-semibold text-navy">{person.name}</h2>
+                <h1 className="text-xl font-semibold text-navy">{person.name}</h1>
                 <StateBadge entry={caregiverStatus[person.status]} />
               </div>
               <p className="mt-0.5 text-sm text-ink-secondary">{person.title || "Caregiver"}</p>

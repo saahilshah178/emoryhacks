@@ -63,7 +63,7 @@ export default function MovementDetailPage() {
             <>
               <header className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h2 className="text-xl font-semibold text-navy">{skillName ?? (sum.video.original_name || "Video")}</h2>
+                  <h1 className="text-xl font-semibold text-navy">{skillName ?? (sum.video.original_name || "Video")}</h1>
                   <p className="mt-1 text-sm text-ink-secondary">
                     {[
                       sum.video.kind === "reference"

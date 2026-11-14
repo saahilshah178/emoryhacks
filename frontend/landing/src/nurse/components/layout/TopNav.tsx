@@ -8,20 +8,9 @@ import { Avatar } from "@/components/ui";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { relativeTime } from "@/lib/format";
+import { SEARCH_ALIGN } from "@/nurse/components/layout/chrome";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useAuth, useUser } from "@/shared/AuthProvider";
-import { Logo } from "@/shared/Logo";
-
-const titles: Record<string, string> = {
-  "/dashboard": "Clinical dashboard",
-  "/dashboard/pending": "Pending reviews",
-  "/dashboard/caregivers": "Caregivers",
-  "/dashboard/skills": "Skills",
-  "/dashboard/skills/new": "New skill",
-  "/dashboard/verified": "Verified skills",
-  "/dashboard/safety": "Safety reports",
-  "/dashboard/settings": "Settings",
-};
 
 /** Pages whose lists filter themselves by the search box. Elsewhere the box would do nothing. */
 const searchable = new Set([
@@ -31,17 +20,6 @@ const searchable = new Set([
   "/dashboard/verified",
   "/dashboard/skills",
 ]);
-
-function titleFor(pathname: string) {
-  const path = pathname.replace(/\/+$/, "") || "/dashboard";
-  if (titles[path]) return titles[path];
-  if (path.startsWith("/dashboard/reviews/")) return "Skill review";
-  if (path.startsWith("/dashboard/caregivers/")) return "Caregiver";
-  if (path.startsWith("/dashboard/safety/videos/")) return "Movement detail";
-  if (path.startsWith("/dashboard/safety/")) return "Safety reports";
-  if (path.startsWith("/dashboard/skills/")) return "Skill";
-  return "Clinical dashboard";
-}
 
 export function TopNav() {
   const pathname = usePathname();
@@ -60,7 +38,6 @@ export function TopNav() {
   const notifications = overview?.notifications ?? [];
   const unread = overview?.unread ?? 0;
   const path = pathname.replace(/\/+$/, "") || "/dashboard";
-  const title = titleFor(path);
   const showSearch = searchable.has(path);
   const roleLine = [user.credentials, user.title].filter(Boolean).join(" · ") || "Nurse";
 
@@ -99,13 +76,14 @@ export function TopNav() {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 border-b border-border bg-white px-4 md:px-6">
-      <Logo href="/dashboard" />
-      <span className="hidden h-6 w-px shrink-0 bg-border sm:block" aria-hidden />
-      <h1 className="min-w-0 truncate text-lg font-semibold text-navy">{title}</h1>
-
+    <header
+      className={cn(
+        "sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 bg-white pr-4 md:pr-6",
+        SEARCH_ALIGN,
+      )}
+    >
       {showSearch ? (
-        <label className="relative ml-auto hidden w-56 sm:block lg:w-72 xl:w-96">
+        <label className="relative hidden min-w-0 flex-1 sm:block max-w-2xl">
           <span className="sr-only">Search this page</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-secondary" />
           <input
@@ -113,12 +91,12 @@ export function TopNav() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search caregivers, skills, or submissions"
-            className="h-10 w-full rounded-[12px] border border-border bg-secondary pl-9 pr-3 text-sm text-ink outline-none placeholder:text-ink-secondary focus:border-teal focus:bg-white focus:ring-2 focus:ring-teal/20"
+            className="h-10 w-full rounded-full border border-border bg-secondary pl-9 pr-3 text-sm text-ink outline-none placeholder:text-ink-secondary focus:border-teal focus:bg-white focus:ring-2 focus:ring-teal/20"
           />
         </label>
       ) : null}
 
-      <div className={cn("relative", showSearch ? "ml-auto sm:ml-0" : "ml-auto")} ref={notificationsRef}>
+      <div className="relative ml-auto" ref={notificationsRef}>
         <button
           type="button"
           onClick={toggleNotifications}
@@ -182,7 +160,7 @@ export function TopNav() {
           aria-haspopup="menu"
           aria-controls={accountMenuId}
           onClick={() => setMenu((current) => (current === "account" ? null : "account"))}
-          className="flex shrink-0 items-center gap-2.5 rounded-[12px] p-1 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 md:pr-2"
+          className="flex shrink-0 items-center gap-2.5 rounded-[12px] py-1 pl-3 pr-1 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 md:pr-2"
         >
           <span className="hidden max-w-[180px] text-right md:block">
             <span className="block truncate text-sm font-medium text-ink">{user.name}</span>

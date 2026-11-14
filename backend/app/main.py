@@ -8,6 +8,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import config, db, gemini, repo
@@ -24,6 +25,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="FirstShift", lifespan=lifespan)
+
+# The Next.js apps under frontend/ run on other local ports and call this API directly.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
+)
 
 for module in (videos, skills, attempts, review, safety, jobs):
     app.include_router(module.router, prefix="/api")

@@ -1,4 +1,4 @@
-.PHONY: dev db migrate test seed fake-demo cost
+.PHONY: dev db migrate test seed e2e fake-demo cost
 
 # Start the app at http://localhost:8000
 dev:
@@ -18,6 +18,11 @@ test:
 # Run the primary reference videos through the nurse pipeline (real Gemini calls)
 seed:
 	cd backend && uv run python -m scripts.seed_reference
+
+# Run stand-in caregiver attempts against the seeded skills (real Gemini calls).
+# Narrow it with: make e2e ARGS="--skills sit_to_stand --cases self,missing"
+e2e:
+	cd backend && uv run python -m scripts.e2e $(ARGS)
 
 # Create one fake skill and one fake attempt without calling Gemini
 fake-demo:

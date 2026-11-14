@@ -39,7 +39,8 @@ DEFAULT_WRONG = "glove_removal"
 
 
 def latest_skills() -> dict[str, dict]:
-    return {row["slug"]: row for row in repo.list_skills()}  # newest version of each skill
+    # newest version of each of the default agency's skills
+    return {row["slug"]: row for row in repo.list_skills(org_id=repo.DEFAULT_ORG)}
 
 
 def _last_step_end(skill: dict) -> float:

@@ -14,9 +14,9 @@ import threading
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from .. import config, gemini, jobs, media, repo
+from .. import auth, config, gemini, jobs, media, repo
 from ..models import Classification, SkillPatch, StepPatch
 from ..stages import rubric
 
@@ -31,34 +31,47 @@ _rebuilding_lock = threading.Lock()
 
 
 @router.get("")
-def list_skills(all: bool = False):
-    """The newest version of each skill, or every version with ?all=1."""
-    return repo.list_skills(all_versions=all)
+def list_skills(all: bool = False, user: dict = Depends(auth.current_user)):
+    """The newest version of each of the agency's skills, or every version with ?all=1."""
+    return repo.list_skills(all_versions=all, org_id=user["org_id"])
 
 
 @router.get("/{skill_id}")
-def get_skill(skill_id: str):
-    skill = _skill_or_404(skill_id)
-    return skill
+def get_skill(skill_id: str, user: dict = Depends(auth.current_user)):
+    return repo.public(_skill_or_404(skill_id, user))
 
 
 @router.patch("/{skill_id}")
-def patch_skill(skill_id: str, body: SkillPatch):
-    _skill_or_404(skill_id)
-    repo.patch_skill(skill_id, body.model_dump(exclude_none=True))
-    return repo.get_skill(skill_id)
+def patch_skill(skill_id: str, body: SkillPatch, user: dict = Depends(auth.nurse)):
+    skill = _skill_or_404(skill_id, user)
+    fields = body.model_dump(exclude_none=True)
+    if body.guide is not None:  # merge, and drop keys set to null or "" so they fall back to the rubric
+        own = {**(skill_guide_own(skill_id)), **body.guide}
+        fields["guide"] = {k: v for k, v in own.items() if v not in (None, "", [])}
+    repo.patch_skill(skill_id, fields)
+    return repo.public(repo.get_skill(skill_id))
+
+
+def skill_guide_own(skill_id) -> dict:
+    from .. import db
+
+    row = db.fetch_one("SELECT guide FROM skills WHERE id=%s", (skill_id,))
+    return (row or {}).get("guide") or {}
 
 
 @router.patch("/{skill_id}/steps/{step_id}")
-def patch_step(skill_id: str, step_id: str, body: StepPatch):
-    skill = _skill_or_404(skill_id)
+def patch_step(skill_id: str, step_id: str, body: StepPatch, user: dict = Depends(auth.nurse)):
+    skill = _skill_or_404(skill_id, user)
     step = next((s for s in skill["steps"] if s["step_id"] == step_id), None)
     if step is None:
         raise HTTPException(404, "Step not found")
-    start = body.start_s if body.start_s is not None else step["start_s"]
-    end = body.end_s if body.end_s is not None else step["end_s"]
-    if start < 0 or end <= start:
-        raise HTTPException(422, "A step must end after it starts, and start at 0 seconds or later")
+    # Times are checked only when the edit changes them, so a step that is not timed yet
+    # (start = end = 0) can still have its text and criteria edited.
+    if body.start_s is not None or body.end_s is not None:
+        start = body.start_s if body.start_s is not None else step["start_s"]
+        end = body.end_s if body.end_s is not None else step["end_s"]
+        if start < 0 or end <= start:
+            raise HTTPException(422, "A step must end after it starts, and start at 0 seconds or later")
     fields = body.model_dump(exclude_none=True)
     if body.must_follow is not None:
         earlier = {s["step_id"] for s in skill["steps"] if s["ord"] < step["ord"]}
@@ -69,17 +82,17 @@ def patch_step(skill_id: str, step_id: str, body: StepPatch):
         fields.setdefault("order_dependent", bool(fields["must_follow"]))
     if not repo.patch_step(skill_id, step_id, fields):
         raise HTTPException(400, "Nothing to change")
-    return repo.get_skill(skill_id)
+    return repo.public(repo.get_skill(skill_id))
 
 
 @router.post("/{skill_id}/regenerate")
-def regenerate(skill_id: str):
+def regenerate(skill_id: str, user: dict = Depends(auth.nurse)):
     """Start rebuilding the skill's rubric from its reference video.
 
     The result is stored as a NEW version of the skill; this version and the attempts graded
     against it are left untouched, so their results never end up under different steps.
     Returns {job_id}. When that job is done, its skill_id is the new version's id."""
-    skill = _skill_or_404(skill_id)
+    skill = _skill_or_404(skill_id, user)
     if not skill["video"]:
         raise HTTPException(409, "This skill has no reference video to rebuild from")
     try:
@@ -87,17 +100,20 @@ def regenerate(skill_id: str):
     except media.MediaError as exc:
         raise HTTPException(409, str(exc)) from exc
     with _rebuilding_lock:
-        running = _rebuilding.get(skill["slug"])
+        key = f"{skill['org_id']}:{skill['slug']}"
+        running = _rebuilding.get(key)
         if running:
             return {"job_id": running}
         job_id = repo.create_job("reference", skill["video"]["id"], skill_id=skill["id"])
-        _rebuilding[skill["slug"]] = job_id
+        _rebuilding[key] = job_id
     _regenerate_pool.submit(_regenerate, job_id, skill)
     return {"job_id": job_id}
 
 
 @router.delete("/{skill_id}")
-def delete_skill(skill_id: str):
+def delete_skill(skill_id: str, user: dict = Depends(auth.nurse)):
+    """Delete this version of the skill, with the attempts graded against it."""
+    _skill_or_404(skill_id, user)
     if not repo.delete_skill(skill_id):
         raise HTTPException(404, "Skill not found")
     return {"deleted": True}
@@ -117,7 +133,7 @@ def _regenerate(job_id, skill: dict) -> None:
         repo.update_job(job_id, status="error", error=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-1500:]}")
     finally:
         with _rebuilding_lock:
-            _rebuilding.pop(skill["slug"], None)
+            _rebuilding.pop(f"{skill['org_id']}:{skill['slug']}", None)
 
 
 def _classification(skill: dict) -> Classification:
@@ -133,11 +149,11 @@ def _classification(skill: dict) -> Classification:
                                    "summary": skill["summary"]})
 
 
-def _skill_or_404(skill_id: str) -> dict:
+def _skill_or_404(skill_id: str, user: dict) -> dict:
     try:
         skill = repo.get_skill(skill_id)
     except Exception:
         skill = None
-    if not skill:
+    if not skill or skill["org_id"] != user["org_id"]:
         raise HTTPException(404, "Skill not found")
     return skill

@@ -43,7 +43,7 @@ def main() -> int:
     db.migrate()
     wanted = {s for s in args.only.split(",") if s}
     failed = 0
-    for skill in repo.list_skills():
+    for skill in repo.list_skills(org_id=repo.DEFAULT_ORG):  # the sample agency has no real recordings
         if wanted and skill["slug"] not in wanted:
             continue
         try:

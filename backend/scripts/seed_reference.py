@@ -53,7 +53,7 @@ def main() -> int:
 
     db.migrate()
     wanted = [s for s in args.only.split(",") if s] or list(catalog.REFERENCE_FILES)
-    existing = {r["slug"] for r in repo.list_skills()}
+    existing = {r["slug"] for r in repo.list_skills(org_id=repo.DEFAULT_ORG)}
     todo = [s for s in wanted if args.force or s not in existing]
     for s in wanted:
         if s not in todo:

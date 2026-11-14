@@ -166,6 +166,7 @@ class SkillPatch(BaseModel):
     summary: str | None = None
     order_matters: bool | None = None
     safety_criteria: list[str] | None = None
+    guide: dict | None = None
 
 
 class StepPatch(BaseModel):

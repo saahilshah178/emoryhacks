@@ -16,7 +16,7 @@ let video = null;          // the <video> element
 async function load() {
   if (!skillId) throw new Error("No skill id in the address. Open a skill from the Skills page.");
   skill = await api(`/skills/${skillId}`);
-  document.title = `${skill.name} · FirstShift`;
+  document.title = `${skill.name} · Test UI`;
   renderPlayer();
   render();
 }

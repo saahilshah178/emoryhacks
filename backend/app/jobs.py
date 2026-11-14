@@ -221,7 +221,7 @@ def submit_attempt(attempt_id, video_id, skill_id):
     return job_id
 
 
-def ingest(src_path: str, kind: str, original_name: str) -> dict:
+def ingest(src_path: str, kind: str, original_name: str, org_id=None, uploaded_by=None) -> dict:
     """Normalise an uploaded or reference file into data/videos and create its row."""
     import uuid
 
@@ -234,7 +234,8 @@ def ingest(src_path: str, kind: str, original_name: str) -> dict:
         raise media.MediaError(
             f"That file is only {info['duration_s']:.1f} seconds long. Record at least "
             f"{config.MIN_VIDEO_SECONDS:.0f} seconds of video.")
-    return repo.create_video(kind, str(dst), original_name, info, video_id=video_id)
+    return repo.create_video(kind, str(dst), original_name, info, video_id=video_id,
+                             org_id=org_id, uploaded_by=uploaded_by)
 
 
 def now() -> dt.datetime:

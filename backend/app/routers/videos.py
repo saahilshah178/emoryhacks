@@ -17,11 +17,11 @@ import logging
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
-from .. import config, jobs, media, repo
+from .. import auth, config, db, jobs, media, repo
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 log = logging.getLogger(__name__)
@@ -37,16 +37,22 @@ async def upload_video(
     caregiver_name: str = Form(""),
     expected_slug: str | None = Form(None),
     expected_name: str | None = Form(None),
+    user: dict = Depends(auth.current_user),
 ):
+    """A reference video (nurses only) starts the rubric pipeline; an attempt starts grading.
+    A caregiver's attempt is recorded under their own account, whatever name is sent."""
     if kind not in ("reference", "attempt"):
         raise HTTPException(400, "kind must be 'reference' or 'attempt'")
-    if kind == "attempt" and not _skill_exists(skill_id):
+    if kind == "reference" and user["role"] != "nurse":
+        raise HTTPException(403, "Only a nurse can add a reference video.")
+    if kind == "attempt" and not _skill_exists(skill_id, user):
         raise HTTPException(400, "An attempt needs the skill_id of an existing skill")
 
     tmp = await _save_upload(file)
     try:
         # Converting can take a minute for a long recording; keep the event loop free.
-        video = await run_in_threadpool(jobs.ingest, str(tmp), kind, file.filename or "")
+        video = await run_in_threadpool(jobs.ingest, str(tmp), kind, file.filename or "",
+                                        user["org_id"], user["id"])
     except media.MediaError as exc:
         log.warning("Upload %r could not be converted: %s", file.filename, exc)
         raise HTTPException(422, "Could not read that video. The file may be damaged or not a video; "
@@ -57,7 +63,10 @@ async def upload_video(
     if kind == "reference":
         job_id = jobs.submit_reference(video["id"], slug=expected_slug or None, name=expected_name or None)
         return {"video_id": video["id"], "job_id": job_id, "attempt_id": None}
-    attempt_id = repo.create_attempt(skill_id, video["id"], caregiver_name.strip()[:MAX_NAME_CHARS])
+    if user["role"] == "caregiver":
+        attempt_id = repo.create_attempt(skill_id, video["id"], user["name"], caregiver_id=user["id"])
+    else:
+        attempt_id = repo.create_attempt(skill_id, video["id"], caregiver_name.strip()[:MAX_NAME_CHARS])
     job_id = jobs.submit_attempt(attempt_id, video["id"], skill_id)
     return {"video_id": video["id"], "job_id": job_id, "attempt_id": attempt_id}
 
@@ -85,19 +94,31 @@ async def _save_upload(file: UploadFile) -> Path:
     return tmp
 
 
-def _skill_exists(skill_id: str | None) -> bool:
+def _skill_exists(skill_id: str | None, user: dict) -> bool:
     try:
-        return bool(skill_id) and repo.get_skill(uuid.UUID(skill_id)) is not None
+        skill = repo.get_skill(uuid.UUID(skill_id)) if skill_id else None
     except ValueError:
         return False
+    return bool(skill) and skill["org_id"] == user["org_id"]
 
 
-def _video_or_404(video_id: str) -> dict:
+def can_see_video(video: dict | None, user: dict) -> bool:
+    """A nurse sees every video of their agency. A caregiver sees its reference videos and
+    the attempts recorded under their own account."""
+    if not video or video["org_id"] != user["org_id"]:
+        return False
+    if user["role"] == "nurse" or video["kind"] == "reference" or video["uploaded_by"] == user["id"]:
+        return True
+    return bool(db.fetch_one("SELECT 1 FROM attempts WHERE video_id=%s AND caregiver_id=%s",
+                             (video["id"], user["id"])))
+
+
+def _video_or_404(video_id: str, user: dict) -> dict:
     try:
         video = repo.get_video(uuid.UUID(video_id))
     except ValueError:
         video = None
-    if not video:
+    if not can_see_video(video, user):
         raise HTTPException(404, "Video not found")
     return video
 
@@ -111,20 +132,22 @@ def _local_or_404(video: dict) -> dict:
 
 
 @router.get("/{video_id}")
-def get_video(video_id: str):
-    return _video_or_404(video_id)
+def get_video(video_id: str, user: dict = Depends(auth.current_user)):
+    video = _video_or_404(video_id, user)
+    video["available"] = repo.video_available(video)
+    return repo.public(video)
 
 
 @router.get("/{video_id}/file")
-def get_video_file(video_id: str):
+def get_video_file(video_id: str, user: dict = Depends(auth.current_user)):
     """The stored MP4. FileResponse answers Range requests with 206, which <video> needs to seek."""
-    video = _local_or_404(_video_or_404(video_id))
+    video = _local_or_404(_video_or_404(video_id, user))
     return FileResponse(video["path"], media_type="video/mp4")
 
 
 @router.get("/{video_id}/thumb")
-def get_thumbnail(video_id: str, t: float = 0.0):
-    video = _local_or_404(_video_or_404(video_id))
+def get_thumbnail(video_id: str, t: float = 0.0, user: dict = Depends(auth.current_user)):
+    video = _local_or_404(_video_or_404(video_id, user))
     t = max(0.0, min(float(t), max(0.0, float(video["duration_s"]) - 0.1)))
     out = config.THUMB_DIR / f"{video['id']}_{int(t * 10):06d}.jpg"
     if not out.exists():
@@ -132,4 +155,4 @@ def get_thumbnail(video_id: str, t: float = 0.0):
             media.thumbnail(video["path"], t, out)
         except media.MediaError as exc:
             raise HTTPException(404, str(exc)) from exc
-    return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+    return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})

@@ -195,7 +195,7 @@ async function load() {
       await new Promise((resolve) => setTimeout(resolve, POLL_MS * (failures + 1)));
       continue;
     }
-    document.title = `${attempt.skill_name} result · FirstShift`;
+    document.title = `${attempt.skill_name} result · Test UI`;
     const job = attempt.job;
     if (job && job.status !== "done") {
       app.innerHTML = headerHtml(attempt) + progressHtml(attempt) + (job.status === "error" ? actionsHtml(attempt) : "");

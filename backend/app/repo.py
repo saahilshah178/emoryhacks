@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Iterable
 
-from . import config, db, media
+from . import config, db, media, progress
 from .models import (
     Classification, Evaluation, PersonObs, Rubric, RubricStep, SafetyFlag, Score, StepEval, Timeline,
 )
@@ -31,15 +31,55 @@ POSE_ROW_KEYS = [c for c in POSE_COLUMNS if c not in ("ts", "video_id")]
 
 
 # --- videos ---------------------------------------------------------------
-def create_video(kind: str, path: str, original_name: str, info: dict, video_id: uuid.UUID | None = None) -> dict:
+DEFAULT_ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
+# Stored as the path of a video row that has no file (sample data).
+NO_FILE = "none://no-file"
+
+
+def create_video(kind: str, path: str, original_name: str, info: dict, video_id: uuid.UUID | None = None,
+                 org_id=None, uploaded_by=None) -> dict:
     video_id = video_id or uuid.uuid4()
     db.execute(
-        """INSERT INTO videos (id, kind, original_name, path, duration_s, width, height, fps)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+        """INSERT INTO videos (id, kind, original_name, path, duration_s, width, height, fps, org_id, uploaded_by)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
         (video_id, kind, original_name, path, info.get("duration_s", 0), info.get("width", 0),
-         info.get("height", 0), info.get("fps", 0)),
+         info.get("height", 0), info.get("fps", 0), org_id or DEFAULT_ORG, uploaded_by),
     )
     return get_video(video_id)
+
+
+def video_available(video: dict | None) -> bool:
+    """Whether this machine can play the video: its file is here, or can be rebuilt from reference_vids/."""
+    if not video:
+        return False
+    if video["path"] != NO_FILE and Path(video["path"]).is_file():
+        return True
+    if media.video_path(video["id"]).is_file():
+        return True
+    name = video.get("original_name") or ""
+    return bool(name) and (config.REFERENCE_DIR / name).is_file()
+
+
+def _with_availability(video: dict | None) -> dict | None:
+    if video is not None:
+        video["available"] = video_available(video)
+    return video
+
+
+_PRIVATE_VIDEO_KEYS = ("path", "gemini_file_name", "gemini_file_uri", "gemini_file_expires")
+
+
+def public(payload):
+    """A skill, attempt or video as the API returns it: without the server's file paths and
+    Gemini file handles. Returns the same object, changed in place."""
+    if isinstance(payload, dict):
+        for key in ("video", "reference_video"):
+            if isinstance(payload.get(key), dict):
+                payload[key] = {k: v for k, v in payload[key].items() if k not in _PRIVATE_VIDEO_KEYS}
+        if "kind" in payload and "path" in payload:  # a video row itself
+            for key in _PRIVATE_VIDEO_KEYS:
+                payload.pop(key, None)
+    return payload
 
 
 def get_video(video_id) -> dict | None:
@@ -57,7 +97,7 @@ def ensure_video_file(video: dict) -> dict:
     them. A teammate's checkout therefore has the rows without the files. Reference videos
     can be rebuilt from reference_vids/, which is in the repository; anything else recorded
     on another machine cannot, and raises media.MediaError saying so."""
-    if Path(video["path"]).exists():
+    if video["path"] != NO_FILE and Path(video["path"]).is_file():
         return video
     with _file_locks_guard:
         lock = _file_locks.setdefault(str(video["id"]), threading.Lock())
@@ -77,20 +117,27 @@ def ensure_video_file(video: dict) -> dict:
 
 # --- skills ---------------------------------------------------------------
 def create_skill(classification: Classification, rubric: Rubric, video_id, slug: str | None = None,
-                 name: str | None = None) -> uuid.UUID:
+                 name: str | None = None, org_id=None) -> uuid.UUID:
     """Store a new skill version with its steps. slug/name override the classifier's."""
     slug = slug or classification.skill_slug
     skill_id = uuid.uuid4()
     with db.tx() as conn:
-        row = conn.execute("SELECT coalesce(max(version), 0) AS v FROM skills WHERE slug=%s", (slug,)).fetchone()
+        # The skill belongs to the agency that owns its reference video. A new version of a
+        # skill keeps the caregiver-facing copy a nurse wrote for the previous one.
+        owner = conn.execute("SELECT org_id FROM videos WHERE id=%s", (video_id,)).fetchone() if video_id else None
+        org_id = org_id or (owner["org_id"] if owner else DEFAULT_ORG)
+        row = conn.execute(
+            """SELECT coalesce(max(version), 0) AS v,
+                      (SELECT guide FROM skills WHERE org_id=%s AND slug=%s ORDER BY version DESC LIMIT 1) AS guide
+               FROM skills WHERE org_id=%s AND slug=%s""", (org_id, slug, org_id, slug)).fetchone()
         conn.execute(
             """INSERT INTO skills (id, slug, name, category, summary, version, order_matters, safety_criteria,
-                                   people, classification, notes, reference_video_id)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                                   people, classification, notes, reference_video_id, org_id, guide)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (skill_id, slug, name or classification.skill_name, classification.category, classification.summary,
              row["v"] + 1, rubric.order_matters, db.J(rubric.safety_criteria),
              db.J([p.model_dump() for p in classification.people]), db.J(classification.model_dump()),
-             rubric.notes, video_id),
+             rubric.notes, video_id, org_id, db.J(row["guide"] or {})),
         )
         _insert_steps(conn, skill_id, rubric.steps)
     return skill_id
@@ -117,18 +164,30 @@ def replace_rubric(skill_id, rubric: Rubric) -> None:
         _insert_steps(conn, skill_id, rubric.steps)
 
 
-def list_skills(all_versions: bool = False) -> list[dict]:
-    """Skills, newest version of each by default. Rebuilding a rubric adds a version."""
-    newest = "" if all_versions else "WHERE s.version = (SELECT max(version) FROM skills x WHERE x.slug = s.slug)"
-    return db.fetch_all(
-        f"""SELECT s.id, s.slug, s.name, s.category, s.summary, s.version, s.order_matters,
-                  s.reference_video_id, s.created_at, v.duration_s,
+def list_skills(all_versions: bool = False, org_id=None) -> list[dict]:
+    """Skills, newest version of each by default. Rebuilding a rubric adds a version.
+    org_id limits the list to one agency; scripts leave it out to see every agency's."""
+    where, params = [], []
+    if not all_versions:
+        where.append("s.version = (SELECT max(version) FROM skills x WHERE x.slug = s.slug AND x.org_id = s.org_id)")
+    if org_id:
+        where.append("s.org_id = %s")
+        params.append(org_id)
+    rows = db.fetch_all(
+        f"""SELECT s.id, s.org_id, s.slug, s.name, s.category, s.summary, s.version, s.order_matters, s.guide,
+                  s.reference_video_id, s.created_at, s.updated_at, v.duration_s,
                   (SELECT count(*) FROM skill_steps st WHERE st.skill_id = s.id) AS step_count,
+                  (SELECT coalesce(sum(greatest(st.end_s - st.start_s, 0)), 0) FROM skill_steps st
+                    WHERE st.skill_id = s.id) AS steps_s,
                   (SELECT count(*) FROM attempts a WHERE a.skill_id = s.id) AS attempt_count
            FROM skills s LEFT JOIN videos v ON v.id = s.reference_video_id
-           {newest}
-           ORDER BY s.name, s.version DESC"""
+           {"WHERE " + " AND ".join(where) if where else ""}
+           ORDER BY s.name, s.version DESC""",
+        params,
     )
+    for row in rows:
+        row["guide"] = skill_guide(row, steps=None, steps_s=row.pop("steps_s"))
+    return rows
 
 
 def get_skill(skill_id) -> dict | None:
@@ -136,10 +195,40 @@ def get_skill(skill_id) -> dict | None:
     if not skill:
         return None
     skill["steps"] = db.fetch_all("SELECT * FROM skill_steps WHERE skill_id=%s ORDER BY ord", (skill_id,))
-    skill["video"] = get_video(skill["reference_video_id"]) if skill["reference_video_id"] else None
-    newest = db.fetch_one("SELECT id FROM skills WHERE slug=%s ORDER BY version DESC LIMIT 1", (skill["slug"],))
+    skill["video"] = _with_availability(get_video(skill["reference_video_id"])) if skill["reference_video_id"] else None
+    newest = db.fetch_one("SELECT id FROM skills WHERE slug=%s AND org_id=%s ORDER BY version DESC LIMIT 1",
+                          (skill["slug"], skill["org_id"]))
     skill["latest_id"] = newest["id"]
+    skill["versions"] = db.fetch_all(
+        """SELECT s.id, s.version, s.created_at,
+                  (SELECT count(*) FROM skill_steps st WHERE st.skill_id = s.id) AS step_count,
+                  (SELECT count(*) FROM attempts a WHERE a.skill_id = s.id) AS attempt_count
+           FROM skills s WHERE s.slug=%s AND s.org_id=%s ORDER BY s.version DESC""", (skill["slug"], skill["org_id"]))
+    skill["guide"] = skill_guide(skill, steps=skill["steps"])
     return skill
+
+
+def skill_guide(skill: dict, steps: list[dict] | None, steps_s: float | None = None) -> dict:
+    """What a caregiver reads before recording: the nurse's own copy where it was written
+    (skills.guide), and otherwise text and timings taken from the rubric.
+
+    cues are prompts shown while recording, at the time each step starts in the reference."""
+    own = skill.get("guide") or {}
+    summary = (skill.get("summary") or "").strip()
+    first_sentence = summary.split(". ")[0].rstrip(".") + "." if summary else ""
+    if steps is not None:
+        steps_s = sum(max((s["end_s"] or 0) - (s["start_s"] or 0), 0) for s in steps)
+    guide = {
+        "description": own.get("description") or first_sentence,
+        "explanation": own.get("explanation") or summary,
+        "safety_reminder": own.get("safety_reminder") or next(iter(skill.get("safety_criteria") or []), ""),
+        "estimated_minutes": own.get("estimated_minutes") or max(1, round((steps_s or 0) / 60)),
+    }
+    if steps is not None:
+        guide["cues"] = own.get("cues") or [
+            {"at_s": round(s["start_s"], 1), "message": s["title"]}
+            for s in steps if (s["end_s"] or 0) > (s["start_s"] or 0)]
+    return guide
 
 
 def get_rubric(skill_id) -> Rubric:
@@ -159,12 +248,12 @@ def get_rubric(skill_id) -> Rubric:
 
 
 def patch_skill(skill_id, fields: dict[str, Any]) -> None:
-    allowed = {"name", "summary", "order_matters", "safety_criteria"}
+    allowed = {"name", "summary", "order_matters", "safety_criteria", "guide"}
     sets, params = [], []
     for key, value in fields.items():
         if key in allowed and value is not None:
             sets.append(f"{key}=%s")
-            params.append(db.J(value) if key == "safety_criteria" else value)
+            params.append(db.J(value) if key in ("safety_criteria", "guide") else value)
     if sets:
         db.execute(f"UPDATE skills SET {', '.join(sets)}, updated_at=now() WHERE id=%s", (*params, skill_id))
 
@@ -189,11 +278,12 @@ def delete_skill(skill_id) -> int:
 
 
 # --- attempts -------------------------------------------------------------
-def create_attempt(skill_id, video_id, caregiver_name: str = "") -> uuid.UUID:
+def create_attempt(skill_id, video_id, caregiver_name: str = "", caregiver_id=None) -> uuid.UUID:
     attempt_id = uuid.uuid4()
     with db.tx() as conn:
-        conn.execute("INSERT INTO attempts (id, skill_id, video_id, caregiver_name) VALUES (%s,%s,%s,%s)",
-                     (attempt_id, skill_id, video_id, caregiver_name))
+        conn.execute(
+            "INSERT INTO attempts (id, skill_id, video_id, caregiver_name, caregiver_id) VALUES (%s,%s,%s,%s,%s)",
+            (attempt_id, skill_id, video_id, caregiver_name, caregiver_id))
         steps = conn.execute("SELECT step_id FROM skill_steps WHERE skill_id=%s ORDER BY ord", (skill_id,)).fetchall()
         for s in steps:
             conn.execute("INSERT INTO attempt_steps (id, attempt_id, step_id) VALUES (%s,%s,%s)",
@@ -277,31 +367,51 @@ def save_score(attempt_id, score: Score) -> None:
     )
 
 
-def list_attempts(skill_id=None) -> list[dict]:
-    where, params = "", ()
-    if skill_id:
-        where, params = "WHERE a.skill_id=%s", (skill_id,)
-    return db.fetch_all(
-        f"""SELECT a.id, a.skill_id, a.video_id, a.caregiver_name, a.status, a.score_pct, a.needs_review,
-                   a.nurse_status, a.reviewed_at, a.created_at, s.name AS skill_name, s.slug AS skill_slug,
+def list_attempts(skill_id=None, org_id=None, caregiver_id=None, state: str | None = None) -> list[dict]:
+    """Attempts, newest first, each with review_state and ai_assessment (see progress.py).
+    org_id limits the list to one agency; state keeps only one review_state."""
+    where, params = [], []
+    for column, value in (("a.skill_id", skill_id), ("s.org_id", org_id), ("a.caregiver_id", caregiver_id)):
+        if value:
+            where.append(f"{column}=%s")
+            params.append(value)
+    rows = db.fetch_all(
+        f"""SELECT a.id, a.skill_id, a.video_id, a.caregiver_id, a.status, a.score_pct, a.needs_review,
+                   a.nurse_status, a.nurse_note, a.reviewed_at, a.reviewed_by, a.created_at, a.overall_feedback,
+                   coalesce(nullif(u.name, ''), a.caregiver_name) AS caregiver_name, u.title AS caregiver_title,
+                   r.name AS reviewer_name, r.credentials AS reviewer_credentials,
+                   s.name AS skill_name, s.slug AS skill_slug, s.version AS skill_version, s.org_id,
                    v.duration_s,
                    (SELECT count(*) FROM safety_flags f WHERE f.attempt_id = a.id AND f.counts_toward_score) AS flag_count,
+                   (SELECT coalesce(jsonb_agg(jsonb_build_object(
+                             'id', f.id, 'kind', f.kind, 'title', f.title, 'description', f.description,
+                             'severity', f.severity, 'start_s', f.start_s, 'end_s', f.end_s) ORDER BY f.start_s), '[]')
+                      FROM safety_flags f WHERE f.attempt_id = a.id AND f.counts_toward_score) AS flags,
                    (SELECT j.status FROM jobs j WHERE j.attempt_id = a.id ORDER BY j.created_at DESC LIMIT 1) AS job_status
             FROM attempts a JOIN skills s ON s.id = a.skill_id JOIN videos v ON v.id = a.video_id
-            {where} ORDER BY a.created_at DESC""",
+            LEFT JOIN users u ON u.id = a.caregiver_id LEFT JOIN users r ON r.id = a.reviewed_by
+            {"WHERE " + " AND ".join(where) if where else ""} ORDER BY a.created_at DESC""",
         params,
     )
+    rows = [progress.describe(r) for r in rows]
+    return [r for r in rows if r["review_state"] == state] if state else rows
 
 
 def get_attempt(attempt_id) -> dict | None:
     """The attempt with its rubric steps joined to their results, violations and flags."""
     attempt = db.fetch_one(
-        """SELECT a.*, s.name AS skill_name, s.slug AS skill_slug, s.order_matters, s.reference_video_id
-           FROM attempts a JOIN skills s ON s.id = a.skill_id WHERE a.id=%s""",
+        """SELECT a.*, s.name AS skill_name, s.slug AS skill_slug, s.version AS skill_version, s.order_matters,
+                  s.reference_video_id, s.org_id,
+                  u.title AS caregiver_title, u.name AS caregiver_account_name,
+                  r.name AS reviewer_name, r.credentials AS reviewer_credentials
+           FROM attempts a JOIN skills s ON s.id = a.skill_id
+           LEFT JOIN users u ON u.id = a.caregiver_id LEFT JOIN users r ON r.id = a.reviewed_by
+           WHERE a.id=%s""",
         (attempt_id,),
     )
     if not attempt:
         return None
+    attempt["caregiver_name"] = attempt.pop("caregiver_account_name") or attempt["caregiver_name"]
     attempt["steps"] = db.fetch_all(
         """SELECT st.step_id, st.ord, st.title, st.description, st.critical, st.order_dependent, st.must_follow,
                   st.evals, st.start_s AS ref_start_s, st.end_s AS ref_end_s,
@@ -318,20 +428,24 @@ def get_attempt(attempt_id) -> dict | None:
     )
     attempt["safety_flags"] = db.fetch_all(
         "SELECT * FROM safety_flags WHERE attempt_id=%s ORDER BY start_s", (attempt_id,))
-    attempt["video"] = get_video(attempt["video_id"])
+    attempt["video"] = _with_availability(get_video(attempt["video_id"]))
+    attempt["reference_video"] = (
+        _with_availability(get_video(attempt["reference_video_id"])) if attempt["reference_video_id"] else None)
     attempt["job"] = db.fetch_one(
         "SELECT id, status, stage, stages, error FROM jobs WHERE attempt_id=%s ORDER BY created_at DESC LIMIT 1",
         (attempt_id,),
     )
-    attempt["final_status"] = attempt["nurse_status"] or attempt["status"]
-    return attempt
+    attempt["job_status"] = attempt["job"]["status"] if attempt["job"] else None
+    attempt["flag_count"] = sum(1 for f in attempt["safety_flags"] if f["counts_toward_score"])
+    return progress.describe(attempt)
 
 
-def review_attempt(attempt_id, overall: str | None, note: str, steps: list[dict]) -> None:
+def review_attempt(attempt_id, overall: str | None, note: str, steps: list[dict], reviewed_by=None) -> None:
     with db.tx() as conn:
         conn.execute(
-            "UPDATE attempts SET nurse_status=coalesce(%s, nurse_status), nurse_note=%s, reviewed_at=now(), needs_review=false WHERE id=%s",
-            (overall, note, attempt_id),
+            "UPDATE attempts SET nurse_status=coalesce(%s, nurse_status), nurse_note=%s, reviewed_at=now(), "
+            "needs_review=false, reviewed_by=coalesce(%s, reviewed_by) WHERE id=%s",
+            (overall, note, reviewed_by, attempt_id),
         )
         for s in steps:
             conn.execute(

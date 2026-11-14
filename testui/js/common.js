@@ -1,4 +1,4 @@
-// Shared helpers for every FirstShift screen. Loaded as an ES module.
+// Shared helpers for every screen of the built-in test UI. Loaded as an ES module.
 // Each page calls mountNav("<page>") once, then uses api(), fmtTime(), badge() etc.
 
 const PAGES = [
@@ -9,12 +9,28 @@ const PAGES = [
   { id: "dashboard", href: "/dashboard.html", label: "Safety dashboard", roles: ["nurse"] },
 ];
 
+const ROLE_KEY = "testui.role";
+
+// The role of the signed-in account, remembered from the last page load so the nav can be
+// drawn at once. mountNav() checks it against the server and reloads if it was stale.
 export function getRole() {
-  try { return localStorage.getItem("firstshift.role") || "nurse"; } catch { return "nurse"; }
+  try { return localStorage.getItem(ROLE_KEY) || "nurse"; } catch { return "nurse"; }
 }
 
-export function setRole(role) {
-  try { localStorage.setItem("firstshift.role", role); } catch { /* storage unavailable */ }
+function rememberRole(role) {
+  try { localStorage.setItem(ROLE_KEY, role); } catch { /* storage unavailable */ }
+}
+
+function toLogin() {
+  if (location.pathname === "/login.html") return;
+  location.replace(`/login.html?next=${encodeURIComponent(location.pathname + location.search)}`);
+}
+
+let userPromise = null;
+// The signed-in user, or null. One request per page.
+export function currentUser() {
+  userPromise ||= fetch("/api/auth/session").then((res) => res.json()).then((body) => body.user).catch(() => null);
+  return userPromise;
 }
 
 export function mountNav(active) {
@@ -25,16 +41,25 @@ export function mountNav(active) {
     .map((p) => `<a class="link ${p.id === active ? "active" : ""}" href="${p.href}">${p.label}</a>`)
     .join("");
   nav.innerHTML = `
-    <a class="brand" href="/index.html">FirstShift</a>
+    <a class="brand" href="/index.html">Test UI</a>
     ${links}
     <span class="spacer"></span>
-    <span class="role-toggle" role="group" aria-label="Role">
-      <button data-role="nurse" class="${role === "nurse" ? "on" : ""}">Nurse</button>
-      <button data-role="caregiver" class="${role === "caregiver" ? "on" : ""}">Caregiver</button>
-    </span>`;
-  nav.querySelectorAll("[data-role]").forEach((b) =>
-    b.addEventListener("click", () => { setRole(b.dataset.role); location.reload(); }));
+    <span class="small muted" id="nav-user"></span>
+    <span class="role-toggle"><button id="nav-signout" type="button">Sign out</button></span>`;
+  nav.querySelector("#nav-signout").addEventListener("click", async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    location.replace("/login.html");
+  });
   document.body.prepend(nav);
+  currentUser().then((user) => {
+    if (!user) return toLogin();
+    if (user.role !== role) {
+      rememberRole(user.role);
+      location.reload();
+      return;
+    }
+    nav.querySelector("#nav-user").textContent = `${user.name} · ${user.role} · ${user.org.name}`;
+  });
   return role;
 }
 
@@ -47,11 +72,13 @@ export async function api(path, options = {}) {
     delete init.json;
   }
   const res = await fetch(`/api${path}`, init);
+  if (res.status === 401 && !path.startsWith("/auth/")) toLogin();
   if (!res.ok) {
     let detail = res.statusText;
     try { detail = (await res.json()).detail || detail; } catch { /* not json */ }
     throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
   }
+  if (path === "/auth/login" || path === "/auth/signup") userPromise = null;
   return res.status === 204 ? null : res.json();
 }
 

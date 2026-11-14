@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import config, db, gemini, repo
-from .routers import attempts, jobs, review, safety, skills, videos
+from .routers import accounts, attempts, jobs, people, review, safety, skills, videos
 
 
 @asynccontextmanager
@@ -26,16 +26,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FirstShift", lifespan=lifespan)
 
-# The Next.js apps under frontend/ run on other local ports and call this API directly.
+# The Next.js app proxies /api to this server, so the browser sees one origin and the session
+# cookie just works. CORS with credentials stays on for calling the API directly in development.
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
 )
 
-for module in (videos, skills, attempts, review, safety, jobs):
+for module in (accounts, people, videos, skills, attempts, review, safety, jobs):
     app.include_router(module.router, prefix="/api")
 
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
-<title>Practice a skill · FirstShift</title>
+<title>Practice a skill · Test UI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/css/style.css">
@@ -51,7 +51,7 @@
 </div>
 </main>
 <script type="module">
-import { api, esc, fmtTime, mountNav, qs, showError, thumbUrl, videoUrl } from "/js/common.js";
+import { api, currentUser, esc, fmtTime, mountNav, qs, showError, thumbUrl, videoUrl } from "/js/common.js";
 import { createRecorder, uploadAndWait } from "/js/recorder.js";
 
 mountNav("attempt");
@@ -61,6 +61,13 @@ const select = $("#skill");
 const nameInput = $("#caregiver");
 
 try { nameInput.value = localStorage.getItem(NAME_KEY) || ""; } catch { /* storage unavailable */ }
+// A caregiver's attempt always goes under their own account, so the name is not theirs to type.
+currentUser().then((user) => {
+  if (user?.role === "caregiver") {
+    nameInput.value = user.name;
+    nameInput.readOnly = true;
+  }
+});
 nameInput.addEventListener("input", () => {
   try { localStorage.setItem(NAME_KEY, nameInput.value.trim()); } catch { /* storage unavailable */ }
 });

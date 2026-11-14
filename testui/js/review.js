@@ -106,7 +106,7 @@ function violationSpan(v) {
 // --- rendering --------------------------------------------------------------
 function render() {
   const a = state.attempt;
-  document.title = `Review: ${a.skill_name} · FirstShift`;
+  document.title = `Review: ${a.skill_name} · Test UI`;
   if (!state.loadedVideo) {
     video.poster = thumbUrl(a.video_id, 1);
     video.src = videoUrl(a.video_id);

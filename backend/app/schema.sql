@@ -34,8 +34,7 @@ CREATE TABLE IF NOT EXISTS skills (
   notes               text NOT NULL DEFAULT '',
   reference_video_id  uuid REFERENCES videos(id) ON DELETE SET NULL,
   created_at          timestamptz NOT NULL DEFAULT now(),
-  updated_at          timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (slug, version)
+  updated_at          timestamptz NOT NULL DEFAULT now()
 );
 -- @@
 CREATE TABLE IF NOT EXISTS skill_steps (
@@ -254,3 +253,73 @@ SELECT add_continuous_aggregate_policy('pose_1s',
 -- Which process is running a job ("host:pid"), so a restarted server only marks its own
 -- dead jobs as interrupted and leaves jobs that a script is still running.
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS runner text;
+-- @@
+-- Accounts. An org is an agency: its nurses and caregivers share one set of skills and
+-- attempts. Everyone who signs up joins the default agency. The sample agency holds
+-- showcase data (see scripts/seed_sample.py) and is only reached by its own accounts.
+CREATE TABLE IF NOT EXISTS orgs (
+  id          uuid PRIMARY KEY,
+  name        text NOT NULL,
+  is_sample   boolean NOT NULL DEFAULT false,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+-- @@
+INSERT INTO orgs (id, name) VALUES ('00000000-0000-0000-0000-000000000001', 'My agency')
+ON CONFLICT (id) DO NOTHING;
+-- @@
+-- password_hash NULL means the person is on the roster but cannot log in.
+CREATE TABLE IF NOT EXISTS users (
+  id                     uuid PRIMARY KEY,
+  org_id                 uuid NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  role                   text NOT NULL CHECK (role IN ('nurse', 'caregiver')),
+  name                   text NOT NULL,
+  email                  text NOT NULL UNIQUE,
+  password_hash          text,
+  title                  text NOT NULL DEFAULT '',
+  credentials            text NOT NULL DEFAULT '',
+  location               text NOT NULL DEFAULT '',
+  hire_date              date,
+  next_shift             text NOT NULL DEFAULT '',
+  employment             text NOT NULL DEFAULT 'onboarding' CHECK (employment IN ('onboarding', 'active')),
+  prefs                  jsonb NOT NULL DEFAULT '{}',
+  notifications_seen_at  timestamptz,
+  created_at             timestamptz NOT NULL DEFAULT now()
+);
+-- @@
+-- Only a hash of the session token is stored; the token itself lives in the browser cookie.
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash  text PRIMARY KEY,
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  expires_at  timestamptz NOT NULL
+);
+-- @@
+-- Ownership. A skill belongs to the org of its reference video; an attempt to the org of its skill.
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS org_id uuid NOT NULL
+  DEFAULT '00000000-0000-0000-0000-000000000001' REFERENCES orgs(id) ON DELETE CASCADE;
+-- @@
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS uploaded_by uuid REFERENCES users(id) ON DELETE SET NULL;
+-- @@
+ALTER TABLE skills ADD COLUMN IF NOT EXISTS org_id uuid NOT NULL
+  DEFAULT '00000000-0000-0000-0000-000000000001' REFERENCES orgs(id) ON DELETE CASCADE;
+-- @@
+-- Caregiver-facing copy a nurse may set: description, explanation, safety_reminder,
+-- estimated_minutes, cues [{at_s, message}]. Anything missing is derived from the rubric.
+ALTER TABLE skills ADD COLUMN IF NOT EXISTS guide jsonb NOT NULL DEFAULT '{}';
+-- @@
+-- Versions are numbered per agency, so two agencies can each have a "sit_to_stand".
+ALTER TABLE skills DROP CONSTRAINT IF EXISTS skills_slug_version_key;
+-- @@
+CREATE UNIQUE INDEX IF NOT EXISTS skills_org_slug_version_idx ON skills (org_id, slug, version);
+-- @@
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS caregiver_id uuid REFERENCES users(id) ON DELETE SET NULL;
+-- @@
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS reviewed_by uuid REFERENCES users(id) ON DELETE SET NULL;
+-- @@
+-- Optional extra notes shown with an attempt, e.g. {"movement": [{label, value, status, note}]}.
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS extras jsonb NOT NULL DEFAULT '{}';
+-- @@
+CREATE INDEX IF NOT EXISTS attempts_caregiver_idx ON attempts (caregiver_id, created_at DESC);
+-- @@
+-- A short heading for a flag. The pipeline leaves it NULL and the UI falls back to the kind.
+ALTER TABLE safety_flags ADD COLUMN IF NOT EXISTS title text;

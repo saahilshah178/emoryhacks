@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:,">
-<title>Skills · FirstShift</title>
+<title>Skills · Test UI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/css/style.css">
@@ -21,7 +21,7 @@
 import { api, mountNav, esc, fmtTime, fmtDate, badge, thumbUrl, showError, attemptListStatus, humanize } from "/js/common.js";
 const role = mountNav("home");
 document.querySelector("#sub").textContent = role === "nurse"
-  ? "Record a reference video and FirstShift turns it into a step-by-step rubric."
+  ? "Record a reference video and the AI turns it into a step-by-step rubric."
   : "Pick a skill, record yourself, and get step-by-step feedback.";
 document.querySelector("#actions").innerHTML = role === "nurse"
   ? `<a class="btn primary" href="/record.html">Record reference</a>`

@@ -14,12 +14,13 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from .. import db, repo
+from .. import auth, db, repo
 from ..stages import pose
 
-router = APIRouter(prefix="/safety", tags=["safety"])
+# Nurses only, and every query is limited to the nurse's own agency.
+router = APIRouter(prefix="/safety", tags=["safety"], dependencies=[Depends(auth.nurse)])
 
 THRESHOLDS = {
     "off_center_offset": pose.OFF_CENTER_OFFSET,  # |com_offset| above this: centre of mass outside the feet
@@ -102,18 +103,18 @@ def _role_figures(row: dict) -> dict:
     return row
 
 
-def _video_or_404(video_id: str) -> dict:
+def _video_or_404(video_id: str, user: dict) -> dict:
     try:
         video = repo.get_video(uuid.UUID(video_id))
     except ValueError:
         video = None
-    if not video:
+    if not video or video["org_id"] != user["org_id"]:
         raise HTTPException(404, "Video not found")
     return video
 
 
 @router.get("/overview")
-def overview():
+def overview(user: dict = Depends(auth.nurse)):
     """One row per video with pose data: what it is, how densely it was measured, the pose_1s
     rollup, per-role readings with the time they cover (_role_figures), and safety-flag
     counts. Peak trunk tilt is the 95th percentile, robust to single bad frames. Attempts
@@ -132,7 +133,8 @@ def overview():
               GROUP BY f.video_id)
             SELECT v.id AS video_id, v.kind, v.original_name, v.duration_s, v.recorded_at, v.fps AS video_fps,
                    q.sample_fps,
-                   a.id AS attempt_id, a.caregiver_name, coalesce(a.nurse_status, a.status) AS attempt_status,
+                   a.id AS attempt_id, coalesce((SELECT u.name FROM users u WHERE u.id = a.caregiver_id), a.caregiver_name) AS caregiver_name,
+                   coalesce(a.nurse_status, a.status) AS attempt_status,
                    a.score_pct, a.skill_match,
                    coalesce(sa.name, sr.name) AS skill_name, coalesce(sa.slug, sr.slug) AS skill_slug,
                    r.seconds_tracked, r.balance_avg, r.balance_min, r.trunk_tilt_max,
@@ -152,9 +154,9 @@ def overview():
             LEFT JOIN skills sa ON sa.id = a.skill_id
             LEFT JOIN LATERAL (SELECT name, slug FROM skills s WHERE s.reference_video_id = v.id
                                ORDER BY s.version DESC LIMIT 1) sr ON true
-            WHERE NOT (v.kind = 'attempt' AND a.id IS NULL)
+            WHERE NOT (v.kind = 'attempt' AND a.id IS NULL) AND v.org_id = %(org)s
             ORDER BY v.recorded_at DESC""",
-        _PARAMS,
+        {**_PARAMS, "org": user["org_id"]},
     )
     for r in rows:
         r["every_frame"] = _sampling(r["sample_fps"], r["video_fps"])["every_frame"]
@@ -195,13 +197,13 @@ _SERIES_FROM_FRAMES = """
 
 
 @router.get("/videos/{video_id}/series")
-def series(video_id: str, bucket_s: float = Query(1.0, gt=0, le=600)):
+def series(video_id: str, bucket_s: float = Query(1.0, gt=0, le=600), user: dict = Depends(auth.nurse)):
     """Per-person readings in buckets of bucket_s seconds of video time, gap-filled so a
     bucket where a person is not seen comes back with null readings. Buckets of a second
     or more roll up the pose_1s continuous aggregate; finer ones read pose_frames.
     t_offset is the bucket's centre in video seconds (buckets align to whole wall-clock
     seconds, so the first one can start up to a bucket before the video does)."""
-    video = _video_or_404(video_id)
+    video = _video_or_404(video_id, user)
     start = video["recorded_at"]
     finish = start + dt.timedelta(seconds=float(video["duration_s"] or 0) + 1)
     source = _SERIES_FROM_ROLLUP if bucket_s >= 1 else _SERIES_FROM_FRAMES
@@ -221,11 +223,12 @@ def series(video_id: str, bucket_s: float = Query(1.0, gt=0, le=600)):
 
 
 @router.get("/videos/{video_id}/frames")
-def frames(video_id: str, metrics: str = Query("l_knee,r_knee"), points: int = Query(600, ge=10, le=5000)):
+def frames(video_id: str, metrics: str = Query("l_knee,r_knee"), points: int = Query(600, ge=10, le=5000),
+           user: dict = Depends(auth.nurse)):
     """Per-frame readings for each person, downsampled to at most `points` per series with
     the toolkit's lttb (largest triangle three buckets), which keeps peaks and dips.
     A null is inserted wherever a person goes unseen, so charts break the line there."""
-    video = _video_or_404(video_id)
+    video = _video_or_404(video_id, user)
     wanted = [m for m in metrics.split(",") if m in FRAME_METRICS]
     if not wanted:
         raise HTTPException(400, f"metrics must be some of: {', '.join(FRAME_METRICS)}")
@@ -256,14 +259,15 @@ def frames(video_id: str, metrics: str = Query("l_knee,r_knee"), points: int = Q
 
 
 @router.get("/videos/{video_id}/summary")
-def summary(video_id: str):
+def summary(video_id: str, user: dict = Depends(auth.nurse)):
     """Tracks with roles and per-track statistics, the stored safety flags (pose flags were
     already named by role with pose.relabel_flags), how densely the video was measured, and
     the thresholds in use. A track's balance figures are shares of its standing_s and are
     None when it stood for less than THRESHOLDS["min_standing_s"]."""
-    video = _video_or_404(video_id)
+    video = _video_or_404(video_id, user)
     attempt = db.fetch_one(
-        """SELECT a.id, a.caregiver_name, coalesce(a.nurse_status, a.status) AS status, a.score_pct,
+        """SELECT a.id, coalesce((SELECT u.name FROM users u WHERE u.id = a.caregiver_id), a.caregiver_name) AS caregiver_name,
+                  coalesce(a.nurse_status, a.status) AS status, a.score_pct,
                   s.name AS skill_name, s.slug AS skill_slug
            FROM attempts a JOIN skills s ON s.id = a.skill_id WHERE a.video_id = %s""", (video["id"],))
     skill = attempt or db.fetch_one(
@@ -309,7 +313,8 @@ def summary(video_id: str):
 
 
 @router.get("/trends")
-def trends(bucket: str = Query("1 day", pattern=r"^\d+ (hour|hours|day|days|week|weeks)$")):
+def trends(bucket: str = Query("1 day", pattern=r"^\d+ (hour|hours|day|days|week|weeks)$"),
+           user: dict = Depends(auth.nurse)):
     """Per-role readings across attempts over calendar time, grouped by skill: one point per
     attempt, and one row per skill per time_bucket of the attempts' recording times that
     averages the attempts in it (so a long attempt counts once, like a short one).
@@ -317,16 +322,17 @@ def trends(bucket: str = Query("1 day", pattern=r"^\d+ (hour|hours|day|days|week
     attempts = db.fetch_all(
         f"""WITH rate AS ({_ALL_SAMPLE_RATES})
             SELECT a.id AS attempt_id, v.recorded_at, time_bucket(%(bucket)s::interval, v.recorded_at) AS bucket,
-                   a.caregiver_name, coalesce(a.nurse_status, a.status) AS status, a.score_pct,
+                   coalesce((SELECT u.name FROM users u WHERE u.id = a.caregiver_id), a.caregiver_name) AS caregiver_name,
+                   coalesce(a.nurse_status, a.status) AS status, a.score_pct,
                    s.slug AS skill_slug, s.name AS skill_name, q.sample_fps, {_ROLE_COUNTS}
             FROM pose_frames f
             JOIN attempts a ON a.video_id = f.video_id JOIN skills s ON s.id = a.skill_id
             JOIN videos v ON v.id = f.video_id
             LEFT JOIN rate q ON q.video_id = f.video_id
             LEFT JOIN pose_tracks t ON t.video_id = f.video_id AND t.person_idx = f.person_idx
-            WHERE a.skill_match IS NOT FALSE
+            WHERE a.skill_match IS NOT FALSE AND v.org_id = %(org)s
             GROUP BY a.id, v.recorded_at, s.slug, s.name, q.sample_fps ORDER BY v.recorded_at""",
-        {**_PARAMS, "bucket": bucket},
+        {**_PARAMS, "bucket": bucket, "org": user["org_id"]},
     )
     groups: dict[tuple, list[dict]] = {}
     for a in attempts:
@@ -347,9 +353,11 @@ def trends(bucket: str = Query("1 day", pattern=r"^\d+ (hour|hours|day|days|week
 
 
 @router.get("/storage")
-def storage():
+def storage(user: dict = Depends(auth.nurse)):
     """Facts about the pose_frames hypertable and its rollup for the "Stored in Tiger Data" panel.
-    Each part is read independently so one unavailable catalogue view does not hide the rest."""
+    Each part is read independently so one unavailable catalogue view does not hide the rest.
+    "rows" counts the nurse's own agency's readings; the hypertable, chunk and size figures
+    describe the table as a whole."""
     def one(sql: str, params=None):
         try:
             return db.fetch_one(sql, params)
@@ -366,8 +374,9 @@ def storage():
         "database": one("SELECT current_database() AS name, "
                         "(SELECT extversion FROM pg_extension WHERE extname='timescaledb') AS timescaledb, "
                         "(SELECT extversion FROM pg_extension WHERE extname='timescaledb_toolkit') AS toolkit"),
-        "rows": one("SELECT count(*) AS pose_frames, count(DISTINCT video_id) AS videos, min(ts) AS first_ts, "
-                    "max(ts) AS last_ts FROM pose_frames"),
+        "rows": one("SELECT count(*) AS pose_frames, count(DISTINCT f.video_id) AS videos, min(f.ts) AS first_ts, "
+                    "max(f.ts) AS last_ts FROM pose_frames f JOIN videos v ON v.id = f.video_id WHERE v.org_id = %s",
+                    (user["org_id"],)),
         "hypertable": one("SELECT hypertable_name, num_chunks, compression_enabled AS columnstore_enabled "
                           "FROM timescaledb_information.hypertables WHERE hypertable_name='pose_frames'"),
         "size": one("SELECT table_bytes, index_bytes, toast_bytes, total_bytes, pg_size_pretty(total_bytes) AS total "

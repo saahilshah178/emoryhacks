@@ -94,6 +94,11 @@ class Case:
     truth: dict[str, tuple[float, float]] | None = None  # step times in the source video; None = no ground truth
     expect_violations: tuple[tuple[str, str], ...] = ()  # (step_id, expected_after)
     expect_missing: tuple[str, ...] = ()
+    reference: str | None = None  # the video the rubric was written from, when it is not the source
+
+    @property
+    def skill_name(self) -> str:
+        return "Sit to stand" if self.rubric is SIT_TO_STAND else "Fall response"
 
 
 def _truth(rubric: Rubric) -> dict[str, tuple[float, float]]:
@@ -114,10 +119,10 @@ CASES: list[Case] = [
          expect_violations=(("s2", "s1"),)),
     Case("fall_without_s6", FALL, FALL_RESPONSE, [(1.5, 61.0)], _truth(FALL_RESPONSE), expect_missing=("s6",)),
     # Same skill, different people and room: a staged controlled fall, no bed and no walk.
-    Case("fall_backup", "Fall Response Backup.mp4", FALL_RESPONSE, [], None),
+    Case("fall_backup", "Fall Response Backup.mp4", FALL_RESPONSE, [], None, reference=FALL),
     # A different skill altogether: no sit-to-stand step should be found.
     Case("glove_vs_sts", "Glove Removal Primary.mp4", SIT_TO_STAND, [], None,
-         expect_missing=("s1", "s2", "s3", "s4", "s5", "s6", "s7")),
+         expect_missing=("s1", "s2", "s3", "s4", "s5", "s6", "s7"), reference=STS),
 ]
 
 BY_NAME = {c.name: c for c in CASES}

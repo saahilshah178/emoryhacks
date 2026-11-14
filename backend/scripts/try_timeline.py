@@ -4,27 +4,37 @@
   uv run python -m scripts.try_timeline fall_original fall_backup
   uv run python -m scripts.try_timeline all --refine on      # force the boundary pass (default: auto)
   uv run python -m scripts.try_timeline --list
+  uv run python -m scripts.try_timeline sts_swap_s3_s4 --attempt   # also store it for review.html
 
 Cases live in tests/fixtures_timeline.py. Each cut video is built once with media.cut
 and ingested once, so repeat runs reuse the Gemini upload. Prints, per step, the found
 time against the true time and the boundary error in seconds.
+
+--attempt instead runs the case through the whole attempt pipeline under a skill made
+from the case's rubric, so the result can be opened on the nurse review screen. Stages
+other than timeline are whatever this branch has (placeholders on feat/timeline).
 """
 from __future__ import annotations
 
 import argparse
 import time
 
-from app import config, db, gemini, jobs, media
+from app import config, db, gemini, jobs, media, repo
+from app.models import Classification
 from app.stages import timeline
 from tests.fixtures_timeline import BY_NAME, CASES, Case, expected_times
+
+
+def _stored_video(kind: str, name: str) -> dict | None:
+    return db.fetch_one("SELECT * FROM videos WHERE kind=%s AND original_name=%s ORDER BY recorded_at DESC LIMIT 1",
+                        (kind, name))
 
 
 def video_for(case: Case) -> dict:
     """The ingested video row for a case, building and ingesting it on first use."""
     # The segments are part of the name so that editing a case builds a fresh cut.
     name = f"fixture:{case.name}:{case.segments}" if case.segments else case.source
-    row = db.fetch_one("SELECT * FROM videos WHERE kind='attempt' AND original_name=%s ORDER BY recorded_at DESC LIMIT 1",
-                       (name,))
+    row = _stored_video("attempt", name)
     if row:
         return row
     src = config.REFERENCE_DIR / case.source
@@ -33,6 +43,25 @@ def video_for(case: Case) -> dict:
         media.cut(src, cut, case.segments)
         src = cut
     return jobs.ingest(str(src), "attempt", name)
+
+
+def store_attempt(case: Case) -> str:
+    """Run the case as a real attempt under a skill built from its rubric; return the attempt id."""
+    ref_name = case.reference or case.source
+    ref = _stored_video("reference", ref_name) or jobs.ingest(str(config.REFERENCE_DIR / ref_name), "reference", ref_name)
+    classification = Classification(
+        skill_slug=f"test_{case.skill_name.lower().replace(' ', '_')}", skill_name=f"{case.skill_name} (test rubric)",
+        category="other", confidence=1.0, summary="Hand-written rubric from tests/fixtures_timeline.py.", people=[],
+        order_matters=case.rubric.order_matters,
+    )
+    skill_id = repo.create_skill(classification, case.rubric, ref["id"])
+    video = video_for(case)
+    attempt_id = repo.create_attempt(skill_id, video["id"], f"Fixture {case.name}")
+    job_id = repo.create_job("attempt", video["id"], skill_id=skill_id, attempt_id=attempt_id)
+    jobs.run_attempt(job_id)
+    job = repo.get_job(job_id)
+    print(f"{case.name}: job {job['status']} {job['error'] or ''}")
+    return str(attempt_id)
 
 
 def run_case(case: Case, refine: bool | None) -> list[float]:
@@ -82,12 +111,18 @@ def main() -> None:
     parser.add_argument("cases", nargs="*", default=["sts_original", "sts_swap_s3_s4", "sts_without_s4"])
     parser.add_argument("--refine", choices=["auto", "on", "off"], default="auto", help="per-step boundary pass")
     parser.add_argument("--list", action="store_true")
+    parser.add_argument("--attempt", action="store_true", help="store each case as an attempt for review.html")
     args = parser.parse_args()
     if args.list:
         for c in CASES:
             print(c.name, "-", c.source)
         return
     names = [c.name for c in CASES] if args.cases == ["all"] else args.cases
+    if args.attempt:
+        for name in names:
+            print(f"  review: http://localhost:8000/review.html?id={store_attempt(BY_NAME[name])}")
+        print(f"Recorded spend: ${gemini.spent_usd():.4f} of ${config.GEMINI_BUDGET_USD:.2f}")
+        return
     all_errors: list[float] = []
     for name in names:
         all_errors += run_case(BY_NAME[name], refine={"auto": None, "on": True, "off": False}[args.refine])

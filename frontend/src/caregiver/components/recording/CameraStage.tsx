@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Circle, FileVideo, Square, VideoOff } from "lucide-react";
+import { Circle, FileVideo, RotateCcw, Square, VideoOff } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
 import { CoachingCue } from "@/caregiver/components/recording/CoachingCue";
@@ -40,6 +40,7 @@ export function CameraStage({
     recording,
     start,
     stop,
+    reset,
     useFile: chooseFile,
   } = useRecorder({ facingMode: "user" });
   const fileInput = useRef<HTMLInputElement>(null);
@@ -181,6 +182,13 @@ export function CameraStage({
                 <FileVideo className="h-4 w-4" aria-hidden />
                 {phase === "unavailable" ? "Choose a video file" : "Choose a video file instead"}
               </Button>
+              {phase === "unavailable" ? (
+                // After allowing the camera in the browser there is no need to reload the page.
+                <Button variant="secondary" size="lg" onClick={reset} className="w-full">
+                  <RotateCcw className="h-4 w-4" aria-hidden />
+                  Try the camera again
+                </Button>
+              ) : null}
               <Button variant="ghost" size="lg" onClick={onBack} className="w-full">
                 Back
               </Button>

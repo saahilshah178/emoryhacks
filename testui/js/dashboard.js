@@ -1,6 +1,8 @@
 // Safety dashboard: every number comes from /api/safety/*, which reads Tiger Data.
 // Charts use uPlot (loaded as a global from jsDelivr in dashboard.html).
-import { api, mountNav, esc, fmtTime, fmtDate, badge, videoUrl, thumbUrl, qs, showError } from "/js/common.js";
+import {
+  api, mountNav, esc, fmtTime, fmtDate, badge, playSegment, timeChip, videoUrl, thumbUrl, qs, showError,
+} from "/js/common.js";
 
 mountNav("dashboard");
 
@@ -206,7 +208,7 @@ const flagKind = (kind) => (kind === "other" ? "other observation" : kind.replac
 function renderFlags(summary) {
   const flags = [...summary.flags].sort((a, b) => a.start_s - b.start_s);
   document.querySelector("#flags").innerHTML = flags.length ? flags.map((f) => `<div class="flag">
-      <button class="time" data-seek="${f.start_s}">${fmtTime(f.start_s)}</button>
+      ${timeChip(f.start_s, f.end_s)}
       <div class="grow"><span class="badge sev-${esc(f.severity)}">${esc(f.severity)}</span>
         <strong>${esc(flagKind(f.kind))}</strong> <span class="muted small">${[f.person_label, FLAG_ORIGIN[f.source] || f.source,
           f.counts_toward_score && "counts toward score"].filter(Boolean).map(esc).join(" · ")}</span>
@@ -227,18 +229,19 @@ function renderTracks(summary) {
       <th class="num">Tilt avg / p95</th><th class="num">Bent &gt;60°</th></tr>
     ${rows.map((t) => `<tr>
       <td><span class="chip" style="background:${roleColour(t.role)}"></span>${esc(roleWord(t.role))}</td>
-      <td><button class="time" data-seek="${t.first_t}">${fmtRange(t.first_t, t.last_t)}</button></td>
+      <td>${timeChip(t.first_t, t.last_t)}</td>
       <td class="num">${pct(t.valid_share)}</td><td class="num">${standing(t)}</td><td class="num">${num(t.balance_avg, 2)}</td>
       <td class="num">${pct(t.off_center_share)}</td><td class="num">${deg(t.tilt_avg)} / ${deg(t.tilt_p95)}</td>
       <td class="num">${pct(t.bent_share)}</td></tr>`).join("")}
   </table>` : `<p class="muted small">Nobody was detected in this video.</p>`;
 }
 
-function fmtRange(a, b) { return `${fmtTime(a)}–${fmtTime(b)}`; }
-
+// A time chip plays its stretch of the video and stops at the end of it.
 document.addEventListener("click", (e) => {
-  const seek = e.target.closest("[data-seek]");
-  if (seek) seekTo(Number(seek.dataset.seek));
+  const chip = e.target.closest("[data-seek]");
+  if (!chip) return;
+  playSegment(player, chip.dataset.seek, chip.dataset.end);
+  movePlayheads();
 });
 
 function seekTo(t) {

@@ -1,7 +1,7 @@
 // Skill screen: the reference video, its rubric steps with jump-to-step links, and an
 // edit mode that saves through PATCH /api/skills/{id} and /api/skills/{id}/steps/{step_id}.
 import {
-  api, esc, fmtRange, fmtTime, humanize, mountNav, pollJob, qs, showError, stagesHtml, thumbUrl, videoUrl,
+  api, esc, fmtRange, fmtTime, humanize, mountNav, playSegment, pollJob, qs, showError, stagesHtml, thumbUrl, videoUrl,
 } from "/js/common.js";
 
 const role = mountNav("home");
@@ -11,8 +11,6 @@ const $ = (sel) => document.querySelector(sel);
 let skill = null;
 let editing = false;
 let video = null;          // the <video> element
-let stopAt = null;         // pause here after a step chip started playback
-let seekFromChip = false;  // distinguishes our own seeks from the user scrubbing
 
 // --- loading -----------------------------------------------------------------
 async function load() {
@@ -104,7 +102,7 @@ function stepHtml(s) {
           <h3>${s.ord}. ${esc(s.title)}</h3>
           <p class="muted">${esc(s.description)}</p>
           <div class="step-meta">
-            <button class="chip" data-seek="${s.step_id}" title="Play this step">${fmtRange(s.start_s, s.end_s)}</button>
+            <button class="chip" data-seek="${s.step_id}" title="Play this step, then stop">${fmtRange(s.start_s, s.end_s)}</button>
             ${s.critical ? `<span class="badge critical">Critical</span>` : ""}
             ${after.length ? `<span class="muted small">after step ${after.join(", ")}</span>` : ""}
           </div>
@@ -295,14 +293,8 @@ function renderPlayer() {
   const poster = thumbUrl(skill.video.id, first ? (first.start_s + first.end_s) / 2 : 0);
   $("#player").innerHTML = `<video controls preload="metadata" poster="${poster}" src="${videoUrl(skill.video.id)}"></video>`;
   video = $("#player video");
-  video.addEventListener("timeupdate", () => {
-    if (stopAt !== null && video.currentTime >= stopAt) { video.pause(); stopAt = null; }
-    highlight();
-  });
-  video.addEventListener("seeked", () => {
-    if (seekFromChip) seekFromChip = false; else stopAt = null;
-    highlight();
-  });
+  video.addEventListener("timeupdate", highlight);
+  video.addEventListener("seeked", highlight);
 }
 
 function playStep(stepId) {
@@ -315,10 +307,7 @@ function playStep(stepId) {
     start = Number(card.querySelector('[data-field="start_s"]').value) || 0;
     end = Number(card.querySelector('[data-field="end_s"]').value) || start + 1;
   }
-  seekFromChip = true;
-  stopAt = end;
-  video.currentTime = start;
-  video.play().catch(() => { /* autoplay can be refused; the seek still happened */ });
+  playSegment(video, start, end); // plays the step and stops at its end; play again to carry on
   video.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 

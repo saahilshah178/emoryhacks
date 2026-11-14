@@ -2,7 +2,8 @@
 // The nurse verifies an attempt by jumping straight to each step, flag and order
 // violation instead of watching the whole video, then records a decision.
 import {
-  api, badge, esc, fmtDate, fmtRange, fmtTime, mountNav, qs, showError, stagesHtml, stepTally, thumbUrl, videoUrl,
+  api, badge, esc, fmtDate, fmtRange, fmtTime, mountNav, playSegment, qs, showError, stagesHtml, stepTally, thumbUrl,
+  timeChip, videoUrl,
 } from "/js/common.js";
 
 mountNav("attempts");
@@ -32,7 +33,6 @@ const state = {
   overallNote: "",
   selected: null,    // step_id last jumped to, used by "Compare with reference"
   playing: null,     // step_id under the playhead
-  refEnd: null,      // stop the reference clip here
   loadedVideo: false,
   itemIndex: -1,     // position in reviewItems() of the last "Next item" visited
 };
@@ -95,10 +95,12 @@ function percent(x) {
   return x == null ? "—" : `${Math.round(Number(x) * 100)}%`;
 }
 
-function timeChip(start, end) {
-  if (start == null) return "";
-  const label = end != null && end > start ? fmtRange(start, end) : fmtTime(start);
-  return `<button class="time" data-seek="${Number(start)}">${label}</button>`;
+// An order violation is stored with the moment it happened. Show and play the whole step that
+// was done too early, so the nurse sees it from start to finish.
+function violationSpan(v) {
+  const step = stepById(v.step_id);
+  const times = step && stepTimes(step);
+  return times ? { start: times.start, end: times.end } : { start: v.at_s, end: null };
 }
 
 // --- rendering --------------------------------------------------------------
@@ -191,7 +193,7 @@ function renderSummary() {
 
   const timelineDone = steps().some((s) => s.found != null);
   const violations = a.order_violations.map((v) => `<div class="issue"><span style="color:var(--accent)">◆</span>
-      <span class="grow">${esc(v.message)}</span>${timeChip(v.at_s)}</div>`).join("");
+      <span class="grow">${esc(v.message)}</span>${timeChip(violationSpan(v).start, violationSpan(v).end)}</div>`).join("");
   const order = `<div class="card">
       <p class="label" style="margin-top:0">Order</p>
       ${violations || `<p class="muted small">${!a.order_matters ? "Order does not matter for this skill."
@@ -238,7 +240,7 @@ function renderBar() {
     const how = byGrader ? " · not located by the timeline, seen by the grader" : "";
     return `<button class="seg ${shownStatus(s)}${byGrader ? " by-grader" : ""}" data-step="${esc(s.step_id)}" data-seek="${start}"
       style="left:${pct(start)};width:${width};top:${2 + lane * LANE_PX}px"
-      title="${esc(`${s.ord}. ${s.title} (${fmtRange(start, end)})${out}${how}`)}">${s.ord}</button>`;
+      title="${esc(`${s.ord}. ${s.title} (${end != null ? fmtRange(start, end) : fmtTime(start)})${out}${how}`)}">${s.ord}</button>`;
   });
   const lanes = $("#lanes");
   lanes.style.height = `${Math.max(1, laneEnds.length) * LANE_PX + 4}px`;
@@ -247,10 +249,11 @@ function renderBar() {
 
   const a = state.attempt;
   const markers = [
-    ...a.safety_flags.map((f) => `<button class="marker flag ${esc(f.severity)}" data-seek="${f.start_s}" style="left:${pct(f.start_s)}"
-        title="${esc(`${FLAG_LABEL[f.kind] || f.kind} (${f.severity}) at ${fmtTime(f.start_s)}: ${f.description}`)}">▲</button>`),
-    ...a.order_violations.filter((v) => v.at_s != null).map((v) => `<button class="marker order" data-seek="${v.at_s}"
-        style="left:${pct(v.at_s)}" title="${esc(`${fmtTime(v.at_s)}: ${v.message}`)}">◆</button>`),
+    ...a.safety_flags.map((f) => `<button class="marker flag ${esc(f.severity)}" data-seek="${f.start_s}" data-end="${f.end_s ?? ""}"
+        style="left:${pct(f.start_s)}"
+        title="${esc(`${FLAG_LABEL[f.kind] || f.kind} (${f.severity}) at ${f.end_s != null ? fmtRange(f.start_s, f.end_s) : fmtTime(f.start_s)}: ${f.description}`)}">▲</button>`),
+    ...a.order_violations.filter((v) => v.at_s != null).map((v) => `<button class="marker order" data-seek="${violationSpan(v).start}"
+        data-end="${violationSpan(v).end ?? ""}" style="left:${pct(v.at_s)}" title="${esc(`${fmtTime(v.at_s)}: ${v.message}`)}">◆</button>`),
   ];
   $("#markers").innerHTML = markers.join("");
   const d = duration();
@@ -309,11 +312,12 @@ function renderDecision() {
 }
 
 // --- playback -------------------------------------------------------------
-function seek(t, play = true) {
-  if (t == null || Number.isNaN(Number(t))) return;
+// Play the attempt from t. With an end, playback stops there (the end of the step or flag);
+// pressing play again carries on from that point.
+function seek(t, end = null) {
+  if (t == null || t === "" || Number.isNaN(Number(t))) return;
   document.querySelectorAll(".step.focused").forEach((el) => el.classList.remove("focused"));
-  video.currentTime = Math.max(0, Number(t));
-  if (play) video.play().catch(() => { /* autoplay blocked: the nurse can press play */ });
+  playSegment(video, t, end);
   updatePlayhead();
 }
 
@@ -321,7 +325,7 @@ function seek(t, play = true) {
 function jumpToStep(step) {
   state.selected = step.step_id;
   const times = stepTimes(step);
-  if (times) seek(times.start); else focusCard(step);
+  if (times) seek(times.start, times.end); else focusCard(step);
   if ($("#compare").checked) playReference(step);
 }
 
@@ -370,9 +374,7 @@ function playReference(step) {
     return;
   }
   $("#ref-caption").textContent = `Reference: ${step.ord}. ${step.title} (${fmtRange(step.ref_start_s, step.ref_end_s)})`;
-  state.refEnd = step.ref_end_s;
-  refVideo.currentTime = step.ref_start_s;
-  refVideo.play().catch(() => {});
+  playSegment(refVideo, step.ref_start_s, step.ref_end_s);
 }
 
 // Items a nurse should look at: every failed or unverified step, order violations and
@@ -383,11 +385,13 @@ function reviewItems() {
   const items = [];
   for (const s of steps()) {
     if (s.status === "unverified" || s.status === "failed") {
-      items.push({ t: stepTimes(s)?.start ?? null, step: s, label: `${s.status === "failed" ? "Failed" : "Unverified"} step: ${s.ord}. ${s.title}` });
+      items.push({ t: stepTimes(s)?.start ?? null, end: stepTimes(s)?.end ?? null, step: s, label: `${s.status === "failed" ? "Failed" : "Unverified"} step: ${s.ord}. ${s.title}` });
     }
   }
-  for (const v of a.order_violations) items.push({ t: v.at_s, step: stepById(v.step_id), label: `Out of order: ${v.message}` });
-  for (const f of a.safety_flags) items.push({ t: f.start_s, label: `Safety flag: ${FLAG_LABEL[f.kind] || f.kind} (${f.severity}). ${f.description}` });
+  for (const v of a.order_violations) {
+    items.push({ t: violationSpan(v).start, end: violationSpan(v).end, step: stepById(v.step_id), label: `Out of order: ${v.message}` });
+  }
+  for (const f of a.safety_flags) items.push({ t: f.start_s, end: f.end_s, label: `Safety flag: ${FLAG_LABEL[f.kind] || f.kind} (${f.severity}). ${f.description}` });
   const timed = items.filter((it) => it.t != null).sort((x, y) => x.t - y.t); // stable: ties keep their order
   return [...timed, ...items.filter((it) => it.t == null)];
 }
@@ -402,13 +406,14 @@ function nextItem() {
   state.itemIndex = (state.itemIndex + 1) % items.length;
   const i = state.itemIndex;
   const item = items[i];
-  const where = item.t != null ? `at ${fmtTime(item.t)}` : "(not located in the video)";
+  const span = item.end != null && item.end > item.t ? fmtRange(item.t, item.end) : fmtTime(item.t);
+  const where = item.t != null ? `at ${span}` : "(not located in the video)";
   $("#next-label").textContent = `Item ${i + 1} of ${items.length} ${where}: ${item.label}`;
   if (item.step) {
     state.selected = item.step.step_id;
     if ($("#compare").checked) playReference(item.step);
   }
-  if (item.t != null) seek(item.t);
+  if (item.t != null) seek(item.t, item.end);
   else if (item.step) focusCard(item.step);
 }
 
@@ -419,7 +424,8 @@ function currentStepId() {
   if (selected) {
     const times = stepTimes(selected);
     const t = video.currentTime || 0;
-    if (!times || (t >= times.start - 0.5 && t < (times.end ?? times.start + 1))) return selected.step_id;
+    // The small allowance past the end covers a stretch that stopped a moment late.
+    if (!times || (t >= times.start - 0.5 && t < (times.end ?? times.start + 1) + 0.3)) return selected.step_id;
   }
   return state.playing;
 }
@@ -471,7 +477,7 @@ document.addEventListener("click", (e) => {
     const card = chip.closest(".step");
     const step = card && stepById(card.id.replace(/^step-/, ""));
     if (step && Number(chip.dataset.seek) === stepTimes(step)?.start) { jumpToStep(step); return; }
-    seek(chip.dataset.seek);
+    seek(chip.dataset.seek, chip.dataset.end);
     return;
   }
   const toggle = e.target.closest(".seg-toggle button");
@@ -514,10 +520,6 @@ $("#compare").addEventListener("change", (e) => {
   if (!e.target.checked) { refVideo.pause(); return; }
   const step = stepById(state.selected) || stepById(state.playing) || locatedSteps()[0] || steps()[0];
   if (step) { state.selected = step.step_id; playReference(step); }
-});
-
-refVideo.addEventListener("timeupdate", () => {
-  if (state.refEnd != null && refVideo.currentTime >= state.refEnd) refVideo.pause();
 });
 
 video.addEventListener("timeupdate", updatePlayhead);

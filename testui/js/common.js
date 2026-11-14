@@ -75,6 +75,65 @@ export function fmtRange(start, end) {
   return `${fmtTime(start)}–${fmtTime(end)}`;
 }
 
+function hasEnd(start, end) {
+  return end !== null && end !== undefined && end !== "" && Number(end) > Number(start);
+}
+
+// A clickable timestamp. With an end it reads "0:12–0:31", and pressing it plays that stretch
+// and stops at its end (the page passes data-seek and data-end to playSegment). With no end
+// it shows the one time and plays on from there.
+export function timeChip(start, end, title) {
+  if (start === null || start === undefined || Number.isNaN(Number(start))) return "";
+  const ranged = hasEnd(start, end);
+  const label = ranged ? fmtRange(start, end) : fmtTime(start);
+  const hint = title || (ranged ? `Play ${label}, then stop` : `Play from ${label}`);
+  return `<button class="time" type="button" data-seek="${Number(start)}"${ranged ? ` data-end="${Number(end)}"` : ""} title="${esc(hint)}">${label}</button>`;
+}
+
+const armedStops = new WeakMap(); // video element -> function that cancels its pending stop
+// Stop this far before the end, so the playhead rests inside the stretch just played rather
+// than on the first frame of whatever follows it.
+const STOP_LEAD_S = 0.05;
+
+// Play the video from start and pause it when it reaches end. Afterwards the viewer can
+// press play to carry on watching: the stop only happens once. It is also dropped if they
+// drag the playhead out of the stretch, or another stretch is started. With no end, the
+// video just plays from start.
+export function playSegment(video, start, end) {
+  armedStops.get(video)?.();
+  const from = Math.max(0, Number(start) || 0);
+  video.currentTime = from;
+  if (hasEnd(from, end)) {
+    const to = Number(end);
+    const stopAt = Math.max(from, to - STOP_LEAD_S);
+    let frame = 0;
+    let ownSeek = true; // the seek above is ours, not the viewer scrubbing
+    const disarm = () => {
+      cancelAnimationFrame(frame);
+      for (const [name, fn] of listeners) video.removeEventListener(name, fn);
+      armedStops.delete(video);
+    };
+    const reached = () => {
+      if (video.currentTime < stopAt) return false;
+      disarm();
+      video.pause();
+      return true;
+    };
+    // timeupdate fires only about four times a second, so also check on every frame.
+    const watch = () => { if (!reached() && !video.paused) frame = requestAnimationFrame(watch); };
+    const restart = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(watch); };
+    const scrubbed = () => {
+      if (ownSeek) { ownSeek = false; return; }
+      if (video.currentTime < from - 0.25 || video.currentTime >= to) disarm();
+    };
+    const listeners = [["timeupdate", reached], ["play", restart], ["seeking", scrubbed], ["emptied", disarm]];
+    for (const [name, fn] of listeners) video.addEventListener(name, fn);
+    armedStops.set(video, disarm);
+    restart(); // already playing means no "play" event will come to start the per-frame check
+  }
+  video.play().catch(() => { /* autoplay can be refused; the seek still happened */ });
+}
+
 export function fmtDate(iso) {
   return iso ? new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
 }

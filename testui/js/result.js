@@ -1,7 +1,9 @@
 // The caregiver's result screen: result.html?id=<attempt_id>.
 // Polls the attempt while its job runs, then renders the overall result, the video,
 // one card per rubric step, safety flags and the people identified.
-import { api, qs, esc, fmtTime, fmtDate, badge, videoUrl, thumbUrl, stagesHtml, showError, stepTally } from "/js/common.js";
+import {
+  api, qs, esc, fmtDate, badge, playSegment, videoUrl, thumbUrl, stagesHtml, showError, stepTally, timeChip,
+} from "/js/common.js";
 
 // Headlines before a nurse has looked at the attempt (the AI's result) and after (the nurse's).
 const HEADLINE = {
@@ -27,10 +29,6 @@ const POLL_MS = 2000;
 
 const app = document.querySelector("#result");
 const id = qs("id");
-
-function timeChip(t) {
-  return t == null ? "" : `<button class="time" data-seek="${Number(t)}" title="Play from here">${fmtTime(t)}</button>`;
-}
 
 function headerHtml(a) {
   const who = a.caregiver_name ? `${esc(a.caregiver_name)} · ` : "";
@@ -93,7 +91,10 @@ function summaryHtml(a) {
 function stepHtml(step, violations) {
   const status = step.nurse_status || step.status;
   const changed = step.nurse_status && step.nurse_status !== step.status;
-  const t = step.evidence_start_s ?? step.start_s;
+  // Where the step happens in the attempt: the located span, or what the grader saw if it was not located.
+  const located = step.start_s != null;
+  const start = located ? step.start_s : step.evidence_start_s;
+  const end = located ? step.end_s : step.evidence_end_s;
   const notes = violations
     .filter((v) => v.step_id === step.step_id || v.expected_after === step.step_id)
     .map((v) => `<p class="small order-note">Out of order: ${esc(v.message)}</p>`).join("");
@@ -112,13 +113,13 @@ function stepHtml(step, violations) {
       </div>
       ${nurse}${ai}
       ${notes}
-      <p class="small muted seen">${timeChip(t)} ${step.evidence ? `What we saw: ${esc(step.evidence)}` : ""}
+      <p class="small muted seen">${timeChip(start, end)} ${step.evidence ? `What we saw: ${esc(step.evidence)}` : ""}
         ${step.double_checked ? `<span class="badge neutral" title="Looked at a second time, more closely">Checked twice</span>` : ""}</p>
     </article>`;
 }
 
 function flagHtml(f) {
-  const when = timeChip(f.start_s);
+  const when = timeChip(f.start_s, f.end_s);
   const who = f.person_label ? ` · ${esc(f.person_label)}` : "";
   return `<li class="${f.counts_toward_score ? "" : "muted"}">
       ${when} <strong>${esc(FLAG_KIND[f.kind] || f.kind)}</strong>
@@ -166,14 +167,13 @@ function actionsHtml(a) {
     </div>`;
 }
 
-// Time chips seek the attempt video and start playing it.
+// A time chip plays its stretch of the attempt video and stops at the end of it.
 app.addEventListener("click", (event) => {
   const chip = event.target.closest("[data-seek]");
   const player = document.querySelector("#player");
   if (!chip || !player) return;
-  player.currentTime = Number(chip.dataset.seek);
   player.scrollIntoView({ behavior: "smooth", block: "center" });
-  player.play().catch(() => { /* autoplay can be blocked; the seek still applies */ });
+  playSegment(player, chip.dataset.seek, chip.dataset.end);
 });
 
 async function load() {

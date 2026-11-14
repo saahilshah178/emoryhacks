@@ -55,6 +55,11 @@ STEPS
 - List the distinct actions of the maneuver in the order the demonstration performs them,
   usually 4 to 10 steps. A step is one thing the caregiver does (or says) that a grader
   can check, such as "Lock the wheelchair brakes" or "Ask the patient about dizziness".
+- Give each safety-critical action (locking brakes, applying a gait belt, supporting the
+  head) a step of its own: write "Lock the wheelchair brakes" as one step, never
+  "Position the wheelchair, lock brakes and clear footrests". To stay within 10 steps,
+  merge only routine preparation (hand hygiene, privacy, introductions) or routine
+  finishing actions (call light, hand hygiene).
 - Leave out intro and outro cards, narration over still images, talk about the product
   or channel, advertising, and anything not performed on screen.
 - Leave out repeated demonstrations and "wrong way" demonstrations. A wrong-way

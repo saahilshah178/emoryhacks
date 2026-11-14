@@ -3,7 +3,7 @@
 Two Gemini passes, because one pass at 1 frame per second drifts on long videos:
   1. outline: the whole video at 1 fps. Returns the steps in order with rough times,
      evals, criticality and prerequisites, plus skill-level safety criteria.
-  2. bounds: consecutive steps are grouped into clips of up to two minutes around
+  2. bounds: consecutive steps are grouped into clips of up to 150 seconds around
      their rough times, and each clip is re-read at 2 fps to pin every step's start
      and end. Clips are refined in parallel; a step whose refinement fails or looks
      wrong keeps its rough times.
@@ -25,7 +25,7 @@ from .rubric_prompts import bounds_prompt, outline_prompt
 
 MAX_CRITERIA = 4
 MIN_STEP_S = 1.0
-WINDOW_MAX_S = 120.0  # longest clip refined in one pass-2 call
+WINDOW_MAX_S = 150.0  # longest clip refined in one pass-2 call
 REFINE_FPS = 2
 
 
@@ -90,10 +90,10 @@ def run(ctx, classification: Classification) -> Rubric:
     return build_rubric(draft, duration, bounds)
 
 
-def step_padding(start: float, end: float, duration: float) -> float:
-    """Seconds searched either side of a rough step span. Grows with the step's length
-    and with the video's length, because outline drift grows on long videos."""
-    return min(25.0, max(8.0, 0.4 * max(end - start, 0.0))) + 0.03 * duration
+def step_padding(duration: float) -> float:
+    """Seconds searched either side of a rough step span. Grows with the video's
+    length, because outline drift grows on long videos."""
+    return 5.0 + 0.03 * duration
 
 
 def plan_windows(steps: list[DraftStep], duration: float, max_len: float = WINDOW_MAX_S) -> list[Window]:
@@ -101,8 +101,8 @@ def plan_windows(steps: list[DraftStep], duration: float, max_len: float = WINDO
     seconds, each covering its steps' padded spans. One call per window instead of one
     per step avoids paying for the overlapping padding twice."""
     windows: list[Window] = []
+    pad = step_padding(duration)
     for i, s in enumerate(steps):
-        pad = step_padding(s.start_s, s.end_s, duration)
         lo = max(0.0, s.start_s - pad)
         hi = s.end_s + pad if duration <= 0 else min(duration, s.end_s + pad)
         hi = max(hi, lo + 2.0)

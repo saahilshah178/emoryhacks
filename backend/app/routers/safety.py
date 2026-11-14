@@ -118,8 +118,9 @@ def overview(user: dict = Depends(auth.nurse)):
     """One row per video with pose data: what it is, how densely it was measured, the pose_1s
     rollup, per-role readings with the time they cover (_role_figures), and safety-flag
     counts. Peak trunk tilt is the 95th percentile, robust to single bad frames. Attempts
-    whose skill was deleted are left out; skill_match False marks an attempt rejected as
-    the wrong skill."""
+    whose skill was deleted are left out, and so are recordings a caregiver has not sent to
+    a nurse (they are the caregiver's own practice); skill_match False marks an attempt
+    rejected as the wrong skill."""
     rows = db.fetch_all(
         f"""WITH roll AS (
               SELECT video_id, count(DISTINCT bucket) AS seconds_tracked, avg(balance_avg) AS balance_avg,
@@ -155,6 +156,7 @@ def overview(user: dict = Depends(auth.nurse)):
             LEFT JOIN LATERAL (SELECT name, slug FROM skills s WHERE s.reference_video_id = v.id
                                ORDER BY s.version DESC LIMIT 1) sr ON true
             WHERE NOT (v.kind = 'attempt' AND a.id IS NULL) AND v.org_id = %(org)s
+              AND (a.id IS NULL OR a.submitted_at IS NOT NULL)
             ORDER BY v.recorded_at DESC""",
         {**_PARAMS, "org": user["org_id"]},
     )
@@ -318,7 +320,8 @@ def trends(bucket: str = Query("1 day", pattern=r"^\d+ (hour|hours|day|days|week
     """Per-role readings across attempts over calendar time, grouped by skill: one point per
     attempt, and one row per skill per time_bucket of the attempts' recording times that
     averages the attempts in it (so a long attempt counts once, like a short one).
-    Attempts rejected as the wrong skill (skill_match false) are left out."""
+    Attempts rejected as the wrong skill (skill_match false) and recordings a caregiver has
+    not sent to a nurse are left out."""
     attempts = db.fetch_all(
         f"""WITH rate AS ({_ALL_SAMPLE_RATES})
             SELECT a.id AS attempt_id, v.recorded_at, time_bucket(%(bucket)s::interval, v.recorded_at) AS bucket,
@@ -330,7 +333,7 @@ def trends(bucket: str = Query("1 day", pattern=r"^\d+ (hour|hours|day|days|week
             JOIN videos v ON v.id = f.video_id
             LEFT JOIN rate q ON q.video_id = f.video_id
             LEFT JOIN pose_tracks t ON t.video_id = f.video_id AND t.person_idx = f.person_idx
-            WHERE a.skill_match IS NOT FALSE AND v.org_id = %(org)s
+            WHERE a.skill_match IS NOT FALSE AND a.submitted_at IS NOT NULL AND v.org_id = %(org)s
             GROUP BY a.id, v.recorded_at, s.slug, s.name, q.sample_fps ORDER BY v.recorded_at""",
         {**_PARAMS, "bucket": bucket, "org": user["org_id"]},
     )

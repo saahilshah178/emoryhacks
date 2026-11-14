@@ -5,7 +5,7 @@ import { CircleCheck } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { APP_NAME, APP_TAGLINE } from "./brand";
 import { PublicHeader } from "./PublicHeader";
-import { homeUrlFor, LOGIN_PATH } from "./urls";
+import { homeUrlFor, LOGIN_PATH, SIGNUP_PATH } from "./urls";
 
 const steps = [
   {
@@ -59,6 +59,9 @@ function AccountActions({
   const primary = invert
     ? "bg-white text-navy hover:bg-teal-soft"
     : "bg-teal text-white shadow-[0_1px_2px_rgba(23,50,77,0.12)] hover:bg-teal-hover";
+  const secondary = invert
+    ? "border border-white/25 text-white hover:bg-white/10"
+    : "border border-border text-navy hover:bg-secondary";
 
   const { user } = useAuth();
   const wide = stacked ? "w-full sm:w-auto" : "";
@@ -81,8 +84,14 @@ function AccountActions({
       className={`flex ${stacked ? "w-full flex-col sm:w-auto sm:flex-row" : "flex-wrap"} items-stretch gap-2 sm:items-center`}
     >
       <Link
-        href={LOGIN_PATH}
+        href={SIGNUP_PATH}
         className={`inline-flex h-12 items-center justify-center rounded-[12px] px-5 text-sm font-semibold transition-colors ${wide} ${primary}`}
+      >
+        Create account
+      </Link>
+      <Link
+        href={LOGIN_PATH}
+        className={`inline-flex h-12 items-center justify-center rounded-[12px] px-5 text-sm font-semibold transition-colors ${wide} ${secondary}`}
       >
         Log in
       </Link>
@@ -223,12 +232,20 @@ export function MarketingPage() {
               Built for home-care agencies. Nurses remain the certifying authority.
             </p>
           </div>
-          <Link
-            href={LOGIN_PATH}
-            className="inline-flex h-11 w-fit items-center text-sm font-semibold text-teal hover:text-teal-hover"
-          >
-            Log in
-          </Link>
+          <div className="flex flex-wrap items-center gap-4">
+            <Link
+              href={SIGNUP_PATH}
+              className="inline-flex h-11 w-fit items-center text-sm font-semibold text-teal hover:text-teal-hover"
+            >
+              Create account
+            </Link>
+            <Link
+              href={LOGIN_PATH}
+              className="inline-flex h-11 w-fit items-center text-sm font-semibold text-navy hover:text-teal"
+            >
+              Log in
+            </Link>
+          </div>
         </div>
       </footer>
     </div>

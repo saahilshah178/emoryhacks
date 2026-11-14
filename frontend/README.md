@@ -22,7 +22,8 @@ API_URL=http://127.0.0.1:8000 npm run dev    # http://localhost:3000, or the nex
 `API_URL` defaults to `http://127.0.0.1:8000`, where `make dev` puts the API.
 
 - `/` marketing
-- `/login` the six fixed logins (usernames and passwords are in `LOGINS.md`, made by `make logins`; there is no sign-up)
+- `/login` username or email, and password (`LOGINS.md` has the six shared agency logins)
+- `/signup` create a nurse or caregiver account, optionally with an agency code
 - `/portal` caregiver portal
 - `/dashboard` nurse dashboard
 

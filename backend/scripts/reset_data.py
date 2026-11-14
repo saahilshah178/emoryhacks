@@ -10,7 +10,7 @@ Deletes
     skill_policies and skill_assignments, if those tables exist);
   - in the default agency, every attempt with its recording, steps, order violations, safety
     flags, jobs and pose rows;
-  - default-agency users who have no username (left over from the old sign-up flow), their
+  - default-agency users who have no username (roster people without a login), their
     sessions and their skill_assignments;
   - everyone's "notifications seen" time, so nothing starts out looking read.
 

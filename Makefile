@@ -41,8 +41,8 @@ seed:
 	cd backend && uv run python -m scripts.seed_reference
 
 # The six logins (nurse, nurse2, caregiver ... caregiver4; see backend/scripts/logins.py).
-# A login that exists keeps its password; a missing one gets a new random password; anyone
-# else loses their username. The passwords made in a run are written to LOGINS.md (gitignored).
+# A listed login that exists keeps its password; a missing one gets a new random password;
+# accounts created by sign-up keep theirs. The passwords made in a run are written to LOGINS.md.
 #   make logins ARGS="--reset nurse,caregiver2"   new password for only those logins
 #   make logins ARGS="--reset-all"                new password for every login
 logins:

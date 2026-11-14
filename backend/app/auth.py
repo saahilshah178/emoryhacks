@@ -1,27 +1,27 @@
 """Accounts and sessions.
 
-The logins are a fixed set: scripts/logins.py gives some people a username and a random
-password, and nobody signs up or changes a password in the app. A person without a
-username cannot log in.
-
-Passwords are stored as scrypt hashes. A login creates a random session token; the browser
-keeps it in an HttpOnly cookie and the database keeps only its SHA-256, so a copy of the
-sessions table cannot be replayed. Scripts and tests may send the token as a bearer token.
+People sign up in the app, or get a username from scripts/logins.py. A login matches a
+username or an email. Passwords are stored as scrypt hashes. A login creates a random
+session token; the browser keeps it in an HttpOnly cookie and the database keeps only its
+SHA-256, so a copy of the sessions table cannot be replayed. Scripts and tests may send
+the token as a bearer token.
 
 Routers depend on current_user (any signed-in user) or nurse (nurses only). Both return the
-user row with its org's name and is_sample flag attached.
+user row with its org's name, is_sample flag and join_code attached.
 """
 from __future__ import annotations
 
 import datetime as dt
 import hashlib
 import hmac
+import re
 import secrets
 import threading
 import time
 import uuid
 
 from fastapi import Depends, HTTPException, Request, Response
+from psycopg import errors as pg_errors
 
 from . import db
 
@@ -29,7 +29,12 @@ COOKIE = "sid"
 SESSION_DAYS = 7
 UPLOAD_SCOPE = "upload"
 UPLOAD_MINUTES = 30
+MIN_PASSWORD = 8
 DEFAULT_ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# No 0/o/1/i/l, so a code read aloud is unambiguous. Stored without the hyphen.
+JOIN_CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+JOIN_CODE_LENGTH = 8
 _SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
 
 # token hash -> (user, time read). Saves a database round trip on every request of a page
@@ -99,7 +104,8 @@ def forget_cached(user_id=None) -> None:
 
 _USER_SQL = """SELECT u.id, u.org_id, u.role, u.name, u.username, u.email, u.title, u.credentials, u.location, u.hire_date,
                       u.next_shift, u.employment, u.prefs, u.notifications_seen_at, u.created_at,
-                      o.name AS org_name, o.is_sample AS org_is_sample
+                      o.name AS org_name, o.is_sample AS org_is_sample, o.join_code AS org_join_code,
+                      EXISTS (SELECT 1 FROM users n WHERE n.org_id = u.org_id AND n.role = 'nurse') AS org_has_nurse
                FROM users u JOIN orgs o ON o.id = u.org_id"""
 
 
@@ -177,16 +183,126 @@ def public(user: dict) -> dict:
         "hire_date": user["hire_date"], "next_shift": user["next_shift"], "employment": user["employment"],
         "prefs": {"safety": True, "submissions": True, "digest": False, **(user["prefs"] or {})},
         "created_at": user["created_at"],
-        "org": {"id": user["org_id"], "name": user["org_name"], "is_sample": user["org_is_sample"]},
+        "org": {"id": user["org_id"], "name": user["org_name"], "is_sample": user["org_is_sample"],
+                "join_code": format_join_code(user.get("org_join_code")),
+                "has_nurse": bool(user.get("org_has_nurse"))},
     }
 
 
-def create_user(*, org_id, role: str, name: str, email: str, password: str | None, **profile) -> uuid.UUID:
+def _exec(conn, sql: str, params) -> None:
+    if conn is None:
+        db.execute(sql, params)
+    else:
+        conn.execute(sql, params)
+
+
+def _fetch(conn, sql: str, params=None) -> dict | None:
+    if conn is None:
+        return db.fetch_one(sql, params)
+    return conn.execute(sql, params).fetchone()
+
+
+def new_join_code() -> str:
+    return "".join(secrets.choice(JOIN_CODE_ALPHABET) for _ in range(JOIN_CODE_LENGTH))
+
+
+def normalize_join_code(raw: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (raw or "").strip().lower())
+
+
+def format_join_code(code: str | None) -> str:
+    compact = normalize_join_code(code or "")
+    if len(compact) == JOIN_CODE_LENGTH:
+        return f"{compact[:4]}-{compact[4:]}"
+    return compact
+
+
+def _unused_join_code(conn=None) -> str:
+    for _ in range(16):
+        code = new_join_code()
+        if not _fetch(conn, "SELECT 1 FROM orgs WHERE join_code=%s", (code,)):
+            return code
+    raise RuntimeError("could not allocate an agency code")
+
+
+def org_for_code(code: str) -> dict | None:
+    compact = normalize_join_code(code)
+    if len(compact) != JOIN_CODE_LENGTH:
+        return None
+    return db.fetch_one("SELECT id, name, is_sample, join_code FROM orgs WHERE join_code=%s", (compact,))
+
+
+def ensure_join_codes() -> None:
+    """Give every existing org a join code. New orgs get one in create_org."""
+    for row in db.fetch_all("SELECT id FROM orgs WHERE join_code IS NULL"):
+        for _ in range(8):
+            try:
+                db.execute("UPDATE orgs SET join_code=%s WHERE id=%s AND join_code IS NULL",
+                           (_unused_join_code(), row["id"]))
+                break
+            except pg_errors.UniqueViolation:
+                continue
+
+
+def create_org(*, name: str = "My agency", conn=None) -> uuid.UUID:
+    """A new empty agency. Sign-up puts the new person in one of these, so they do not
+    inherit the default agency's skills, roster or recordings."""
+    org_id = uuid.uuid4()
+    _exec(conn, "INSERT INTO orgs (id, name, join_code) VALUES (%s, %s, %s)",
+          (org_id, name[:120], _unused_join_code(conn)))
+    return org_id
+
+
+def _drop_empty_org(org_id, conn) -> None:
+    if str(org_id) == str(DEFAULT_ORG):
+        return
+    leftover = conn.execute("SELECT count(*) AS n FROM users WHERE org_id=%s", (org_id,)).fetchone()
+    skills = conn.execute("SELECT 1 FROM skills WHERE org_id=%s LIMIT 1", (org_id,)).fetchone()
+    if leftover and leftover["n"] == 0 and not skills:
+        conn.execute("DELETE FROM orgs WHERE id=%s", (org_id,))
+
+
+def join_agency(user: dict, code: str) -> dict:
+    """Move the signed-in person into the agency that owns this code. Caregivers can
+    always move. A nurse can only leave an agency that has no skills and no other people."""
+    target = org_for_code(code)
+    if not target:
+        raise HTTPException(422, "That agency code does not match an agency.")
+    if str(target["id"]) == str(user["org_id"]):
+        raise HTTPException(422, "You already belong to that agency.")
+    if user["role"] == "nurse":
+        if db.fetch_one("SELECT 1 FROM skills WHERE org_id=%s LIMIT 1", (user["org_id"],)):
+            raise HTTPException(
+                422, "A nurse whose agency already has skills cannot join another. Share your code instead.")
+        if db.fetch_one("SELECT 1 FROM users WHERE org_id=%s AND id<>%s LIMIT 1", (user["org_id"], user["id"])):
+            raise HTTPException(
+                422, "A nurse whose agency already has people cannot join another. Share your code, or have them join first.")
+    old = user["org_id"]
+    with db.tx() as conn:
+        conn.execute("UPDATE users SET org_id=%s WHERE id=%s", (target["id"], user["id"]))
+        _drop_empty_org(old, conn)
+    forget_cached()
+    return get_user(user["id"])
+
+
+def unique_username(email: str) -> str:
+    """A username derived from the email local-part, unique among existing usernames."""
+    local = email.split("@", 1)[0].lower()
+    base = re.sub(r"[^a-z0-9]+", "", local)[:24] or "user"
+    n = 0
+    while True:
+        candidate = base if n == 0 else f"{base}{n}"
+        if not db.fetch_one("SELECT 1 FROM users WHERE lower(username)=%s", (candidate,)):
+            return candidate
+        n = n + 1 if n else 2
+
+
+def create_user(*, org_id, role: str, name: str, email: str, password: str | None, conn=None, **profile) -> uuid.UUID:
     user_id = uuid.uuid4()
     columns = {"id": user_id, "org_id": org_id, "role": role, "name": name, "email": email.strip().lower(),
                "password_hash": hash_password(password) if password else None, **profile}
     if "prefs" in columns:
         columns["prefs"] = db.J(columns["prefs"])
-    db.execute(f"INSERT INTO users ({', '.join(columns)}) VALUES ({', '.join(['%s'] * len(columns))})",
-               tuple(columns.values()))
+    _exec(conn, f"INSERT INTO users ({', '.join(columns)}) VALUES ({', '.join(['%s'] * len(columns))})",
+          tuple(columns.values()))
     return user_id

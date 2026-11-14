@@ -1,7 +1,7 @@
 """make logins: six fixed logins with stable passwords (scripts/logins.py).
 
-These tests clear the username of every other account in the test database (that is what the
-script is for), so they live in their own file, which runs after the account tests.
+These tests start from a clean set of listed logins, so they live in their own file, which
+runs after the account tests.
 """
 import uuid
 
@@ -141,11 +141,15 @@ def test_taking_a_login_off_the_list_clears_its_username(fresh, monkeypatch):
     assert client.get("/api/auth/me").status_code == 401
     assert _log_in("caregiver4", first["caregiver4"])[1].status_code == 401
     assert "caregiver4" not in path.read_text().split("| Role")[1]
-    # someone with an unlisted username elsewhere loses it as well, and the listed ones are kept
+    # someone who signed up keeps their username; a reserved name on the wrong person is taken back
     stray = auth.create_user(org_id=auth.DEFAULT_ORG, role="caregiver", name="Stray",
                              email=f"{uuid.uuid4().hex[:8]}@x.test", password="long-enough", username="stray")
+    thief = auth.create_user(org_id=auth.DEFAULT_ORG, role="caregiver", name="Thief",
+                             email=f"{uuid.uuid4().hex[:8]}@x.test", password="long-enough", username="nurse")
     logins.generate(path)
-    assert db.fetch_one("SELECT username FROM users WHERE id=%s", (stray,))["username"] is None
+    assert db.fetch_one("SELECT username FROM users WHERE id=%s", (stray,))["username"] == "stray"
+    assert db.fetch_one("SELECT username FROM users WHERE id=%s", (thief,))["username"] is None
+    assert db.fetch_one("SELECT username FROM users WHERE id=%s", (logins.uid("login:nurse"),))["username"] == "nurse"
 
 
 def test_logins_never_share_a_hash_and_each_works_only_with_its_own_password(fresh):

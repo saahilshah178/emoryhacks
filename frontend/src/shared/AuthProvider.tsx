@@ -2,15 +2,20 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { User } from "@/lib/types";
+import type { Role, User } from "@/lib/types";
 import { homeUrlFor, landingUrl } from "./urls";
+
+type SignUpDetails = { role: Role; name: string; email: string; password: string; join_code?: string };
 
 type AuthContextValue = {
   /** False until the first check of who is signed in has finished. */
   ready: boolean;
   user: User | null;
-  /** Throws an ApiError with a sentence for the user when it fails. */
+  /** Both throw an ApiError with a sentence for the user when they fail. */
   signIn: (username: string, password: string) => Promise<User>;
+  signUp: (details: SignUpDetails) => Promise<User>;
+  /** Move into the agency that owns this code. Throws an ApiError with a sentence when it fails. */
+  joinAgency: (code: string) => Promise<User>;
   signOut: () => Promise<void>;
   /** Replace the signed-in user after a profile or agency change. */
   setUser: (user: User) => void;
@@ -47,6 +52,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return me;
   }, []);
 
+  const signUp = useCallback(async (details: SignUpDetails) => {
+    const me = await api<User>("/auth/signup", { json: details });
+    setUser(me);
+    return me;
+  }, []);
+
+  const joinAgency = useCallback(async (code: string) => {
+    const me = await api<User>("/org/join", { json: { code } });
+    setUser(me);
+    return me;
+  }, []);
+
   const signOut = useCallback(async () => {
     try {
       await api("/auth/logout", { method: "POST" });
@@ -57,8 +74,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ready, user, signIn, signOut, setUser }),
-    [ready, user, signIn, signOut],
+    () => ({ ready, user, signIn, signUp, joinAgency, signOut, setUser }),
+    [ready, user, signIn, signUp, joinAgency, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

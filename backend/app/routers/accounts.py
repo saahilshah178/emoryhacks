@@ -1,28 +1,47 @@
-"""Accounts: log in, the signed-in user's profile and their agency.
+"""Accounts: sign up, log in, the signed-in user's profile and their agency.
 
-POST  /api/auth/login    {username, password}          -> user; sets the session cookie
+POST  /api/auth/signup   {role, name, email, password, join_code?} -> user; sets the session cookie
+POST  /api/auth/login    {username or email, password} -> user; sets the session cookie
 POST  /api/auth/logout                                 -> {ok}; clears the cookie
-GET   /api/auth/me                                     -> user, with org {id, name, is_sample}; 401 if signed out
+GET   /api/auth/me                                     -> user, with org {id, name, is_sample, join_code, has_nurse}; 401 if signed out
 GET   /api/auth/session                                -> {user} or {user: null}; never 401
 PATCH /api/auth/me       {name, title, credentials, prefs}  prefs are merged
 PATCH /api/org           {name}                        nurses only
+POST  /api/org/join      {code}                        move into the agency that owns that code
 
-There is no sign-up and no way to change a password here. The logins are a fixed set made
-by scripts/logins.py (make logins), which writes the usernames and passwords to LOGINS.md.
+Everyone who signs up gets a new empty agency unless they send a join_code, which puts
+them in that agency instead. The six agency logins from scripts/logins.py stay as they
+are; sign-up adds more people rather than replacing them.
 """
 from __future__ import annotations
 
+import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .. import auth, db
 
 router = APIRouter(tags=["accounts"])
 
 
-class Login(BaseModel):
-    username: str
+class Signup(BaseModel):
+    role: str
+    name: str
+    email: str
     password: str
+    join_code: str | None = None
+
+
+class Login(BaseModel):
+    password: str
+    username: str | None = None
+    email: str | None = None
+
+    @model_validator(mode="after")
+    def need_identifier(self):
+        if not (self.username and self.username.strip()) and not (self.email and self.email.strip()):
+            raise ValueError("Enter your username or email.")
+        return self
 
 
 class ProfilePatch(BaseModel):
@@ -36,18 +55,61 @@ class OrgPatch(BaseModel):
     name: str
 
 
+class OrgJoin(BaseModel):
+    code: str
+
+
 def _signed_in(response: Response, user_id) -> dict:
     auth.set_cookie(response, auth.create_session(user_id))
     return auth.public(auth.get_user(user_id))
 
 
+def _email_taken(exc: BaseException) -> bool:
+    constraint = getattr(getattr(exc, "diag", None), "constraint_name", None) or ""
+    return "email" in f"{constraint} {exc}".lower()
+
+
+@router.post("/auth/signup")
+def signup(body: Signup, response: Response):
+    name, email = body.name.strip(), body.email.strip().lower()
+    if body.role not in ("nurse", "caregiver"):
+        raise HTTPException(422, "Choose whether you are signing up as a caregiver or a nurse.")
+    if len(name) < 2:
+        raise HTTPException(422, "Please add your name.")
+    if not auth.EMAIL_RE.match(email):
+        raise HTTPException(422, "Enter a valid email address.")
+    if len(body.password) < auth.MIN_PASSWORD:
+        raise HTTPException(422, f"Choose a password of at least {auth.MIN_PASSWORD} characters.")
+    target = None
+    if (body.join_code or "").strip():
+        target = auth.org_for_code(body.join_code)
+        if not target:
+            raise HTTPException(422, "That agency code does not match an agency.")
+    user_id = None
+    for _ in range(4):
+        try:
+            with db.tx() as conn:
+                org_id = target["id"] if target else auth.create_org(conn=conn)
+                user_id = auth.create_user(org_id=org_id, role=body.role, name=name[:120],
+                                           email=email, password=body.password,
+                                           username=auth.unique_username(email), conn=conn)
+            break
+        except psycopg.errors.UniqueViolation as exc:
+            if _email_taken(exc):
+                raise HTTPException(409, "An account with that email already exists. Log in instead.") from None
+    if user_id is None:
+        raise HTTPException(409, "An account with that email already exists. Log in instead.")
+    return _signed_in(response, user_id)
+
+
 @router.post("/auth/login")
 def login(body: Login, response: Response):
-    row = db.fetch_one("SELECT id, password_hash FROM users WHERE lower(username)=%s",
-                       (body.username.strip().lower(),))
-    # Verify against something even when the username is unknown, so both failures take as long.
+    ident = (body.username or body.email or "").strip().lower()
+    row = db.fetch_one("SELECT id, password_hash FROM users WHERE lower(username)=%s OR email=%s",
+                       (ident, ident))
+    # Verify against something even when the login is unknown, so both failures take as long.
     if not auth.verify_password(body.password, row["password_hash"] if row else auth.hash_password("-")) or not row:
-        raise HTTPException(401, "That username and password don't match a login.")
+        raise HTTPException(401, "That username or email and password don't match an account.")
     return _signed_in(response, row["id"])
 
 
@@ -101,3 +163,8 @@ def patch_org(body: OrgPatch, user: dict = Depends(auth.nurse)):
     db.execute("UPDATE orgs SET name=%s WHERE id=%s", (name[:120], user["org_id"]))
     auth.forget_cached()
     return auth.public(auth.get_user(user["id"]))
+
+
+@router.post("/org/join")
+def join_org(body: OrgJoin, user: dict = Depends(auth.current_user)):
+    return auth.public(auth.join_agency(user, body.code))

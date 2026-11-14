@@ -9,6 +9,7 @@ import { api, errorMessage } from "@/lib/api";
 import { useTitle } from "@/lib/hooks";
 import type { User } from "@/lib/types";
 import { useAuth, useUser } from "@/shared/AuthProvider";
+import { connectedToAgency, JoinAgencyForm } from "@/shared/JoinAgency";
 
 function NameEditor({ user, onDone }: { user: User; onDone: () => void }) {
   const { setUser } = useAuth();
@@ -78,6 +79,7 @@ export default function ProfilePage() {
   const { skills, counts, error, reload } = useCaregiver();
   const ready = skills.filter((skill) => skill.ready_attempt_id).length;
   const [editing, setEditing] = useState(false);
+  const connected = connectedToAgency(user);
 
   return (
     <div className="space-y-5">
@@ -107,7 +109,22 @@ export default function ProfilePage() {
 
           <Card className="space-y-4 p-5">
             <Row icon={Building2} label="Agency">
-              <p className="text-sm font-medium text-navy">{user.org.name}</p>
+              {connected ? (
+                <>
+                  <p className="text-sm font-medium text-navy">{user.org.name}</p>
+                  <p className="mt-0.5 text-sm text-ink-secondary">You&apos;re connected.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-navy">Not connected yet</p>
+                  <JoinAgencyForm
+                    className="mt-3"
+                    size="lg"
+                    hint="Ask your nurse for their agency code to join theirs."
+                    onJoined={() => reload()}
+                  />
+                </>
+              )}
             </Row>
             {user.username ? (
               <Row icon={AtSign} label="Username">

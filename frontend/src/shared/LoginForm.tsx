@@ -1,17 +1,18 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Field, Input } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { useAuth } from "./AuthProvider";
 import { APP_NAME } from "./brand";
 import { Logo } from "./Logo";
-import { homeUrlFor } from "./urls";
+import { homeUrlFor, SIGNUP_PATH } from "./urls";
 
 /**
- * The login page. The logins are a fixed set of usernames with generated passwords
- * (backend/scripts/logins.py), so there is no way to create an account from here.
+ * The login page. Agency logins use a username; an account created on the sign-up
+ * page can use that username or the email it was created with.
  */
 export function LoginForm() {
   const router = useRouter();
@@ -29,7 +30,7 @@ export function LoginForm() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!username.trim()) {
-      setError("Enter your username.");
+      setError("Enter your username or email.");
       return;
     }
     if (!password) {
@@ -58,11 +59,11 @@ export function LoginForm() {
       <main id="main" className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 py-10">
         <h1 className="text-2xl font-semibold tracking-tight text-navy">{`Log in to ${APP_NAME}`}</h1>
         <p className="mt-2 text-sm text-ink-secondary">
-          Use the username and password you were given. You&apos;ll go straight to your own workspace.
+          Use your username or email, and your password. You&apos;ll go straight to your own workspace.
         </p>
 
         <form onSubmit={submit} className="mt-8 space-y-5" noValidate>
-          <Field label="Username">
+          <Field label="Username or email">
             <Input
               className="h-11"
               value={username}
@@ -71,7 +72,7 @@ export function LoginForm() {
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
-              placeholder="Your username"
+              placeholder="Your username or email"
             />
           </Field>
 
@@ -96,6 +97,13 @@ export function LoginForm() {
             Log in
           </Button>
         </form>
+
+        <p className="mt-6 text-center text-sm text-ink-secondary">
+          Need an account?{" "}
+          <Link href={SIGNUP_PATH} className="font-semibold text-teal hover:underline">
+            Create account
+          </Link>
+        </p>
       </main>
     </div>
   );

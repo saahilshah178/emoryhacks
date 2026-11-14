@@ -94,7 +94,7 @@ export type User = {
   id: string;
   role: Role;
   name: string;
-  /** What they sign in with. Null for someone on the roster who has no login. */
+  /** What they can type at login. Null for someone on the roster who has no login. */
   username: string | null;
   email: string;
   title: string;
@@ -105,7 +105,7 @@ export type User = {
   employment: "onboarding" | "active";
   prefs: Prefs;
   created_at: string;
-  org: { id: string; name: string; is_sample: boolean };
+  org: { id: string; name: string; is_sample: boolean; join_code: string; has_nurse: boolean };
 };
 
 export type Person = { label: string; role: "caregiver" | "patient" | "other"; description: string };

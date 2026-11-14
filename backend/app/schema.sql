@@ -273,17 +273,24 @@ SELECT add_continuous_aggregate_policy('pose_1s',
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS runner text;
 -- @@
 -- Accounts. An org is an agency: its nurses and caregivers share one set of skills and
--- attempts. Everyone who signs up joins the default agency. The sample agency holds
--- showcase data (see scripts/seed_sample.py) and is only reached by its own accounts.
+-- attempts. Sign-up creates a new empty agency. The default agency holds the six shared
+-- logins and the standard skills.
 CREATE TABLE IF NOT EXISTS orgs (
   id          uuid PRIMARY KEY,
   name        text NOT NULL,
   is_sample   boolean NOT NULL DEFAULT false,
+  join_code   text,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 -- @@
 INSERT INTO orgs (id, name) VALUES ('00000000-0000-0000-0000-000000000001', 'My agency')
 ON CONFLICT (id) DO NOTHING;
+-- @@
+-- Short code people type to join this agency. Generated for every org
+-- (auth.create_org, auth.ensure_join_codes). Unique among agencies; NULL only before backfill.
+ALTER TABLE orgs ADD COLUMN IF NOT EXISTS join_code text;
+-- @@
+CREATE UNIQUE INDEX IF NOT EXISTS orgs_join_code_idx ON orgs (join_code);
 -- @@
 -- password_hash NULL means the person is on the roster but cannot log in.
 CREATE TABLE IF NOT EXISTS users (
@@ -342,8 +349,8 @@ CREATE INDEX IF NOT EXISTS attempts_caregiver_idx ON attempts (caregiver_id, cre
 -- A short heading for a flag. The pipeline leaves it NULL and the UI falls back to the kind.
 ALTER TABLE safety_flags ADD COLUMN IF NOT EXISTS title text;
 -- @@
--- The name a person signs in with; NULL means they cannot log in. The logins are a fixed set
--- made by scripts/logins.py: nobody signs up or changes a password in the app.
+-- Optional login name. Sign-up fills this from the email so the account can also sign in
+-- with a username. The six agency logins are created by scripts/logins.py.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS username text;
 -- @@
 CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users (lower(username));

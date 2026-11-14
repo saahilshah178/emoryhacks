@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import builtin, config, db, gemini, repo
+from . import auth, builtin, config, db, gemini, repo
 from . import jobs as pipeline
 from .routers import accounts, attempts, jobs, people, review, safety, skills, videos
 
@@ -22,6 +22,7 @@ from .routers import accounts, attempts, jobs, people, review, safety, skills, v
 async def lifespan(app: FastAPI):
     config.ensure_dirs()
     db.migrate()
+    auth.ensure_join_codes()  # agencies created before join codes existed
     builtin.ensure()  # the nine standard skills, on any database, without a Gemini call
     pipeline.resume_interrupted()  # grading cut short by the last shutdown carries on where it stopped
     yield

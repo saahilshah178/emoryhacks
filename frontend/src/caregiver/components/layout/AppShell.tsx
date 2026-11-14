@@ -6,6 +6,7 @@ import { BottomNav } from "@/caregiver/components/layout/BottomNav";
 import { mainNav, profileNav } from "@/caregiver/nav";
 import { cn } from "@/lib/cn";
 import { useUser } from "@/shared/AuthProvider";
+import { agencyCaption } from "@/shared/JoinAgency";
 import { AccountMenu } from "@/shared/layout/AccountMenu";
 import { Rail } from "@/shared/layout/Rail";
 import { Logo } from "@/shared/Logo";
@@ -53,7 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         <header className="sticky top-0 z-30 hidden h-16 shrink-0 items-center gap-4 bg-white pl-8 pr-6 lg:flex">
-          <p className="min-w-0 truncate text-sm text-ink-secondary">{user.org.name}</p>
+          <p className="min-w-0 truncate text-sm text-ink-secondary">{agencyCaption(user)}</p>
           <div className="ml-auto">
             <AccountMenu links={[profileNav]} role="Caregiver" />
           </div>

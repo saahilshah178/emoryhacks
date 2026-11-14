@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Card, CardBody, CardHeader, CardTitle, EmptyState, Loadable, Skeleton } from "@/components/ui";
+import { Button, Card, CardBody, CardHeader, CardTitle, EmptyState, Loadable, Skeleton } from "@/components/ui";
 import { useApi, useTitle } from "@/lib/hooks";
 import type { AttemptSummary } from "@/lib/types";
 import { KpiCards } from "@/nurse/components/dashboard/KpiCards";
@@ -12,16 +12,48 @@ import { PageHeading } from "@/shared/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useUser } from "@/shared/AuthProvider";
 import { APP_NAME } from "@/shared/brand";
+import { AgencyCode, JoinAgencyForm } from "@/shared/JoinAgency";
 
 const SHOWN = 6;
 
 export function OverviewPage() {
   useTitle("Clinical dashboard");
   const user = useUser();
-  const { overview } = useDashboard();
+  const { overview, reloadOverview } = useDashboard();
   const pending = useApi<AttemptSummary[]>("/attempts?state=pending", { refreshMs: 30_000 });
   const everything = useApi<AttemptSummary[]>("/attempts?all=1", { refreshMs: 30_000 });
   const pendingCount = overview?.counts.pending;
+  const freshAgency = overview && overview.counts.skills === 0 && overview.counts.caregivers === 0;
+
+  if (freshAgency) {
+    return (
+      <div className="space-y-5">
+        <PageHeading
+          title="Clinical dashboard"
+          description={`${overview.agency ?? user.org.name} · ${user.title || "Nurse"}`}
+        />
+        <EmptyState
+          title="Nothing here yet"
+          action={
+            <Button href="/dashboard/skills/new">
+              Record a reference skill
+            </Button>
+          }
+        >
+          <p>
+            Share this code with caregivers and other nurses, or join an agency that already exists.
+            Record a reference video to add a skill once people are here.
+          </p>
+          <AgencyCode className="mt-4" code={user.org.join_code} />
+          <JoinAgencyForm
+            className="mt-5 text-left"
+            hint="If another nurse gave you their code, enter it here."
+            onJoined={() => reloadOverview()}
+          />
+        </EmptyState>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

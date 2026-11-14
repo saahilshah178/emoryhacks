@@ -86,6 +86,11 @@ function ordinal(n) {
   return `${n}${tail}`;
 }
 
+// Gemini's notes sometimes cite raw step ids ("Performed before s2"); show "step 2" instead.
+function nameStepIds(text) {
+  return String(text).replace(/\bs\d+\b/g, (id) => (stepById(id) ? `step ${stepById(id).ord}` : id));
+}
+
 function percent(x) {
   return x == null ? "—" : `${Math.round(Number(x) * 100)}%`;
 }
@@ -276,7 +281,7 @@ function renderSteps() {
       ${violations.map((v) => `<p class="small" style="color:var(--accent)">${esc(v.message)}</p>`).join("")}
       ${s.feedback ? `<p>${esc(s.feedback)}</p>` : ""}
       ${s.evidence ? `<p class="small muted">Seen: ${esc(s.evidence)} ${timeChip(s.evidence_start_s, s.evidence_end_s)}</p>` : ""}
-      ${s.timeline_note ? `<p class="small muted">Timeline: ${esc(s.timeline_note)}</p>` : ""}
+      ${s.timeline_note ? `<p class="small muted">Timeline: ${esc(nameStepIds(s.timeline_note))}</p>` : ""}
       <div class="nurse" data-step="${esc(s.step_id)}">
         <span class="small muted">Nurse</span>
         <span class="seg-toggle">${STATUSES.map(([v, label]) => `<button data-status="${v}" class="${nurse.status === v ? "on" : ""}">${label}</button>`).join("")}</span>

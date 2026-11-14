@@ -8,6 +8,7 @@ patient, using one still frame per call.
 """
 from __future__ import annotations
 
+import math
 import threading
 import time
 from collections import defaultdict
@@ -32,15 +33,23 @@ MAX_SIDE_PX = 640           # frames are shrunk to this longest side before dete
 IN_FRAME_MARGIN = 0.02      # landmarks further outside the frame than this are never "seen"
 MIN_TRACK_FRAMES = 3        # tracks shorter than this many frames...
 MIN_TRACK_SECONDS = 1.0     # ...or this many seconds of samples are spurious detections and dropped
-SMOOTHING = 0.5             # weight of the newest frame in the landmark moving average
+# Landmarks are smoothed with an exponential moving average whose time constant does not
+# depend on the sampling rate: the newest frame weighs 0.5 at 10 frames/s, about 0.2 at 30.
+SMOOTHING_TAU_S = 0.1 / math.log(2)
 MAX_SMOOTH_GAP_S = 0.5      # a longer gap restarts smoothing and sway for a track
+# Balance readings are kept only inside runs of standing frames lasting this long, so a
+# seated person who passes the standing test in a stray frame gets no reading.
+MIN_STANDING_SECONDS = 0.5
+MAX_STANDING_GAP_S = 0.25   # undetected time bridged inside a standing run
+BALANCE_KEYS = ("bos_center_x", "bos_width", "com_offset", "balance_score", "sway_velocity")
 
 # Advisory flag rules (roles are not known yet, so these apply to every track).
 OFF_CENTER_OFFSET = 1.0     # |com_offset| above this: centre of mass outside the feet
 FLAG_TILT_DEG = 50.0        # trunk tilt at or above this is extreme...
-LYING_TILT_DEG = 75.0       # ...unless it is this flat, which is lying down, not unsteady
+LYING_TILT_DEG = pose_math.LYING_TILT_DEG  # ...unless it is this flat, which is lying down, not unsteady
+RISING_KNEE_DEG = 20.0      # a lean while the knees straighten this much is standing up, not unsteady
 FLAG_MIN_SECONDS = 1.0
-MAX_FLAGS = 5
+MAX_FLAGS = 5               # pose flags kept per video, after relabel_flags
 
 _model_lock = threading.Lock()
 _model_bytes: bytes | None = None
@@ -166,15 +175,18 @@ def extract(ctx) -> PoseSummary:
         detector.close()
 
     rows, tracks = _keep_real_tracks(rows, rate)
+    keep_standing_balance(rows)
     n = repo.replace_pose(ctx.video_id, ctx.video["recorded_at"], rows, tracks)
     elapsed = time.time() - started
     flags = candidate_flags(rows, rate)
     valid = sum(1 for r in rows if r["valid"])
-    note = (f"{sampled} frames sampled at {rate:.1f}/s in {elapsed:.1f}s ({sampled / max(elapsed, 1e-6):.0f} frames/s); "
+    coverage = "every frame" if rate >= 0.99 * video_fps else f"{rate:.1f} of {video_fps:.0f} frames/s"
+    note = (f"{sampled} frames measured ({coverage}) in {elapsed:.1f}s ({sampled / max(elapsed, 1e-6):.0f} frames/s); "
             f"{segment} camera cuts; {valid} of {len(rows)} person-frames valid.")
     ctx.log(note)
+    # Every candidate is returned: which ones matter depends on roles, so relabel_flags keeps the top MAX_FLAGS.
     return PoseSummary(frames_written=n, tracks=len(tracks), segments=segment + 1, sample_fps=round(rate, 3),
-                       candidate_flags=flags[:MAX_FLAGS], note=note)
+                       candidate_flags=flags, note=note)
 
 
 def _sampled_frames(cap, video_fps: float, rate: float):
@@ -196,29 +208,39 @@ def _shrink(frame: np.ndarray) -> np.ndarray:
     return cv2.resize(frame, (round(w * scale), round(h * scale)), interpolation=cv2.INTER_AREA) if scale < 1 else frame
 
 
+def smoothing_weight(dt: float) -> float:
+    """Weight of the newest frame in the landmark moving average, dt seconds after the last."""
+    return 1 - math.exp(-dt / SMOOTHING_TAU_S)
+
+
 def _measure(detector: _Detector, tracker: pose_math.BoxTracker, smooth: dict, frame: np.ndarray, t: float,
              segment: int) -> list[dict]:
     """Detect, track and measure the people in one sampled frame."""
     h, w = frame.shape[:2]
     aspect = w / h
+    scale = np.array([aspect, 1.0])
     people = detector.detect(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), t)
-    ids = tracker.update(t, [pose_math.bounding_box(xy, vis) for xy, vis, _ in people])
+    ids = tracker.update(t, [pose_math.bounding_box(xy, vis) for xy, vis, _ in people],
+                         [(xy * scale, vis) for xy, vis, _ in people])
     out = []
     for track_id, (xy, vis, world) in zip(ids, people):
         state = smooth.get(track_id)
         if state and t - state["t"] <= MAX_SMOOTH_GAP_S:
-            xy = SMOOTHING * xy + (1 - SMOOTHING) * state["xy"]
-            world = SMOOTHING * world + (1 - SMOOTHING) * state["world"]
+            # Average only landmarks seen in both frames: an unseen one is a guess.
+            weight = smoothing_weight(t - state["t"])
+            both = ((vis > pose_math.VISIBLE) & (state["vis"] > pose_math.VISIBLE))[:, None]
+            xy = np.where(both, weight * xy + (1 - weight) * state["xy"], xy)
+            world = np.where(both, weight * world + (1 - weight) * state["world"], world)
         else:
             state = None
         row = pose_math.frame_readings(xy, vis, world, aspect)
         com = None
         if row.get("com_x") is not None:
             com = (row["com_x"] * aspect, row["com_y"])
-            torso = pose_math.torso_length(xy * np.array([aspect, 1.0]), vis)
+            torso = pose_math.torso_length(xy * scale, vis)
             if state and state.get("com") is not None and torso:
                 row["sway_velocity"] = pose_math.sway_velocity(state["com"], com, t - state["t"], torso)
-        smooth[track_id] = {"xy": xy, "world": world, "com": com, "t": t}
+        smooth[track_id] = {"xy": xy, "world": world, "vis": vis, "com": com, "t": t}
         row.update(person_idx=track_id, t_offset=round(t, 3), segment_id=segment)
         out.append(row)
     return out
@@ -247,10 +269,52 @@ def _keep_real_tracks(rows: list[dict], sample_fps: float) -> tuple[list[dict], 
     return out_rows, tracks
 
 
-def candidate_flags(rows: list[dict], sample_fps: float, labels: dict[int, str] | None = None) -> list[SafetyFlag]:
+def keep_standing_balance(rows: list[dict]) -> None:
+    """Clear the balance readings (BALANCE_KEYS) of every row outside a run of standing
+    frames lasting MIN_STANDING_SECONDS, per track, and the sway of each run's first row
+    (it was measured from a frame that was not standing). Rows are changed in place."""
+    by_track: dict[int, list[dict]] = defaultdict(list)
+    for r in sorted(rows, key=lambda r: r["t_offset"]):
+        by_track[r["person_idx"]].append(r)
+    for track in by_track.values():
+        times = [r["t_offset"] for r in track]
+        mask = [bool(r.get("valid") and r.get("standing") and r.get("com_offset") is not None) for r in track]
+        keep: set[int] = set()
+        for run in pose_math.stable_runs(times, mask, MIN_STANDING_SECONDS, MAX_STANDING_GAP_S):
+            keep.update(run)
+            track[run[0]]["sway_velocity"] = None
+        for i, r in enumerate(track):
+            if i not in keep:
+                for key in BALANCE_KEYS:
+                    r[key] = None
+
+
+UNNAMED = "a person"  # how a flag's description names someone whose role is not known
+
+
+def _bent_knee(rows: list[dict]) -> float | None:
+    """Mean over rows of the more bent knee's angle."""
+    knees = [min(k for k in (r.get("l_knee"), r.get("r_knee")) if k is not None)
+             for r in rows if r.get("l_knee") is not None or r.get("r_knee") is not None]
+    return float(np.mean(knees)) if knees else None
+
+
+def _is_rising(window: list[dict]) -> bool:
+    """True when the more bent knee straightens by RISING_KNEE_DEG or more across a window:
+    the person is standing up, and a forward lean then is the taught technique ("nose over toes")."""
+    edge = max(1, len(window) // 5)
+    first, last = _bent_knee(window[:edge]), _bent_knee(window[-edge:])
+    return first is not None and last is not None and last - first >= RISING_KNEE_DEG
+
+
+def candidate_flags(rows: list[dict], sample_fps: float) -> list[SafetyFlag]:
     """Sustained windows (FLAG_MIN_SECONDS or longer) where a track's centre of mass is
-    outside its base of support, or its trunk tilt is extreme without lying down.
-    Strongest first. labels maps person_idx to a person_label (default "track N")."""
+    outside its base of support, or its trunk tilt is extreme without lying down or standing
+    up. Strongest first.
+
+    Roles are not known yet, so each flag names its track in person_label as "track N" and
+    calls the person "a person" in its description. "track N" is an internal key, not text
+    for a nurse: relabel_flags must rewrite these flags before they are stored."""
     max_gap = max(0.35, 1.5 / max(sample_fps, 1e-6))
     by_track: dict[int, list[dict]] = defaultdict(list)
     for r in sorted(rows, key=lambda r: r["t_offset"]):
@@ -258,7 +322,7 @@ def candidate_flags(rows: list[dict], sample_fps: float, labels: dict[int, str] 
             by_track[r["person_idx"]].append(r)
     scored: list[tuple[float, SafetyFlag]] = []
     for idx, track in by_track.items():
-        label = (labels or {}).get(idx, f"track {idx}")
+        key = f"track {idx}"
         times = [r["t_offset"] for r in track]
         offsets = [abs(r["com_offset"]) if r.get("com_offset") is not None else None for r in track]
         off = [o is not None and o > OFF_CENTER_OFFSET for o in offsets]
@@ -268,58 +332,79 @@ def candidate_flags(rows: list[dict], sample_fps: float, labels: dict[int, str] 
             severity = "high" if dur >= 3 and peak >= 2 else "medium" if dur >= 2 or peak >= 1.5 else "low"
             scored.append((dur * (1 + mean_excess), SafetyFlag(
                 kind="patient_off_center", severity=severity, start_s=times[w[0]], end_s=times[w[-1]],
-                person_label=label, source="pose", counts_toward_score=False,
-                description=(f"Pose readings: {label}'s centre of mass was outside the base of support for "
-                             f"{dur:.1f}s (peak {peak:.1f} half-widths from the middle of the feet)."))))
+                person_label=key, source="pose", counts_toward_score=False,
+                description=(f"Pose readings: {UNNAMED}'s weight was outside the area of their feet for {dur:.1f} s "
+                             f"while standing (at worst {peak:.1f} times as far from the middle of the feet "
+                             f"as the edge of the feet)."))))
         tilts = [r.get("trunk_tilt") for r in track]
         bent = [a is not None and FLAG_TILT_DEG <= a < LYING_TILT_DEG for a in tilts]
         for w in pose_math.sustained_windows(times, bent, FLAG_MIN_SECONDS, max_gap):
+            if _is_rising([track[i] for i in w]):
+                continue
             dur, peak = times[w[-1]] - times[w[0]], max(tilts[i] for i in w)
             mean = float(np.mean([tilts[i] for i in w]))
             severity = "high" if dur >= 2 and peak >= 70 else "medium" if dur >= 2 or peak >= 60 else "low"
             scored.append((dur * (1 + (mean - FLAG_TILT_DEG) / 20), SafetyFlag(
                 kind="patient_unsteady", severity=severity, start_s=times[w[0]], end_s=times[w[-1]],
-                person_label=label, source="pose", counts_toward_score=False,
-                description=(f"Pose readings: {label}'s trunk tilted {mean:.0f} degrees from vertical on average "
-                             f"(peak {peak:.0f}) for {dur:.1f}s."))))
+                person_label=key, source="pose", counts_toward_score=False,
+                description=(f"Pose readings: {UNNAMED}'s upper body leaned {mean:.0f} degrees from upright on "
+                             f"average (at most {peak:.0f}) for {dur:.1f} s."))))
     scored.sort(key=lambda s: -s[0])
     return [f for _, f in scored]
 
 
-def relabel_flags(video_id, flags: list[SafetyFlag]) -> list[SafetyFlag]:
-    """Rewrite candidate flags once assign_roles has labelled the tracks.
+def _track_of(flag: SafetyFlag) -> int | None:
+    """The person_idx in a candidate flag's internal "track N" label, else None."""
+    parts = (flag.person_label or "").split()
+    return int(parts[1]) if len(parts) == 2 and parts[0] == "track" and parts[1].isdigit() else None
 
-    Candidates are created before roles are known, as "track N" with a patient kind.
-      * a patient's flag keeps its kind and is labelled "patient (track N)"
-      * a caregiver's trunk-tilt flag becomes unsafe_caregiver_posture (a bent back is an
-        ergonomic risk to the caregiver, not a sign the patient is unsteady)
+
+def _renamed(flag: SafetyFlag, idx: int, subject: str, **update) -> SafetyFlag:
+    """flag with its description's subject ("a person's" or "track N's") replaced by subject."""
+    text = flag.description.replace(f"{UNNAMED}'s", f"{subject}'s", 1).replace(f"track {idx}'s", f"{subject}'s")
+    return flag.model_copy(update={**update, "description": text})
+
+
+def relabel_flags(video_id, flags: list[SafetyFlag]) -> list[SafetyFlag]:
+    """Rewrite candidate flags once assign_roles has labelled the tracks, and keep the
+    MAX_FLAGS most useful ones.
+
+    Candidates are created before roles are known, with a patient kind and an internal
+    "track N" label (candidate_flags). Each is named by role, never by tracker id:
+      * a patient's flag keeps its kind and is labelled "patient" ("the patient's ...")
+      * a caregiver's trunk-tilt flag becomes unsafe_caregiver_posture, labelled "caregiver"
+        (a bent back is an ergonomic risk to the caregiver, not a sign the patient is unsteady)
       * a caregiver's off-centre flag is dropped: caregivers shift their weight on purpose
-      * a track with no known role is left as it is
+      * a track with no known caregiver or patient role becomes kind "other" with no
+        person_label; its description already says "a person". It does not claim to be
+        about the patient.
+    Flags without a "track N" label (already named) are kept as they are. The result keeps
+    patient flags first, then caregiver flags, then the rest, each strongest first.
     """
     roles = {t["person_idx"]: t["role"] for t in repo.get_tracks(video_id)}
     out: list[SafetyFlag] = []
     for flag in flags:
-        label = flag.person_label or ""
-        idx = int(label.split()[-1]) if label.startswith("track ") and label.split()[-1].isdigit() else None
-        role = roles.get(idx, "unknown") if idx is not None else "unknown"
+        idx = _track_of(flag)
+        if idx is None:
+            out.append(flag)
+            continue
+        role = roles.get(idx, "unknown")
         if role == "patient":
-            named = f"patient (track {idx})"
-            out.append(flag.model_copy(update={"person_label": named,
-                                               "description": flag.description.replace(label, f"the {named}")}))
+            out.append(_renamed(flag, idx, "the patient", person_label="patient"))
         elif role == "caregiver":
             if flag.kind == "patient_unsteady":
-                named = f"caregiver (track {idx})"
-                out.append(flag.model_copy(update={
-                    "kind": "unsafe_caregiver_posture", "person_label": named,
-                    "description": flag.description.replace(label, f"the {named}")}))
+                out.append(_renamed(flag, idx, "the caregiver", person_label="caregiver",
+                                    kind="unsafe_caregiver_posture"))
         else:
-            out.append(flag)
-    return out
+            out.append(_renamed(flag, idx, UNNAMED, person_label=None, kind="other"))
+    rank = {"unsafe_caregiver_posture": 1, "other": 2}
+    out.sort(key=lambda f: rank.get(f.kind, 0))  # stable: keeps strongest-first within each group
+    return out[:MAX_FLAGS]
 
 
 # --- roles ----------------------------------------------------------------
 MAX_ROLE_CALLS = 4
-MIN_ROLE_FRAMES = 10   # tracks shorter than this are not worth a Gemini call
+MIN_ROLE_SECONDS = 1.0  # tracks spanning less time than this are not worth a Gemini call
 MIN_ROLE_IOU = 0.2
 
 
@@ -340,7 +425,7 @@ def assign_roles(ctx, people: list[PersonObs]) -> None:
     Otherwise up to MAX_ROLE_CALLS stills are sent to Gemini, each at a time when as many
     unlabelled tracks as possible are visible, and the returned boxes are matched to the
     track boxes by overlap. Tracks that cannot be matched stay 'unknown'."""
-    tracks = [t for t in repo.get_tracks(ctx.video_id) if t["n_frames"] >= MIN_ROLE_FRAMES]
+    tracks = [t for t in repo.get_tracks(ctx.video_id) if t["last_t"] - t["first_t"] >= MIN_ROLE_SECONDS]
     if not tracks:
         return
     if len(people) <= 1 and not any(p.role == "patient" for p in people) and not _overlap_in_time(tracks):

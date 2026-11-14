@@ -50,7 +50,7 @@
   <div class="header">
     <div>
       <h1>Safety dashboard</h1>
-      <p class="muted">Joint angles and balance readings for every sampled frame, stored over time in Tiger Data.</p>
+      <p class="muted">Joint angles for each measured frame, and balance while a person is standing with both feet in view, stored over time in Tiger Data.</p>
     </div>
   </div>
   <div id="tiles" class="tiles"></div>
@@ -71,7 +71,7 @@
       </div>
       <div>
         <div class="card chart-card">
-          <h3>Balance <span class="muted">1 = centre of mass over the middle of the feet, 0 = at or past their edge</span></h3>
+          <h3>Balance <span class="muted">while standing: 1 = centre of mass over the middle of the feet, 0 = at or past their edge</span></h3>
           <div class="legend" id="legend-balance"></div>
           <div class="chart" id="chart-balance"></div>
           <div class="readout" id="readout-balance"></div>
@@ -88,7 +88,7 @@
               <option value="knee">Knees</option><option value="hip">Hips</option><option value="elbow">Elbows</option>
               <option value="shoulder">Shoulders</option><option value="ankle">Ankles</option>
             </select>
-            <span class="muted">every frame, downsampled with lttb; solid left, dashed right; 180° is straight</span></h3>
+            <span class="muted" id="joint-note">solid left, dashed right; 180° is straight</span></h3>
           <div class="legend" id="legend-joint"></div>
           <div class="chart" id="chart-joint"></div>
           <div class="readout" id="readout-joint"></div>

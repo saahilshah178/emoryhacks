@@ -5,8 +5,9 @@
   uv run python -m scripts.try_pose "Fall Response Backup.mp4" --roles      # real Gemini calls
 
 --at draws landmarks, track ids and readings onto the frames nearest those times and
-saves them as JPEGs in --out. --roles also runs assign_roles; the people descriptions
-come from a stored skill for the video when there is one, else a generic pair.
+saves them as JPEGs in --out. --roles also runs assign_roles and stores the pose flags,
+named by role, as the reference pipeline does; the people descriptions come from a
+stored skill for the video when there is one, else a generic pair.
 A video already ingested under the same file name is reused.
 """
 from __future__ import annotations
@@ -121,11 +122,14 @@ def report(video_id) -> None:
         """SELECT t.person_idx, t.segment_id, t.role, t.first_t, t.last_t, t.n_frames,
                   round(avg(f.trunk_tilt)::numeric, 1) AS tilt, round(avg(f.balance_score)::numeric, 2) AS balance,
                   round(avg(f.l_knee)::numeric, 0) AS l_knee, count(f.com_offset) AS n_balance,
+                  round(min(f.t_offset) FILTER (WHERE f.com_offset IS NOT NULL)::numeric, 1) AS standing_from,
+                  round(max(f.t_offset) FILTER (WHERE f.com_offset IS NOT NULL)::numeric, 1) AS standing_to,
                   round(avg(f.sway_velocity)::numeric, 2) AS sway
            FROM pose_tracks t JOIN pose_frames f ON f.video_id = t.video_id AND f.person_idx = t.person_idx AND f.valid
            WHERE t.video_id=%s GROUP BY 1,2,3,4,5,6 ORDER BY 1""", (video_id,)):
+        span = f", {t['standing_from']}-{t['standing_to']}s" if t["n_balance"] else ""
         print(f"  track {t['person_idx']} seg {t['segment_id']} {t['role']:9s} {t['first_t']:6.1f}-{t['last_t']:6.1f}s "
-              f"frames {t['n_frames']:4d}  tilt {t['tilt']}  balance {t['balance']} ({t['n_balance']} frames)  "
+              f"frames {t['n_frames']:4d}  tilt {t['tilt']}  balance {t['balance']} ({t['n_balance']} standing frames{span})  "
               f"l_knee {t['l_knee']}  sway {t['sway']}")
 
 
@@ -147,10 +151,13 @@ def main() -> None:
         print(f"  {summary.note}")
         print(f"  frames_written={summary.frames_written} tracks={summary.tracks} segments={summary.segments} "
               f"sample_fps={summary.sample_fps}")
+        flags = summary.candidate_flags
         if args.roles:
             pose.assign_roles(ctx, people_for(video["id"]))
+            flags = pose.relabel_flags(video["id"], flags)  # stored as the reference pipeline does
+            repo.save_flags(video["id"], None, flags, sources=("pose", "pose_confirmed"))
         report(video["id"])
-        for f in summary.candidate_flags:
+        for f in flags:
             print(f"  flag {f.kind} {f.severity} {f.start_s:.1f}-{f.end_s:.1f}s {f.person_label}: {f.description}")
         for path in overlay.save(video["id"], Path(args.out), Path(name).stem.replace(" ", "_")):
             print(f"  saved {path}")

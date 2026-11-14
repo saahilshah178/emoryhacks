@@ -2,6 +2,8 @@
 // forwards to the FastAPI server (see next.config.ts), so the session cookie is sent
 // automatically and <video>/<img> tags can use the same URLs.
 
+import { uploadTooLarge } from "./upload";
+
 export class ApiError extends Error {
   status: number;
 
@@ -87,6 +89,10 @@ export function uploadVideo(
   },
   onProgress?: (fraction: number) => void,
 ): { promise: Promise<UploadResult>; abort: () => void } {
+  // Refuse before sending rather than after minutes of uploading into the proxy's limit.
+  const tooLarge = uploadTooLarge(args.file.size);
+  if (tooLarge) return { promise: Promise.reject(new ApiError(413, tooLarge)), abort: () => undefined };
+
   const form = new FormData();
   form.append("file", args.file, args.filename);
   form.append("kind", args.kind);

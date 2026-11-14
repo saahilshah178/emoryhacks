@@ -6,6 +6,7 @@ import { Button, Card } from "@/components/ui";
 import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
 import { CoachingCue } from "@/caregiver/components/recording/CoachingCue";
 import { StepChecklist } from "@/caregiver/components/recording/StepChecklist";
+import { RecordingCountdown, recordingLimitNote } from "@/components/media/RecordingCountdown";
 import { formatClock } from "@/lib/format";
 import { useRecorder, type Recording } from "@/lib/recorder";
 import type { Skill } from "@/lib/types";
@@ -28,9 +29,19 @@ export function CameraStage({
   onBack: () => void;
 }) {
   // Destructured once: the result holds the preview ref, so its other fields are read as plain values.
-  const { previewRef, phase, problem, seconds, recording, start, stop, useFile: chooseFile } = useRecorder({
-    facingMode: "user",
-  });
+  const {
+    previewRef,
+    phase,
+    problem,
+    fileProblem,
+    seconds,
+    remaining,
+    warning,
+    recording,
+    start,
+    stop,
+    useFile: chooseFile,
+  } = useRecorder({ facingMode: "user" });
   const fileInput = useRef<HTMLInputElement>(null);
 
   // A finished take (or a chosen file) moves the wizard on to the review step.
@@ -93,6 +104,7 @@ export function CameraStage({
                   <p className="font-mono text-lg font-semibold tabular-nums text-white" aria-live="off">
                     {formatClock(seconds)}
                   </p>
+                  <RecordingCountdown remaining={remaining} warning={warning} className="ml-auto mr-2" />
                   {phase === "recording" ? (
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-navy">
                       <span className="relative flex h-2 w-2" aria-hidden>
@@ -114,6 +126,11 @@ export function CameraStage({
           {problem ? (
             <p role="alert" className="rounded-[12px] bg-warning-bg px-4 py-3 text-sm text-warning">
               {problem}
+            </p>
+          ) : null}
+          {fileProblem ? (
+            <p role="alert" className="rounded-[12px] bg-danger-bg px-4 py-3 text-sm text-danger">
+              {fileProblem}
             </p>
           ) : null}
 
@@ -167,6 +184,9 @@ export function CameraStage({
               <Button variant="ghost" size="lg" onClick={onBack} className="w-full">
                 Back
               </Button>
+              {phase !== "unavailable" ? (
+                <p className="text-center text-xs text-ink-secondary">{recordingLimitNote()}</p>
+              ) : null}
             </div>
           )}
 

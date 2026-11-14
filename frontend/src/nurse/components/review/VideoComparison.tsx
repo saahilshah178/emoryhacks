@@ -7,8 +7,9 @@ import { formatClock } from "@/lib/format";
 import type { Video } from "@/lib/types";
 
 /**
- * The caregiver's recording beside the nurse's reference (stacked below xl), with the step
- * timeline underneath. A recording that is not on this server shows a calm notice instead;
+ * The caregiver's recording beside the nurse's reference (stacked below xl), each with its
+ * own steps underneath: the step timeline under the recording, the reference's chapters
+ * under the reference. A recording that is not on this server shows a calm notice instead;
  * nothing is simulated in its place.
  */
 export function VideoComparison({
@@ -19,6 +20,7 @@ export function VideoComparison({
   referenceRef,
   referenceCaption,
   timeline,
+  referenceTimeline,
 }: {
   video: Video;
   videoRef: Ref<HTMLVideoElement>;
@@ -28,10 +30,12 @@ export function VideoComparison({
   /** What the reference is showing, e.g. the step being compared. */
   referenceCaption: string | null;
   timeline: ReactNode;
+  /** The steps over the reference video; shown when there is a reference to play. */
+  referenceTimeline?: ReactNode;
 }) {
   return (
-    <section className="space-y-3" aria-label="Recordings">
-      <div className="grid gap-4 xl:grid-cols-2">
+    <section className="grid gap-4 xl:grid-cols-2 xl:items-start" aria-label="Recordings">
+      <div className="min-w-0 space-y-3">
         <VideoFrame
           video={video}
           videoRef={videoRef}
@@ -56,6 +60,9 @@ export function VideoComparison({
             </>
           }
         />
+        <div className="rounded-[12px] border border-border bg-white p-4">{timeline}</div>
+      </div>
+      <div className="min-w-0 space-y-3">
         {reference ? (
           <VideoFrame
             video={reference}
@@ -83,9 +90,10 @@ export function VideoComparison({
             </p>
           </div>
         )}
+        {reference?.available && referenceTimeline ? (
+          <div className="rounded-[12px] border border-border bg-white p-4">{referenceTimeline}</div>
+        ) : null}
       </div>
-
-      <div className="rounded-[12px] border border-border bg-white p-4">{timeline}</div>
     </section>
   );
 }

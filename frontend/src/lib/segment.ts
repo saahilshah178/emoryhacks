@@ -115,5 +115,9 @@ export function useVideoSegments() {
     node.currentTime = Math.max(0, seconds);
   }, []);
 
-  return { ref, video, time, playing, play, seek };
+  // The playhead once the video has been started or moved; null before, so a bar shows no
+  // position and no step counts as current until the viewer does something.
+  const playhead = playing || time > 0 ? time : null;
+
+  return { ref, video, time, playhead, playing, play, seek };
 }

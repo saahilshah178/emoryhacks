@@ -2,6 +2,7 @@
 
 import { Camera, CameraOff, Circle, FileVideo, RotateCcw, Square, Upload } from "lucide-react";
 import { useId } from "react";
+import { RecordingCountdown, recordingLimitNote } from "@/components/media/RecordingCountdown";
 import { Button, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatClock } from "@/lib/format";
@@ -28,7 +29,20 @@ export function ReferenceRecorder({
   busy?: boolean;
 }) {
   const inputId = useId();
-  const { previewRef, phase, recording, problem, seconds, start, stop, reset, useFile: chooseFile } = recorder;
+  const {
+    previewRef,
+    phase,
+    recording,
+    problem,
+    fileProblem,
+    seconds,
+    remaining,
+    warning,
+    start,
+    stop,
+    reset,
+    useFile: chooseFile,
+  } = recorder;
   const live = phase === "starting" || phase === "ready" || phase === "recording";
   const fromFile = recording !== null && recording.seconds === 0;
 
@@ -89,6 +103,7 @@ export function ReferenceRecorder({
             Recording {formatClock(seconds)}
           </div>
         ) : null}
+        <RecordingCountdown remaining={remaining} warning={warning} className="absolute right-3 top-3" />
         {phase === "ready" ? (
           <div className="absolute left-3 top-3 rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white">
             Camera ready
@@ -99,6 +114,11 @@ export function ReferenceRecorder({
       {problem && phase !== "unavailable" ? (
         <p role="alert" className="rounded-[12px] bg-danger-bg px-3 py-2 text-sm text-danger">
           {problem}
+        </p>
+      ) : null}
+      {fileProblem ? (
+        <p role="alert" className="rounded-[12px] bg-danger-bg px-3 py-2 text-sm text-danger">
+          {fileProblem}
         </p>
       ) : null}
 
@@ -149,7 +169,10 @@ export function ReferenceRecorder({
             ? `Chosen file: ${recording.filename}`
             : `Your recording · ${formatClock(recording.seconds)}`}
           {" · "}Watch it back, then use it or record again.
+          {recording.stoppedAtLimit ? " It stopped by itself at the length limit." : ""}
         </p>
+      ) : phase === "ready" ? (
+        <p className="text-xs text-ink-secondary">{recordingLimitNote()}</p>
       ) : null}
     </div>
   );

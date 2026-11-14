@@ -44,6 +44,7 @@ export function StepCard({
 
   return (
     <article
+      data-step-id={step.step_id}
       aria-current={active ? "step" : undefined}
       className={cn(
         "rounded-[12px] border bg-white p-4 shadow-[var(--shadow-card)] transition-colors",

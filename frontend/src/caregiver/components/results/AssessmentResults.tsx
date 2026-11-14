@@ -2,17 +2,19 @@
 
 import Link from "next/link";
 import { ChevronRight, CircleAlert, HeartHandshake, ShieldCheck, Sparkles, TriangleAlert, Users } from "lucide-react";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Avatar, Badge, Button, Card, ErrorNote, Skeleton, StateBadge } from "@/components/ui";
+import { attemptChapters, attemptReferenceChapters, attemptStepSpan } from "@/components/media/chapters";
 import { JobProgress } from "@/components/media/JobProgress";
+import { StepChapters, useCurrentChapter } from "@/components/media/StepChapters";
 import { TimeChip } from "@/components/media/TimeChip";
 import { VideoFrame } from "@/components/media/VideoFrame";
 import { BackToSkills, PortalHeading } from "@/caregiver/components/layout/PortalHeading";
-import { StepResult, stepSpan } from "@/caregiver/components/results/StepResult";
+import { StepResult } from "@/caregiver/components/results/StepResult";
 import { useCaregiver } from "@/caregiver/context/CaregiverContext";
 import { practiceHref, resultsHref } from "@/caregiver/skills";
 import { cn } from "@/lib/cn";
-import { formatDate, formatDateTime, hasSpan } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { useApi, useJob, useTitle } from "@/lib/hooks";
 import { flagTitle, personRole, reviewState, skillState, stepStatusForCaregiver, toneClass, type Tone } from "@/lib/status";
 import { useVideoSegments } from "@/lib/segment";
@@ -242,8 +244,20 @@ function ProcessingFailed({ attempt, skillId, reason }: { attempt: Attempt; skil
 
 function Graded({ attempt, skillId }: { attempt: Attempt; skillId: string }) {
   const player = useVideoSegments();
+  const demo = useVideoSegments();
   const playable = attempt.video.available;
   const onPlay = playable ? player.play : undefined;
+  const reference = attempt.reference_video?.available ? attempt.reference_video : null;
+  const chapters = useMemo(
+    () =>
+      attemptChapters(attempt.steps, (step) => {
+        const status = step.nurse_status ?? step.status;
+        return status ? { tone: stepStatusForCaregiver[status].tone, hint: stepStatusForCaregiver[status].label } : null;
+      }),
+    [attempt.steps],
+  );
+  const demoChapters = useMemo(() => attemptReferenceChapters(attempt.steps), [attempt.steps]);
+  const current = useCurrentChapter(chapters, player.playhead, player.play);
   const flags = attempt.safety_flags.filter((flag) => flag.counts_toward_score);
   const reviewed = attempt.review_state === "approved" || attempt.review_state === "retraining";
   const steps = [...attempt.steps].sort((a, b) => a.ord - b.ord);
@@ -281,7 +295,21 @@ function Graded({ attempt, skillId }: { attempt: Attempt; skillId: string }) {
           <NurseNote attempt={attempt} />
 
           {playable ? (
-            <VideoFrame video={attempt.video} videoRef={player.ref} label="Your recording" />
+            <div className="space-y-3">
+              <VideoFrame video={attempt.video} videoRef={player.ref} label="Your recording" />
+              <Card className="p-4">
+                <StepChapters
+                  chapters={chapters}
+                  duration={attempt.video.duration_s || attempt.duration_s}
+                  time={player.playhead}
+                  activeId={current.id}
+                  onSelect={current.select}
+                  label="Steps in your recording"
+                  emptyText="The check didn't find the steps in your recording, so there are no times to jump to."
+                  missingText="Not seen in your recording"
+                />
+              </Card>
+            </div>
           ) : null}
 
           <Card className="p-5">
@@ -307,17 +335,37 @@ function Graded({ attempt, skillId }: { attempt: Attempt; skillId: string }) {
               <p className="mt-3 text-xs text-ink-secondary">Your nurse&apos;s decision above is the one that counts.</p>
             ) : null}
           </Card>
+
+          {reference ? (
+            <div className="space-y-3">
+              <VideoFrame video={reference} videoRef={demo.ref} label="Your nurse's demonstration" />
+              <Card className="p-4">
+                <StepChapters
+                  chapters={demoChapters}
+                  duration={reference.duration_s}
+                  time={demo.playhead}
+                  onPlay={demo.play}
+                  label="Steps in the demonstration"
+                  emptyText="Your nurse hasn't marked where each step is in the demonstration."
+                />
+              </Card>
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-6 lg:space-y-5">
           <Section
             title="Step by step"
             description={
-              steps.some((step) => hasSpan(...stepSpan(step)))
+              steps.some((step) => attemptStepSpan(step))
                 ? playable
-                  ? "Press a time to watch that part of your recording."
+                  ? reference
+                    ? "Press “Your recording” to watch that part of what you recorded, or “Demonstration” to see the same step done by your nurse."
+                    : "Press a time to watch that part of your recording."
                   : "Times show where each step was found in your recording."
-                : undefined
+                : reference
+                  ? "Press “Demonstration” to see a step done by your nurse."
+                  : undefined
             }
           >
             {steps.length === 0 ? (
@@ -332,6 +380,8 @@ function Graded({ attempt, skillId }: { attempt: Attempt; skillId: string }) {
                       number={index + 1}
                       violations={attempt.order_violations}
                       onPlay={onPlay}
+                      onPlayDemo={reference ? demo.play : undefined}
+                      active={step.step_id === current.id}
                     />
                   ))}
                 </ol>

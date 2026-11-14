@@ -22,7 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "backend"
-WEB = ROOT / "frontend" / "landing"
+WEB = ROOT / "frontend"
 # Starting includes connecting to the database and bringing its schema up to date.
 START_TIMEOUT_S = 90
 STOP_TIMEOUT_S = 10

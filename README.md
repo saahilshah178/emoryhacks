@@ -1,6 +1,6 @@
 # Caregiver skills verification
 
-Video-based training and verification for caregiver skills such as wheelchair transfers, glove removal and sit-to-stand. The product name is not final: the web app shows the placeholder set in `frontend/landing/src/shared/brand.ts`.
+Video-based training and verification for caregiver skills such as wheelchair transfers, glove removal and sit-to-stand. The product name is not final: the web app shows the placeholder set in `frontend/src/shared/brand.ts`.
 
 - **Nurse:** records a reference video. Gemini names the maneuver, splits it into timestamped steps, and writes pass / fail / cannot-verify criteria for each step.
 - **Caregiver:** picks a skill and records an attempt. Gemini finds each step in the attempt, flags steps done out of order, grades every step with feedback, identifies patient and caregiver, and flags visible patient distress or loss of balance, which feed the result.
@@ -121,7 +121,7 @@ All routes are under `/api`, return JSON, and need a session (cookie, or `Author
 
 | Path | What it is |
 | --- | --- |
-| `frontend/landing/` | The web app (Next.js): marketing, login, caregiver portal, nurse dashboard. See its README. |
+| `frontend/` | The web app (Next.js): marketing, login, caregiver portal, nurse dashboard. See its README. |
 | `backend/app/models.py` | Shared data contracts between stages, database and UI |
 | `backend/app/schema.sql` | Tiger Data schema |
 | `backend/app/auth.py`, `progress.py` | Accounts and sessions; the states derived from attempts |

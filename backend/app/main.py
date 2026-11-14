@@ -1,5 +1,5 @@
 """The API. It serves JSON and video under /api and nothing else: the only UI is the web app
-in frontend/landing, which forwards /api to this server.
+in frontend/, which forwards /api to this server.
 
 `make run` starts both. On its own, from the backend directory:
     uv run uvicorn app.main:app --port 8000

@@ -4,7 +4,7 @@
 # (http://localhost:3000, or the next free port). The API takes any free local port and is
 # only used by the web app. Another web port: PORT=3100 make run.
 run:
-	npm install --prefix frontend/landing --no-audit --no-fund
+	npm install --prefix frontend --no-audit --no-fund
 	cd backend && uv run python -m scripts.run_app
 
 # The two halves on their own, in two terminals, instead of `make run`.
@@ -15,8 +15,8 @@ dev:
 # The web app only. It forwards /api to the API from `make dev`.
 # Another port: PORT=3100 make web. Another API: API_URL=http://127.0.0.1:8001 make web.
 web:
-	npm install --prefix frontend/landing --no-audit --no-fund
-	npm run dev --prefix frontend/landing
+	npm install --prefix frontend --no-audit --no-fund
+	npm run dev --prefix frontend
 
 # Local TimescaleDB for development (used when DATABASE_URL is not set to Tiger Cloud)
 db:

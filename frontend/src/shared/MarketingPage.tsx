@@ -1,21 +1,21 @@
 "use client";
 
 import { CircleCheck } from "lucide-react";
-import { APP_NAME, APP_TAGLINE } from "./brand";
+import { APP_NAME } from "./brand";
 import { PublicHeader } from "./PublicHeader";
 
 const steps = [
   {
     title: "Caregivers record the skill",
-    copy: "A bed-to-wheelchair transfer, gait belt assistance, or assisted standing — on video, against a nurse-written checklist.",
+    copy: "A new caregiver watches a demonstration of an assigned skill, then records themselves attempting it.",
   },
   {
-    title: "AI timestamps missed safety steps",
-    copy: "Movement is compared to a nurse-approved reference. A brake left unlocked shows up with the second it happened.",
+    title: "AI analyzes the video",
+    copy: "The caregiver's attempt of the skill is compared to the demonstration video. Timestamps are provided with each step so the caregiver knows exactly where they went wrong.",
   },
   {
-    title: "A registered nurse decides",
-    copy: "Approve the skill or request retraining. AI never certifies anyone before independent work.",
+    title: "A nurse makes the final decision",
+    copy: "Once the caregiver successfully performs a skill, the video is sent to a registered nurse for verification.",
   },
 ];
 
@@ -46,135 +46,124 @@ const badge = {
   danger: "bg-danger-bg text-danger",
 };
 
-export function MarketingPage() {
+/** The sample clinical review card shown under the hero text. */
+function ReviewPreview() {
   const needsNurse = queue.filter((item) => item.tone !== "success").length;
 
+  return (
+    <div className="overflow-hidden rounded-[16px] border border-border bg-white shadow-[0_8px_28px_rgba(23,50,77,0.08)]">
+      <div className="flex items-center gap-2 border-b border-border bg-navy px-4 py-3">
+        <span className="h-2 w-2 rounded-full bg-white/25" aria-hidden />
+        <span className="h-2 w-2 rounded-full bg-white/25" aria-hidden />
+        <span className="h-2 w-2 rounded-full bg-teal" aria-hidden />
+        <p className="ml-2 text-xs font-medium tracking-wide text-white/80">
+          Clinical review · {APP_NAME}
+        </p>
+      </div>
+      <div className="p-4">
+        <div className="mb-2 flex items-baseline justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-secondary">
+            Pending reviews
+          </p>
+          <p className="text-xs font-semibold text-warning">{needsNurse} need a nurse</p>
+        </div>
+        <ul className="divide-y divide-border">
+          {queue.map((item) => (
+            <li key={item.name} className="flex items-center justify-between gap-3 py-2 first:pt-1">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-ink">{item.name}</p>
+                <p className="truncate text-xs text-ink-secondary">{item.skill}</p>
+              </div>
+              <span
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${badge[item.tone]}`}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+                {item.status}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-2.5 rounded-[12px] border border-danger/20 bg-danger-bg px-3.5 py-2.5">
+          <p className="text-xs font-semibold text-danger">Wheelchair brakes not locked · 0:04–0:09</p>
+          <p className="mt-1 text-xs leading-5 text-ink-secondary">
+            Both brake levers stay up through the pivot.
+          </p>
+        </div>
+        <p className="mt-3 flex items-center gap-2 text-xs text-ink-secondary">
+          <CircleCheck className="h-3.5 w-3.5 text-teal" aria-hidden />
+          AI findings are recommendations, not certifications.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** The "how it works" banner on the right of the hero. */
+function HowItWorks() {
+  return (
+    <aside
+      id="how-it-works"
+      aria-labelledby="how-it-works-title"
+      className="flex w-full flex-col rounded-[20px] border border-border bg-white px-5 py-6 shadow-[0_8px_28px_rgba(23,50,77,0.08)] sm:px-7 sm:py-7"
+    >
+      <div className="flex flex-1 flex-col">
+        <h2 id="how-it-works-title" className="text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] text-navy">
+          How {APP_NAME} works
+        </h2>
+
+        <ol className="mt-5 flex flex-1 flex-col gap-3">
+          {steps.map((step, index) => (
+            <li
+              key={step.title}
+              className="grid flex-1 grid-cols-[2.25rem_minmax(0,1fr)] content-center gap-x-4 rounded-[14px] border border-border bg-page p-4"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-teal text-sm font-semibold tabular-nums text-white">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <div>
+                <h3 className="text-[17px] font-semibold tracking-tight text-navy">{step.title}</h3>
+                <p className="mt-0.5 text-sm leading-[1.4rem] text-ink-secondary">{step.copy}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </aside>
+  );
+}
+
+export function MarketingPage() {
   return (
     <div className="min-h-dvh bg-page text-ink">
       <PublicHeader />
 
       <main id="main">
         <section className="relative overflow-hidden">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_circle_at_78%_-8%,rgba(23,108,113,0.12),transparent_58%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_circle_at_20%_-8%,rgba(23,108,113,0.12),transparent_58%)]" />
 
-          <div className="relative mx-auto grid max-w-[1120px] items-center gap-6 px-5 pb-10 pt-6 sm:gap-8 sm:px-6 sm:pb-14 sm:pt-8 md:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)] md:gap-12 md:pb-20 md:pt-12">
-            <div className="min-w-0 md:order-2">
-              <h1 className="text-balance text-[1.85rem] font-semibold leading-[1.14] tracking-[-0.035em] text-navy sm:text-[2.6rem] sm:leading-[1.1] lg:text-[2.85rem] lg:leading-[1.08]">
+          <div className="relative mx-auto grid max-w-[1200px] items-start gap-8 px-5 pb-10 pt-6 sm:px-6 md:min-h-[calc(100dvh-4rem-1px)] md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:content-center md:items-stretch md:gap-10 md:py-6 lg:gap-14">
+            <div className="min-w-0">
+              <h1 className="text-balance text-[2.4rem] font-semibold leading-[1.04] tracking-[-0.035em] text-navy sm:text-[2.7rem] lg:text-[2.9rem]">
                 Better Caregivers.
                 <br />
                 <em>Faster.</em>
               </h1>
-              <p className="mt-3 hidden max-w-md text-[17px] leading-7 text-ink-secondary sm:mt-4 sm:block">
-                {APP_NAME} helps nurses verify essential caregiving skills with
-                AI-assisted video review — so safety issues surface before the first
-                unsupervised shift.
+              <p className="mt-3 max-w-lg text-[17px] leading-7 text-ink-secondary sm:mt-4">
+                {APP_NAME} helps nurses efficiently train caregivers on essential healthcare skills
+                via AI-assisted video review.
               </p>
-              <p className="mt-3 max-w-md text-sm leading-6 text-ink-secondary">
-                AI findings are recommendations, not certifications.
-              </p>
-            </div>
 
-            <div className="relative min-w-0 md:order-1">
-              <div className="overflow-hidden rounded-[16px] border border-border bg-white shadow-[0_8px_28px_rgba(23,50,77,0.08)]">
-                <div className="flex items-center gap-2 border-b border-border bg-navy px-4 py-3">
-                  <span className="h-2 w-2 rounded-full bg-white/25" aria-hidden />
-                  <span className="h-2 w-2 rounded-full bg-white/25" aria-hidden />
-                  <span className="h-2 w-2 rounded-full bg-teal" aria-hidden />
-                  <p className="ml-2 text-xs font-medium tracking-wide text-white/80">
-                    Clinical review · {APP_NAME}
-                  </p>
-                </div>
-                <div className="p-4">
-                  <div className="mb-2 flex items-baseline justify-between gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-secondary">
-                      Pending reviews
-                    </p>
-                    <p className="text-xs font-semibold text-warning">
-                      {needsNurse} need a nurse
-                    </p>
-                  </div>
-                  <ul className="divide-y divide-border">
-                    {queue.map((item) => (
-                      <li
-                        key={item.name}
-                        className="flex items-center justify-between gap-3 py-3 first:pt-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-ink">{item.name}</p>
-                          <p className="truncate text-xs text-ink-secondary">{item.skill}</p>
-                        </div>
-                        <span
-                          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${badge[item.tone]}`}
-                        >
-                          <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-                          {item.status}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-3 rounded-[12px] border border-danger/20 bg-danger-bg px-3.5 py-3">
-                    <p className="text-xs font-semibold text-danger">
-                      Wheelchair brakes not locked · 0:04–0:09
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-ink-secondary">
-                      Both brake levers stay up through the pivot.
-                    </p>
-                  </div>
-                  <p className="mt-4 flex items-center gap-2 text-xs text-ink-secondary">
-                    <CircleCheck className="h-3.5 w-3.5 text-teal" aria-hidden />
-                    AI findings are recommendations, not certifications.
-                  </p>
-                </div>
+              <div className="mt-5">
+                <ReviewPreview />
               </div>
             </div>
-          </div>
-        </section>
 
-        <section id="how-it-works" className="scroll-mt-24 border-t border-border bg-white">
-          <div className="mx-auto max-w-[720px] px-5 py-16 sm:px-6 md:py-20">
-            <h2 className="text-3xl font-semibold tracking-[-0.03em] text-navy">
-              How {APP_NAME} works
-            </h2>
-            <p className="mt-3 text-[15px] leading-7 text-ink-secondary">{APP_TAGLINE}</p>
-
-            <ol className="mt-10 space-y-8">
-              {steps.map((step, index) => (
-                <li key={step.title} className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-4">
-                  <span className="text-sm font-semibold tabular-nums text-teal">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <div>
-                    <h3 className="text-lg font-semibold tracking-tight text-navy">{step.title}</h3>
-                    <p className="mt-1.5 text-sm leading-6 text-ink-secondary">{step.copy}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
-
-        <section id="for-teams" className="scroll-mt-24 border-t border-border bg-navy text-white">
-          <div className="mx-auto max-w-[720px] px-5 py-16 sm:px-6 md:py-20">
-            <h2 className="text-3xl font-semibold tracking-[-0.03em]">For nurses</h2>
-            <p className="mt-4 text-[15px] leading-7 text-white/80">
-              Open a side-by-side review, jump to flagged timestamps, and approve or request
-              retraining. Caregivers practice against a checklist first. You remain the only
-              person who can certify a skill.
-            </p>
+            <div className="flex min-w-0">
+              <HowItWorks />
+            </div>
           </div>
         </section>
       </main>
-
-      <footer className="border-t border-border bg-white pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-        <div className="mx-auto flex max-w-[1120px] flex-col gap-4 px-5 py-8 sm:flex-row sm:items-end sm:justify-between sm:px-6">
-          <div>
-            <p className="text-[15px] font-semibold tracking-tight text-navy">{APP_NAME}</p>
-            <p className="mt-1 max-w-sm text-sm text-ink-secondary">
-              Built for home-care agencies. Nurses remain the certifying authority.
-            </p>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

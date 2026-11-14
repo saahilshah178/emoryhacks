@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Bell } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { Badge } from "@/components/ui";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { relativeTime } from "@/lib/format";
@@ -106,9 +107,18 @@ export function TopNav() {
                     <Link
                       href={item.attempt_id ? `/dashboard/reviews/${item.attempt_id}` : "/dashboard/pending"}
                       onClick={() => setOpen(false)}
-                      className={cn("block px-4 py-3 hover:bg-secondary", freshIds.has(item.id) && "bg-teal-soft/40")}
+                      className={cn(
+                        "block px-4 py-3 hover:bg-secondary",
+                        freshIds.has(item.id) && "bg-teal-soft/40",
+                        item.forced && "border-l-2 border-warning",
+                      )}
                     >
                       <p className="text-sm font-medium text-ink">{item.title}</p>
+                      {item.forced ? (
+                        <Badge tone="warning" className="mt-1">
+                          Sent anyway
+                        </Badge>
+                      ) : null}
                       <p className="mt-0.5 text-xs text-ink-secondary">{item.body}</p>
                       <p className="mt-1 text-[11px] text-ink-secondary">{relativeTime(item.time)}</p>
                     </Link>

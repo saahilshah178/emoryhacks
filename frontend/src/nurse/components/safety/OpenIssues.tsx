@@ -54,7 +54,7 @@ export function OpenIssues() {
                       <p className="font-semibold text-ink">
                         {item.caregiver_name || "Unnamed caregiver"} · {item.skill_name}
                       </p>
-                      <p className="mt-1 text-xs text-ink-secondary">Submitted {formatDateTime(item.created_at)}</p>
+                      <p className="mt-1 text-xs text-ink-secondary">Sent {formatDateTime(item.submitted_at ?? item.created_at)}</p>
                     </div>
                     <StateBadge entry={item.ai_assessment ? aiAssessment[item.ai_assessment] : null} />
                   </div>

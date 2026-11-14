@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { Circle, FileVideo, Square, VideoOff } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
-import { CoachingCue } from "@/caregiver/components/recording/CoachingCue";
 import { StepChecklist } from "@/caregiver/components/recording/StepChecklist";
 import { formatClock } from "@/lib/format";
 import { useRecorder, type Recording } from "@/lib/recorder";
@@ -12,6 +11,8 @@ import type { Skill } from "@/lib/types";
 
 /** The server needs at least this much video to grade. */
 const MIN_SECONDS = 2;
+/** Recording stops by itself at this length. */
+const MAX_SECONDS = 4 * 60;
 
 /**
  * The camera preview and the record button. Nothing is analysed here: the video is
@@ -30,6 +31,7 @@ export function CameraStage({
   // Destructured once: the result holds the preview ref, so its other fields are read as plain values.
   const { previewRef, phase, problem, seconds, recording, start, stop, useFile: chooseFile } = useRecorder({
     facingMode: "user",
+    maxSeconds: MAX_SECONDS,
   });
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -38,8 +40,6 @@ export function CameraStage({
     if (recording) onRecorded(recording);
   }, [recording, onRecorded]);
 
-  const cues = [...(skill.guide.cues ?? [])].sort((a, b) => a.at_s - b.at_s);
-  const cue = phase === "recording" ? cues.filter((item) => item.at_s <= seconds).at(-1) : undefined;
   const cameraOn = phase === "ready" || phase === "recording";
 
   return (
@@ -47,7 +47,7 @@ export function CameraStage({
       <PortalHeading
         eyebrow="Your turn"
         title={`Record ${skill.name.toLowerCase()}`}
-        description="Set up the camera so your whole body and the space around you are in view. Your movement is checked after you send the video."
+        description={`Set up the camera so your whole body and the space around you are in view. Maximum video length is ${MAX_SECONDS / 60} minutes.`}
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
@@ -85,8 +85,6 @@ export function CameraStage({
                   <span className="absolute -bottom-1 -right-1 h-4 w-4 border-b-2 border-r-2 border-teal" />
                 </div>
               ) : null}
-
-              {cue ? <CoachingCue message={cue.message} /> : null}
 
               {cameraOn ? (
                 <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-navy/90 to-transparent px-4 pb-4 pt-10">
@@ -170,16 +168,14 @@ export function CameraStage({
             </div>
           )}
 
-          {cues.length === 0 ? (
-            <Card className="p-4">
-              <StepChecklist
-                steps={skill.steps}
-                orderMatters={skill.order_matters}
-                title="Steps to show"
-                compact
-              />
-            </Card>
-          ) : null}
+          <Card className="p-4">
+            <StepChecklist
+              steps={skill.steps}
+              orderMatters={skill.order_matters}
+              title="Steps to show"
+              compact
+            />
+          </Card>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Play, RotateCcw, Video } from "lucide-react";
+import { Video } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
 import { VideoFrame } from "@/components/media/VideoFrame";
@@ -58,17 +58,6 @@ export function ReferencePlayer({
               </>
             }
           />
-
-          {available ? (
-            <Button variant="secondary" size="lg" className="w-full" onClick={() => player.play(0)}>
-              {player.playing || player.time > 0 ? (
-                <RotateCcw className="h-4 w-4" aria-hidden />
-              ) : (
-                <Play className="h-4 w-4" aria-hidden />
-              )}
-              {player.playing || player.time > 0 ? "Replay the demonstration" : "Play the demonstration"}
-            </Button>
-          ) : null}
 
           <div className="hidden flex-col gap-3 lg:flex">{actions}</div>
         </div>

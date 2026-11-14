@@ -24,45 +24,40 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6 lg:space-y-5">
-      <PortalHeading
-        title={`Welcome back, ${firstName(user.name)}`}
-        description={user.next_shift ? `Next shift: ${user.next_shift}.` : undefined}
-      />
+      <PortalHeading title={`Welcome back, ${firstName(user.name)}`} />
 
       <MySkillsLoadable
         skeleton={
-          <div className="space-y-6 lg:space-y-5">
-            <div className="hidden gap-4 lg:grid lg:grid-cols-2 xl:grid-cols-4">
-              {[0, 1, 2, 3].map((key) => (
-                <Skeleton key={key} className="h-28" />
-              ))}
-            </div>
-            <Skeleton className="h-32 lg:hidden" />
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="grid gap-6 lg:grid-cols-2 lg:gap-5">
+            <div className="space-y-5">
+              <div className="hidden grid-cols-2 gap-3 lg:grid xl:grid-cols-4">
+                {[0, 1, 2, 3].map((key) => (
+                  <Skeleton key={key} className="h-[72px]" />
+                ))}
+              </div>
+              <Skeleton className="h-32 lg:hidden" />
               <Skeleton className="h-48" />
-              <Skeleton className="hidden h-48 lg:block" />
             </div>
+            <Skeleton className="hidden h-96 lg:block" />
           </div>
         }
       >
         {(skills, counts) => {
           const next = recommendedSkill(skills);
           return (
-            <div className="space-y-6 lg:space-y-5">
-              <ProgressTiles counts={counts} className="hidden lg:grid" />
-              <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-5">
-                <div className="space-y-6 lg:space-y-5">
-                  <ProgressOverview counts={counts} className="lg:hidden" />
-                  {/* No banner for a skill a nurse sent back; the "Try again" figure covers it. */}
-                  {!next ? (
-                    <CaughtUpCard inReview={counts.in_review} />
-                  ) : next.state !== "needs_practice" ? (
-                    <StartSkillCta skill={next} />
-                  ) : null}
-                  <SkillsAtAGlance skills={skills} className="hidden lg:block" />
-                </div>
+            <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-5">
+              <div className="space-y-6 lg:space-y-5">
+                <ProgressTiles counts={counts} className="hidden lg:grid" />
+                <ProgressOverview counts={counts} className="lg:hidden" />
+                {/* No banner for a skill a nurse sent back; the "Try again" figure covers it. */}
+                {!next ? (
+                  <CaughtUpCard inReview={counts.in_review} />
+                ) : next.state !== "needs_practice" ? (
+                  <StartSkillCta skill={next} />
+                ) : null}
                 <RecentUpdates className="hidden lg:block" />
               </div>
+              <SkillsAtAGlance skills={skills} className="hidden lg:block" />
             </div>
           );
         }}

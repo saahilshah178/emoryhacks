@@ -25,8 +25,10 @@ Work in two passes.
 1. In "observed", describe in order what actually happens in the recording, one short entry per distinct
    action, with its start and end time. Use what you see and what you hear people say.
 2. In "steps", give one entry for every step id above. performed is true only if that action clearly happens
-   in this recording. start_s is when the action begins (the first movement or instruction for it) and
-   end_s is when it is complete. Use the timing you observed in this recording only.
+   in this recording. start_s is when the caregiver begins doing the action (its first movement, or for a
+   spoken step the moment they say it) and end_s is when it is complete. Announcing a plan in advance ("I'll
+   lock the brakes, then help you up") is not the start of those steps. Use the timing you observed in this
+   recording only.
 
 Rules:
 - The people, room and camera angle may differ from any example of this skill. Judge the actions.
@@ -36,7 +38,8 @@ Rules:
 - Do not stretch a step to fill a gap, and do not mark a step performed because a related step was.
 - If the recording does not show this skill at all, mark every step not performed.
 - confidence is 0 to 1: how sure you are that the step happened at the time you gave.
-- note: a few words for the nurse when useful (what you saw, why it was not found, or a repeat)."""
+- note: a few words for the nurse when useful (what you saw, why it was not found, or a repeat). Refer to
+  other steps by their title, never by their id."""
 
 
 def refine(title: str, description: str, cues: list[str], start_s: float, end_s: float,
@@ -47,6 +50,7 @@ a care skill. Timestamps are seconds from the start of the full recording, as pl
 A first pass placed this step at roughly {start_s:.1f} s to {end_s:.1f} s:
 "{title}": {description} Look for: {"; ".join(cues) or "none listed"}
 
-Find the exact boundaries of this step within the clip. start_s is the first movement or spoken instruction
-that belongs to it; end_s is when it is complete and the next action begins. If the step is not in this
+Find the exact boundaries of this step within the clip. start_s is the first movement of the action itself
+(for a spoken step, the moment it is said), not an earlier mention of it in a plan; end_s is when it is
+complete and the next action begins. If the step is not in this
 clip at all, set performed to false."""

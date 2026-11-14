@@ -17,7 +17,7 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex items-center justify-center gap-2 font-medium transition-colors disabled:cursor-not-allowed disabled:bg-secondary disabled:text-ink-muted disabled:border-transparent",
+        "inline-flex items-center justify-center gap-2 font-semibold transition-colors disabled:cursor-not-allowed disabled:bg-secondary disabled:text-ink-muted disabled:border-transparent",
         size === "sm" && "h-8 rounded-[10px] px-3 text-xs",
         size === "md" && "h-10 rounded-[12px] px-4 text-sm",
         size === "lg" && "h-11 rounded-[12px] px-5 text-sm",

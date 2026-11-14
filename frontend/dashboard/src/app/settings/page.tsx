@@ -6,8 +6,10 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { APP_NAME } from "@/lib/branding";
 import { CURRENT_NURSE } from "@/lib/mock-data";
+import { useAuth } from "@/shared/AuthProvider";
 
 export default function SettingsPage() {
+  const { signOut } = useAuth();
   const [name, setName] = useState(CURRENT_NURSE.name);
   const [alerts, setAlerts] = useState({
     safety: true,
@@ -85,6 +87,9 @@ export default function SettingsPage() {
             Save preferences
           </Button>
           {saved && <p className="text-sm text-success">Preferences saved on this device.</p>}
+          <Button type="button" variant="secondary" onClick={signOut}>
+            Sign out
+          </Button>
         </CardBody>
       </Card>
     </div>

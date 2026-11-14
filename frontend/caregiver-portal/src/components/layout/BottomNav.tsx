@@ -31,9 +31,10 @@ export function BottomNav() {
             <li key={item.href} className="flex-1">
               <Link
                 href={item.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-[12px] px-2 text-[11px] font-medium",
-                  active ? "text-teal" : "text-text-muted",
+                  active ? "bg-teal-soft text-teal" : "text-ink-secondary",
                 )}
               >
                 <Icon
@@ -41,9 +42,6 @@ export function BottomNav() {
                   aria-hidden
                 />
                 {item.label}
-                {active ? (
-                  <span className="sr-only">(current)</span>
-                ) : null}
               </Link>
             </li>
           );

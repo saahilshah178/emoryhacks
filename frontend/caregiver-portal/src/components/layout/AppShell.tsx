@@ -12,6 +12,7 @@ const desktopNav = [
   { href: "/", label: "Home" },
   { href: "/skills", label: "My Skills" },
   { href: "/progress", label: "My Progress" },
+  { href: "/profile", label: "Profile" },
 ];
 
 function isImmersivePath(pathname: string) {
@@ -24,9 +25,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isHome = pathname === "/";
 
   return (
-    <div className="min-h-dvh w-full bg-bg">
+    <div className="min-h-dvh w-full bg-page">
       <header className="sticky top-0 z-20 w-full bg-navy">
-        <div className="mx-auto flex h-14 w-full max-w-lg items-center justify-between gap-4 px-4 md:max-w-3xl">
+        <div className="mx-auto flex h-16 w-full max-w-lg items-center justify-between gap-3 px-4 md:max-w-3xl">
           {immersive && !isHome ? (
             <Link
               href="/"
@@ -50,7 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "rounded-[10px] px-3 py-2 text-sm font-medium",
+                      "rounded-[12px] px-3 py-2 text-sm font-medium transition-colors",
                       active ? "bg-teal text-white" : "text-white/80 hover:bg-white/10",
                     )}
                   >
@@ -64,16 +65,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <div
+      <main
+        id="main"
         className={cn(
           "mx-auto w-full max-w-lg px-4 md:max-w-3xl",
           immersive
-            ? "pb-8 pt-4 md:pb-12"
-            : "pb-[calc(5.25rem+env(safe-area-inset-bottom))] pt-5 md:pb-10",
+            ? "pb-8 pt-5 md:pb-12"
+            : "pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-6 md:pb-12",
         )}
       >
         {children}
-      </div>
+      </main>
 
       {immersive ? null : <BottomNav />}
     </div>

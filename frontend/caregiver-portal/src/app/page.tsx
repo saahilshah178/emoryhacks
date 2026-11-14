@@ -17,11 +17,11 @@ export default function HomePage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-[1.65rem] font-bold leading-tight tracking-tight text-navy">
-          Welcome back, {caregiver.firstName}!
+        <h1 className="text-[1.65rem] font-semibold leading-tight tracking-tight text-navy">
+          Welcome back, {caregiver.firstName}
         </h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          Let&apos;s get you ready for your next shift.
+        <p className="mt-1 text-sm text-ink-secondary">
+          Next shift: {caregiver.nextShift}. Let&apos;s get you ready.
         </p>
       </header>
 
@@ -36,11 +36,11 @@ export default function HomePage() {
       <section className="space-y-3">
         <div className="flex items-end justify-between">
           <h2 className="text-lg font-semibold text-navy">My Skills</h2>
-          <p className="text-xs font-medium text-text-muted">
+          <p className="text-xs font-medium tabular-nums text-ink-muted">
             {skills.length} skills
           </p>
         </div>
-        <div className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-2">
           {skills.map((skill) => (
             <SkillCard key={skill.id} skill={skill} />
           ))}

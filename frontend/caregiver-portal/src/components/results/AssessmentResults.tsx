@@ -19,66 +19,65 @@ export function AssessmentResults({
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-wide text-teal">
-          Skill assessment
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-navy">
-          Your skill assessment is ready!
+        <h1 className="text-2xl font-semibold tracking-tight text-navy">
+          Your skill assessment is ready
         </h1>
-        <p className="mt-2 text-[15px] leading-relaxed text-text-secondary">
+        <p className="mt-2 text-[15px] leading-relaxed text-ink-secondary">
           {assessment.summary}
         </p>
       </header>
 
-      <Card className="p-4">
+      <Card className="p-5">
         <p className="text-sm font-semibold text-navy">{skill.name}</p>
         <div className={`mt-3 grid gap-3 ${needsWork > 0 ? "grid-cols-2" : "grid-cols-1"}`}>
           <div className="rounded-[12px] bg-success-bg px-3 py-2.5">
-            <p className="text-xl font-bold text-success">{passed}</p>
+            <p className="text-xl font-semibold tabular-nums text-success">{passed}</p>
             <p className="text-xs font-medium text-success">Steps looking strong</p>
           </div>
           {needsWork > 0 ? (
             <div className="rounded-[12px] bg-warning-bg px-3 py-2.5">
-              <p className="text-xl font-bold text-warning">{needsWork}</p>
+              <p className="text-xl font-semibold tabular-nums text-warning">{needsWork}</p>
               <p className="text-xs font-medium text-warning">Worth another look</p>
             </div>
           ) : null}
         </div>
       </Card>
 
-      <section className="space-y-2">
+      <section>
         <h2 className="text-sm font-semibold text-navy">Step by step</h2>
-        {assessment.steps.map((step) => {
-          const passedStep = step.status === "passed";
-          return (
-            <Card key={step.id} className="flex items-start gap-3 p-3.5">
-              <span
-                className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                  passedStep ? "bg-success-bg text-success" : "bg-warning-bg text-warning"
-                }`}
-              >
-                {passedStep ? (
-                  <Check className="h-4 w-4" aria-hidden />
-                ) : (
-                  <Clock3 className="h-4 w-4" aria-hidden />
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-semibold text-navy">{step.label}</p>
-                  <span
-                    className={`shrink-0 text-xs font-semibold ${
-                      passedStep ? "text-success" : "text-warning"
-                    }`}
-                  >
-                    {passedStep ? "Passed" : "Needs improvement"}
-                    {step.timestamp ? ` (${step.timestamp})` : ""}
-                  </span>
+        <Card className="mt-2 divide-y divide-border">
+          {assessment.steps.map((step) => {
+            const passedStep = step.status === "passed";
+            return (
+              <div key={step.id} className="flex items-start gap-3 px-4 py-3.5">
+                <span
+                  className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                    passedStep ? "bg-success-bg text-success" : "bg-warning-bg text-warning"
+                  }`}
+                >
+                  {passedStep ? (
+                    <Check className="h-4 w-4" aria-hidden />
+                  ) : (
+                    <Clock3 className="h-4 w-4" aria-hidden />
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold text-navy">{step.label}</p>
+                    <span
+                      className={`shrink-0 text-xs font-semibold ${
+                        passedStep ? "text-success" : "text-warning"
+                      }`}
+                    >
+                      {passedStep ? "Passed" : "Needs improvement"}
+                      {step.timestamp ? ` (${step.timestamp})` : ""}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </Card>
-          );
-        })}
+            );
+          })}
+        </Card>
       </section>
 
       <Card className="flex gap-3 bg-info-bg p-4">

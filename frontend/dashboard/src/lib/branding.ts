@@ -1,1 +1,1 @@
-export const APP_NAME = "Project Name";
+export { APP_NAME, APP_TAGLINE } from "@/shared/brand";

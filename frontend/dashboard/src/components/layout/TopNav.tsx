@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Search } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Bell, ChevronDown, LogOut, Search, Settings } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { useDashboard } from "@/context/DashboardContext";
 import { CURRENT_NURSE, notifications } from "@/lib/mock-data";
 import { cn } from "@/lib/cn";
+import { useAuth } from "@/shared/AuthProvider";
 
 const titles: Record<string, string> = {
   "/": "Clinical Dashboard",
@@ -21,19 +22,32 @@ const titles: Record<string, string> = {
 export function TopNav() {
   const pathname = usePathname();
   const { search, setSearch } = useDashboard();
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const { signOut } = useAuth();
+  const [menu, setMenu] = useState<"notifications" | "account" | null>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const accountRef = useRef<HTMLDivElement>(null);
+  const accountMenuId = useId();
   const unread = notifications.filter((item) => item.unread).length;
   const title = pathname.startsWith("/reviews/")
     ? "Skill Review"
     : (titles[pathname] ?? "Clinical Dashboard");
 
   useEffect(() => {
-    function onClick(event: MouseEvent) {
-      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    function onPointerDown(event: MouseEvent) {
+      const target = event.target as Node;
+      const insideNotifications = notificationsRef.current?.contains(target);
+      const insideAccount = accountRef.current?.contains(target);
+      if (!insideNotifications && !insideAccount) setMenu(null);
     }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenu(null);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, []);
 
   return (
@@ -55,19 +69,23 @@ export function TopNav() {
         />
       </label>
 
-      <div className="relative" ref={menuRef}>
+      <div className="relative ml-auto sm:ml-0" ref={notificationsRef}>
         <button
           type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="relative flex h-10 w-10 items-center justify-center rounded-[12px] border border-border text-ink-secondary hover:bg-secondary"
+          onClick={() =>
+            setMenu((current) => (current === "notifications" ? null : "notifications"))
+          }
+          className="relative flex h-10 w-10 items-center justify-center rounded-[12px] border border-border text-ink-secondary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30"
           aria-label="Notifications"
+          aria-expanded={menu === "notifications"}
+          aria-haspopup="menu"
         >
           <Bell className="h-4 w-4" />
           {unread > 0 && (
             <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger" />
           )}
         </button>
-        {open && (
+        {menu === "notifications" && (
           <div className="absolute right-0 z-30 mt-2 w-[340px] overflow-hidden rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <p className="text-sm font-semibold text-ink">Notifications</p>
@@ -78,7 +96,7 @@ export function TopNav() {
                 <li key={item.id}>
                   <Link
                     href={item.href ?? "/pending"}
-                    onClick={() => setOpen(false)}
+                    onClick={() => setMenu(null)}
                     className={cn(
                       "block px-4 py-3 hover:bg-secondary",
                       item.unread && "bg-teal-soft/40",
@@ -95,12 +113,66 @@ export function TopNav() {
         )}
       </div>
 
-      <div className="hidden items-center gap-3 pl-1 md:flex">
-        <div className="text-right">
-          <p className="text-sm font-medium text-ink">{CURRENT_NURSE.name}</p>
-          <p className="text-xs text-ink-secondary">{CURRENT_NURSE.credentials}</p>
-        </div>
-        <Avatar name={CURRENT_NURSE.name} initials="PC" />
+      <div className="relative" ref={accountRef}>
+        <button
+          type="button"
+          aria-label="Account menu"
+          aria-expanded={menu === "account"}
+          aria-haspopup="menu"
+          aria-controls={accountMenuId}
+          onClick={() => setMenu((current) => (current === "account" ? null : "account"))}
+          className="flex shrink-0 items-center gap-2.5 rounded-[12px] p-1 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 md:pr-2"
+        >
+          <span className="hidden text-right md:block">
+            <span className="block whitespace-nowrap text-sm font-medium text-ink">
+              {CURRENT_NURSE.name}
+            </span>
+            <span className="block whitespace-nowrap text-xs text-ink-secondary">
+              {CURRENT_NURSE.credentials}
+            </span>
+          </span>
+          <Avatar name={CURRENT_NURSE.name} initials="PC" />
+          <ChevronDown
+            className={cn(
+              "hidden h-4 w-4 shrink-0 text-ink-muted transition-transform duration-150 md:block",
+              menu === "account" && "rotate-180",
+            )}
+          />
+        </button>
+        {menu === "account" && (
+          <div
+            id={accountMenuId}
+            role="menu"
+            aria-label="Account"
+            className="absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]"
+          >
+            <div className="border-b border-border px-4 py-3">
+              <p className="text-sm font-semibold text-ink">{CURRENT_NURSE.name}</p>
+              <p className="text-xs text-ink-secondary">
+                {CURRENT_NURSE.credentials} · {CURRENT_NURSE.title}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-ink-muted">{CURRENT_NURSE.email}</p>
+            </div>
+            <Link
+              role="menuitem"
+              href="/settings"
+              onClick={() => setMenu(null)}
+              className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-ink hover:bg-secondary focus-visible:bg-secondary focus-visible:outline-none"
+            >
+              <Settings className="h-4 w-4 text-ink-secondary" />
+              Settings
+            </Link>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={signOut}
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-ink hover:bg-secondary focus-visible:bg-secondary focus-visible:outline-none"
+            >
+              <LogOut className="h-4 w-4 text-ink-secondary" />
+              Sign out
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

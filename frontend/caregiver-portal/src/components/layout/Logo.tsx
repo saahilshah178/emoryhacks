@@ -3,12 +3,12 @@ import { APP_NAME } from "@/config/branding";
 
 export function Logo({ light = false }: { light?: boolean }) {
   return (
-    <Link href="/" className="flex items-center gap-2.5 min-h-11">
-      <span
-        className={`flex h-8 w-8 items-center justify-center rounded-[10px] text-sm font-bold ${
-          light ? "bg-teal text-white" : "bg-teal text-white"
-        }`}
-      >
+    <Link
+      href="/"
+      aria-label={APP_NAME}
+      className="flex min-h-11 items-center gap-2.5"
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] bg-teal text-sm font-semibold text-white">
         {APP_NAME.charAt(0)}
       </span>
       <span

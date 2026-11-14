@@ -12,8 +12,8 @@ export default function SkillsPage() {
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight text-navy">My Skills</h1>
-        <p className="mt-1 text-sm text-text-secondary">
+        <h1 className="text-2xl font-semibold tracking-tight text-navy">My Skills</h1>
+        <p className="mt-1 text-sm text-ink-secondary">
           Practice at your own pace. A nurse always makes the final decision.
         </p>
       </header>
@@ -22,7 +22,7 @@ export default function SkillsPage() {
         Continue with {nextSkill.name}
       </Button>
 
-      <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2">
         {skills.map((skill) => (
           <SkillCard key={skill.id} skill={skill} />
         ))}

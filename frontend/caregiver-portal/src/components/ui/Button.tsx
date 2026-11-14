@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 
 const variants = {
   primary:
-    "bg-teal text-white hover:bg-[#1d7b80] active:bg-[#1a6e72] shadow-[0_1px_2px_rgba(23,50,77,0.12)]",
+    "bg-teal text-white hover:bg-teal-hover active:bg-teal-hover shadow-sm",
   secondary:
     "bg-card text-teal border border-teal hover:bg-teal-soft active:bg-teal-soft",
   destructive: "bg-error text-white hover:bg-[#c44743] active:bg-[#b03f3b]",

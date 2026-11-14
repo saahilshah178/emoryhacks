@@ -55,8 +55,9 @@ GEMINI_API_KEY = _get("GEMINI_API_KEY")
 GEMINI_MODEL_MAIN = _get("GEMINI_MODEL_MAIN", "gemini-4-hydrogen")
 GEMINI_MODEL_STRONG = _get("GEMINI_MODEL_STRONG", "gemini-4-carbon")
 GEMINI_MODEL_FALLBACK = _get("GEMINI_MODEL_FALLBACK", "gemini-3.8-flash")
-# Hard stop for this database's recorded Gemini spend, in US dollars.
-GEMINI_BUDGET_USD = float(_get("GEMINI_BUDGET_USD", "8"))
+# Hard stop for this database's recorded Gemini spend, in US dollars. The home page shows
+# how much is used. Raise it in .env (GEMINI_BUDGET_USD) when you want to keep going.
+GEMINI_BUDGET_USD = float(_get("GEMINI_BUDGET_USD", "14"))
 GEMINI_CONCURRENCY = int(_get("GEMINI_CONCURRENCY", "3"))
 # Per-call ceiling on thinking plus reply tokens. The largest legitimate call seen is about 6,000.
 GEMINI_MAX_OUTPUT_TOKENS = int(_get("GEMINI_MAX_OUTPUT_TOKENS", "12000"))

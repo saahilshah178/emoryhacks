@@ -15,6 +15,7 @@
 <div id="skills"></div>
 <p class="label">Recent attempts</p>
 <div id="attempts"></div>
+<p class="muted small" id="status" style="margin-top:2rem"></p>
 </main>
 <script type="module">
 import { api, mountNav, esc, fmtTime, fmtDate, badge, thumbUrl, showError, attemptListStatus, humanize } from "/js/common.js";
@@ -46,6 +47,14 @@ try {
       <td><a href="/${role === "nurse" ? "review" : "result"}.html?id=${a.id}">Open</a></td></tr>`).join("")}
     </table></div>` : `<div class="notice">No attempts yet.</div>`;
 } catch (err) { showError("#skills", err); }
+// Where the data lives and how much Gemini spend is recorded, so a tester sees the cap coming.
+try {
+  const h = await api("/health");
+  const db = h.database.tiger_cloud ? `Tiger Cloud (TimescaleDB ${h.database.timescaledb})` : `local TimescaleDB ${h.database.timescaledb}`;
+  const ai = h.gemini.fake_ai ? "canned AI (no Gemini calls)"
+    : `Gemini ${h.gemini.model_main} · $${h.gemini.spent_usd.toFixed(2)} of the $${h.gemini.budget_usd.toFixed(2)} spend cap used`;
+  document.querySelector("#status").textContent = `Database: ${db} · ${ai}`;
+} catch { /* the status line is optional */ }
 </script>
 </body>
 </html>

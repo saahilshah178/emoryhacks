@@ -90,9 +90,10 @@ def test_person_labels_are_made_unique():
 
 
 def test_sample_fps_caps_frames_on_long_videos():
-    assert classify.sample_fps(90) is None
-    assert classify.sample_fps(150) is None
-    assert classify.sample_fps(300) == 0.5
+    assert classify.sample_fps(45) is None
+    assert classify.sample_fps(60) is None
+    assert classify.sample_fps(90) == 0.667
+    assert classify.sample_fps(300) == 0.2
     assert classify.sample_fps(876) * 876 <= classify.MAX_FRAMES + 1
 
 
@@ -105,7 +106,7 @@ def test_run_builds_one_main_model_call_without_the_hint(monkeypatch):
     (call,) = ctx.calls
     assert call["model"] == "main" and call["schema"] is _Reply
     video, prompt = call["parts"]
-    assert video["type"] == "video" and video["resolution"] == "low" and video["fps"] == 0.375
+    assert video["type"] == "video" and video["resolution"] == "low" and video["fps"] == 0.15
     assert "400 seconds" in prompt["text"] and "glove_removal" in prompt["text"]
     assert "sit_to_stand" in prompt["text"]  # listed in the catalog, but never singled out as the answer
     assert "expected" not in prompt["text"].lower()

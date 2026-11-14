@@ -2,7 +2,7 @@
 reads cleanly and the wording can be tuned in one place."""
 from __future__ import annotations
 
-from ..models import Rubric, RubricStep, SafetyFlag, Timeline, TimelineStep
+from ..models import RubricStep, SafetyFlag
 
 _GROUND_RULES = """\
 Ground rules:
@@ -56,79 +56,6 @@ def _step_block(step: RubricStep) -> str:
         f"  Unverified when: {_fmt_list(ev.unverified_when)}\n"
         f"  Look for: {_fmt_list(ev.visual_cues)}"
     )
-
-
-def _timeline_line(step: RubricStep, t: TimelineStep | None) -> str:
-    if t is None:
-        return f"  [{step.step_id}] no timeline entry"
-    if not t.found:
-        return f"  [{step.step_id}] not located" + (f" ({t.note})" if t.note else "")
-    where = f"{t.start_s or 0:.0f}s-{t.end_s or t.start_s or 0:.0f}s"
-    order = f", performed {t.performed_index}th" if t.performed_index else ""
-    return f"  [{step.step_id}] around {where}{order}" + (f" ({t.note})" if t.note else "")
-
-
-def grade_prompt(skill: dict, rubric: Rubric, timeline: Timeline, duration: float) -> str:
-    """Instructions for the first pass: grade every step, identify people, flag safety issues."""
-    steps = sorted(rubric.steps, key=lambda s: s.order)
-    by_id = {t.step_id: t for t in timeline.steps}
-    violations = "\n".join(f"  - {v.message}" for v in timeline.order_violations) or "  (none)"
-    safety = "\n".join(f"  - {c}" for c in rubric.safety_criteria) or "  (none listed; use general patient safety)"
-    return f"""\
-You are a clinical skills assessor reviewing a caregiver's practice recording.
-The caregiver is practising the skill "{skill.get('name', 'unknown')}": {skill.get('summary', '')}
-The video is {duration:.0f} seconds long.
-
-{_GROUND_RULES.format(duration=duration)}
-1. People. List every person you see, labelled P1, P2, ... Role "caregiver" is the trainee
-   performing the skill, "patient" is whoever is being assisted (it may be a colleague or an
-   actor playing the part), "other" is anyone else. There may be more than one of each, and a
-   solo skill (for example glove removal) may have no patient. Describe each so a nurse can
-   tell them apart: clothing, position, what they do.
-
-2. Skill match. Say whether the recording shows the caregiver attempting this skill at all.
-   If it shows something else, set skill_match false and say what it shows instead.
-
-3. Steps. Grade every step below, in the order given, exactly once, reusing its step id.
-   Write the evidence first: what you actually saw or heard. evidence_start_s and
-   evidence_end_s are the span where you saw or heard the step; use null for both when the
-   step is not seen at all.
-{_rules(_WHOLE_VIDEO_RULES, "   ")}
-   Do not fail a step only because it was not located in the timeline below: look for it
-   yourself first.
-   confidence_pct is 0 to 100: how sure you are of the status.
-   feedback speaks to the caregiver as "you", in one or two plain, encouraging sentences:
-   for a pass, what you did well; for a failure, what went wrong and what to do instead;
-   for unverified, what could not be seen and how to record it so it can be.
-
-Steps:
-{chr(10).join(_step_block(s) for s in steps)}
-
-Where an earlier pass located each step (a hint, it can be wrong):
-{chr(10).join(_timeline_line(s, by_id.get(s.step_id)) for s in steps)}
-Order problems found by that pass:
-{violations}
-
-4. Safety flags. Watch the patient throughout. Flag only what is actually seen or heard, with
-   its time span and the person's label:
-   - patient_distress: grimacing, crying out, saying it hurts or that they are dizzy
-   - patient_off_center: the patient off-centre, leaning to one side or sliding
-   - patient_unsteady: unsteadiness, buckling knees or a near fall
-   - unsafe_caregiver_posture: unsafe handling, such as pulling on arms or letting go mid-move
-   - environment_hazard: hazards such as clutter, an unlocked wheelchair, a wet floor
-   Severity: high = imminent risk of injury, medium = a concerning posture or instability,
-   low = a minor point. Return an empty list when nothing is wrong.
-   Judge against what this skill expects. When the skill is a response to the patient's
-   instability (in a fall-response drill the patient losing balance and being lowered to the
-   floor is the scenario), do not flag that instability itself; flag only what the caregiver's
-   handling adds to it, such as the patient dropping hard, twisting or hitting their head.
-   Skill-specific points to watch:
-{safety}
-
-5. overall_feedback: two or three encouraging, plain sentences to the caregiver: what went
-   well and the one or two most important things to work on. If a step was done out of
-   order or you raised a medium or high safety flag, mention the most important of these.
-"""
 
 
 def double_check_prompt(skill: dict, step: RubricStep, start_s: float, end_s: float, duration: float,

@@ -1,12 +1,13 @@
 """Stage: timeline. Locate each rubric step in an attempt and check the order.
 
-Pass 1 sends the whole attempt and asks, for every rubric step, whether it was
-performed and when. At 2 frames per second (attempts up to 2 minutes) its
-boundaries were within about half a second of hand-labelled truth, so pass 2,
-which re-locates each found step on a short clip at 4 fps, runs by default only
-when a longer video had to be sampled more sparsely. Everything after that
-(clamping, performed order, missing steps, order violations) is computed here in
-code so it is deterministic and never left to the model.
+The whole attempt is watched once, by assess.assess(), which locates and grades every step
+in one Gemini call (evaluate.run reads the same reply). This stage takes the locations from
+it. Up to 2 minutes the video is sampled at 2 frames per second, where boundaries were within
+about half a second of hand-labelled truth. Longer videos are sampled more sparsely, and for
+those a refine pass, which re-locates a found step on a short clip at REFINE_FPS, is offered
+as optional spending: it runs only while the job is within its allowance. Everything after
+that (clamping, performed order, missing steps, order violations) is computed here in code
+so it is deterministic and never left to the model.
 """
 from __future__ import annotations
 
@@ -17,19 +18,15 @@ from pydantic import BaseModel, Field
 
 from .. import config, gemini
 from ..models import OrderViolation, Rubric, RubricStep, Timeline, TimelineStep
-from . import _fake, timeline_prompts
+from . import _budget, _fake, assess, timeline_prompts
 
 MIN_SPAN_S = 1.0           # a found step lasts at least this long
 ORDER_TOLERANCE_S = 1.0    # starts closer than this are not an order violation
-REFINE_PAD_S = 4.0         # context either side of a step for the refine clip
-REFINE_FPS = 4.0
-DENSE_FPS = 2.0            # whole-video sampling rate for attempts up to 2 minutes
-
-
-class _Observed(BaseModel):
-    start_s: float
-    end_s: float
-    action: str
+REFINE_PAD_S = 3.0         # context either side of a step for the refine clip
+REFINE_FPS = 3.0
+REFINE_BELOW_FPS = 1.0     # the refine pass is offered when the whole video was sampled sparser than this
+MAX_REFINES = 4            # refine calls per attempt, longest-uncertain first
+REFINE_MAX_TOKENS = 2000
 
 
 class _Located(BaseModel):
@@ -43,11 +40,6 @@ class _Located(BaseModel):
     note: str = ""
 
 
-class _LocateReply(BaseModel):
-    observed: list[_Observed]
-    steps: list[_Located]
-
-
 class _RefineReply(BaseModel):
     performed: bool
     start_s: float
@@ -58,35 +50,44 @@ class _RefineReply(BaseModel):
 def run(ctx, rubric: Rubric, refine: bool | None = None) -> Timeline:
     """Find every rubric step in the attempt video.
 
-    refine forces the per-step boundary pass on or off; None runs it only for sparsely sampled videos."""
+    refine forces the per-step boundary pass on or off; None offers it (as optional spending)
+    only for sparsely sampled videos."""
     if config.FAKE_AI:
         return _fake.timeline(ctx, rubric)
     duration = ctx.duration
-    reply = ctx.generate_json(
-        "timeline",
-        [ctx.video_part(resolution="low", fps=sample_fps(duration)),
-         gemini.text_part(timeline_prompts.locate(rubric, duration))],
-        _LocateReply, model="main", thinking="medium",
-    )
-    ctx.log("observed: " + " | ".join(f"{o.start_s:.0f}-{o.end_s:.0f} {o.action}" for o in reply.observed))
-    steps = clean_steps(rubric, reply.steps, duration)
+    reply = assess.assess(ctx, rubric)
+    ctx.log("observed: " + " | ".join(f"{o.start_s}-{o.end_s} {o.action}" for o in reply.observed))
+    steps = clean_steps(rubric, located_from(reply), duration)
     if refine is None:
-        refine = sample_fps(duration) < DENSE_FPS
+        refine = sample_fps(duration) < REFINE_BELOW_FPS
     if refine:
-        by_id = {s.step_id: s for s in rubric.steps}
-        with ThreadPoolExecutor(max_workers=config.GEMINI_CONCURRENCY) as pool:
-            refined = list(pool.map(lambda t: _refine(ctx, by_id[t.step_id], t) if t.found else t, steps))
-        steps = keep_performed_order(steps, refined)
+        steps = _refine_all(ctx, rubric, steps)
     return build_timeline(rubric, steps)
 
 
+def located_from(reply: assess.AssessReply) -> list[_Located]:
+    """The locating half of the whole-video reply, as the timeline reads it."""
+    return [_Located(step_id=s.step_id, performed=s.performed, start_s=s.start_s, end_s=s.end_s,
+                     confidence=s.timing_confidence_pct / 100, note=s.note) for s in reply.steps]
+
+
 def sample_fps(duration: float) -> float:
-    """Frames per second for the whole-video pass: dense for typical 30-120 s attempts, cheaper beyond."""
-    if duration <= 120:
-        return DENSE_FPS
-    if duration <= 300:
-        return 1.0
-    return 0.5
+    """Frames per second the whole-video look uses (see assess.sample_fps)."""
+    return assess.sample_fps(duration)
+
+
+def _refine_all(ctx, rubric: Rubric, steps: list[TimelineStep]) -> list[TimelineStep]:
+    """Refine up to MAX_REFINES found steps, least confident first, while the job can afford it."""
+    by_id = {s.step_id: s for s in rubric.steps}
+    found = sorted((t for t in steps if t.found), key=lambda t: t.confidence)[:MAX_REFINES]
+    estimates = [_budget.clip_estimate(ctx, *refine_clip(t, ctx.duration), REFINE_FPS, "low", 1500, 600)
+                 for t in found]
+    found = found[:_budget.how_many_fit(ctx, estimates)]
+    if not found:
+        return steps
+    with ThreadPoolExecutor(max_workers=config.GEMINI_CONCURRENCY) as pool:
+        done = {t.step_id: r for t, r in zip(found, pool.map(lambda t: _refine(ctx, by_id[t.step_id], t), found))}
+    return keep_performed_order(steps, [done.get(t.step_id, t) for t in steps])
 
 
 def clamp_span(start: float, end: float | None, duration: float) -> tuple[float, float]:
@@ -148,11 +149,15 @@ def keep_performed_order(first: list[TimelineStep], refined: list[TimelineStep])
     return [final.get(s.step_id, s) for s in first]
 
 
+def refine_clip(step: TimelineStep, duration: float) -> tuple[float, float]:
+    """The clip a refine call looks at: the located step with REFINE_PAD_S either side."""
+    return max(0.0, step.start_s - REFINE_PAD_S), min(duration, step.end_s + REFINE_PAD_S)
+
+
 def _refine(ctx, rs: RubricStep, step: TimelineStep) -> TimelineStep:
     """Tighten one found step's boundaries on a clip around it. Keeps the first-pass times if the
-    refine call fails or answers with something outside the clip."""
-    clip_start = max(0.0, step.start_s - REFINE_PAD_S)
-    clip_end = min(ctx.duration, step.end_s + REFINE_PAD_S)
+    refine call fails, is skipped for budget, or answers with something outside the clip."""
+    clip_start, clip_end = refine_clip(step, ctx.duration)
     prompt = timeline_prompts.refine(rs.title, rs.description, rs.evals.visual_cues, step.start_s, step.end_s,
                                      clip_start, clip_end)
     try:
@@ -160,9 +165,10 @@ def _refine(ctx, rs: RubricStep, step: TimelineStep) -> TimelineStep:
             f"timeline_refine:{rs.step_id}",
             [ctx.video_part(resolution="low", start_s=clip_start, end_s=clip_end, fps=REFINE_FPS),
              gemini.text_part(prompt)],
-            _RefineReply, model="main", thinking="low",
+            _RefineReply, model="main", thinking="low", max_output_tokens=REFINE_MAX_TOKENS,
+            optional=True, expect_output_tokens=600,
         )
-    except gemini.BudgetExceeded:
+    except (gemini.BudgetExceeded, gemini.JobBudgetExceeded):
         raise
     except gemini.GeminiError as exc:
         ctx.log(f"refine {rs.step_id} failed: {exc}")

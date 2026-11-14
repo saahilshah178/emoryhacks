@@ -4,8 +4,8 @@ import pytest
 
 from app import config
 from app.models import Rubric, RubricStep, StepEval, TimelineStep
-from app.stages import timeline
-from app.stages.timeline import _Located, _LocateReply, _Observed, _RefineReply
+from app.stages import assess, timeline
+from app.stages.timeline import _Located, _RefineReply
 from tests.fixtures_timeline import CASES, FALL_RESPONSE, SIT_TO_STAND, expected_times
 
 
@@ -80,7 +80,7 @@ def test_notes_name_steps_by_title_not_id():
                         note="Performed before s2; repeated after S1. Not s9.")]
     [_, _, s3] = timeline.clean_steps(rb, located, duration=40.0)
     assert s3.note == 'Performed before "Step 2"; repeated after "Step 1". Not s9.'
-    assert "never by their id" in timeline.timeline_prompts.locate(rb, 40.0)
+    assert "never by their id" in assess.assess_prompts.assess_prompt({}, rb, 40.0)
 
 
 def test_refined_times_never_move_a_step_past_a_located_neighbour():
@@ -129,7 +129,7 @@ def test_clamp_span_keeps_end_after_start():
 
 
 def test_sample_fps_drops_for_long_videos():
-    assert [timeline.sample_fps(d) for d in (45, 120, 200, 460)] == [2.0, 2.0, 1.0, 0.5]
+    assert [timeline.sample_fps(d) for d in (45, 120, 200, 460, 900)] == [2.0, 2.0, 1.2, 0.52, 0.5]
 
 
 def test_expected_times_maps_steps_through_a_cut():
@@ -142,6 +142,7 @@ class _StubCtx:
 
     def __init__(self, duration, locate_reply, refine_reply=None):
         self.duration = duration
+        self.skill = {"name": "Fall response", "summary": "Lower a falling person safely."}
         self.locate_reply = locate_reply
         self.refine_reply = refine_reply
         self.calls = []
@@ -152,16 +153,19 @@ class _StubCtx:
 
     def generate_json(self, purpose, parts, schema, **kwargs):
         self.calls.append((purpose, parts))
-        return self.locate_reply if purpose == "timeline" else self.refine_reply
+        return self.locate_reply if purpose == "assess" else self.refine_reply
 
     def log(self, message):
         self.logs.append(message)
 
 
 def _reply(*items):
-    return _LocateReply(observed=[_Observed(start_s=0, end_s=1, action="walks in")],
-                        steps=[_Located(step_id=i, performed=s is not None, start_s=s, end_s=e, confidence=0.9)
-                               for i, s, e in items])
+    return assess.AssessReply(
+        observed=[assess.Observed(start_s=0, end_s=1, action="walks in")], people=[], skill_match=True,
+        steps=[assess.StepAssessment(step_id=i, performed=s is not None, start_s=s, end_s=e, timing_confidence_pct=90,
+                                     evidence="seen", status="passed", confidence_pct=90, feedback="Good.", note="")
+               for i, s, e in items],
+        overall_feedback="Fine.")
 
 
 def test_run_sends_video_first_without_reference_times(monkeypatch):
@@ -170,9 +174,9 @@ def test_run_sends_video_first_without_reference_times(monkeypatch):
                                 ("s5", 41, 50), ("s6", 52, 58)))
     tl = timeline.run(ctx, FALL_RESPONSE)
     [(purpose, parts)] = ctx.calls  # 60 s is densely sampled, so no refine calls
-    assert purpose == "timeline" and parts[0]["type"] == "video" and parts[0]["fps"] == 2.0
+    assert purpose == "assess" and parts[0]["type"] == "video" and parts[0]["fps"] == 2.0
     prompt = parts[1]["text"]
-    assert "60.0 seconds" in prompt and "Recognise the fall and pull close" in prompt
+    assert "60 seconds" in prompt and "Recognise the fall and pull close" in prompt
     for step in FALL_RESPONSE.steps:  # reference timestamps must not leak into the request
         assert f"{step.start_s:.1f}" not in prompt.replace("60.0", "")
     assert [(v.step_id, v.expected_after) for v in tl.order_violations] == [("s3", "s2")]
@@ -183,12 +187,12 @@ def test_run_sends_video_first_without_reference_times(monkeypatch):
 def test_refine_pass_tightens_boundaries_and_ignores_answers_outside_the_clip(monkeypatch):
     monkeypatch.setattr(config, "FAKE_AI", False)
     rb = _rubric([], ["s1"])
-    ctx = _StubCtx(200.0, _reply(("s1", 20, 40), ("s2", 100, 130)),
+    ctx = _StubCtx(300.0, _reply(("s1", 20, 40), ("s2", 100, 130)),
                    refine_reply=_RefineReply(performed=True, start_s=22.0, end_s=37.5, confidence=0.9))
-    tl = timeline.run(ctx, rb)  # 200 s is sampled at 1 fps, so the refine pass runs
-    assert sorted(p for p, _ in ctx.calls) == ["timeline", "timeline_refine:s1", "timeline_refine:s2"]
+    tl = timeline.run(ctx, rb)  # 300 s is sampled at 0.8 fps, so the refine pass is offered
+    assert sorted(p for p, _ in ctx.calls) == ["assess", "timeline_refine:s1", "timeline_refine:s2"]
     clip = next(parts[0] for p, parts in ctx.calls if p == "timeline_refine:s1")
-    assert (clip["start_s"], clip["end_s"], clip["fps"]) == (16.0, 44.0, 4.0)
+    assert (clip["start_s"], clip["end_s"], clip["fps"]) == (17.0, 43.0, 3.0)
     by_id = {s.step_id: s for s in tl.steps}
     assert (by_id["s1"].start_s, by_id["s1"].end_s) == (22.0, 37.5)
     assert (by_id["s2"].start_s, by_id["s2"].end_s) == (100.0, 130.0)  # 22-37.5 is outside s2's clip
@@ -225,3 +229,14 @@ def test_fake_mode_makes_no_calls():
     ctx = _StubCtx(45.0, None)
     tl = timeline.run(ctx, SIT_TO_STAND)
     assert ctx.calls == [] and len(tl.steps) == len(SIT_TO_STAND.steps)
+
+
+def test_refine_pass_only_runs_while_the_job_can_afford_it(monkeypatch):
+    monkeypatch.setattr(config, "FAKE_AI", False)
+    rb = _rubric([], ["s1"])
+    ctx = _StubCtx(300.0, _reply(("s1", 20, 40), ("s2", 100, 130)),
+                   refine_reply=_RefineReply(performed=True, start_s=22.0, end_s=37.5, confidence=0.9))
+    ctx.affordable = lambda usd: False  # the whole-video call used up the allowance
+    tl = timeline.run(ctx, rb)
+    assert [p for p, _ in ctx.calls] == ["assess"]
+    assert (tl.steps[0].start_s, tl.steps[0].end_s) == (20.0, 40.0)

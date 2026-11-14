@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app import config, db, jobs, media, pose_math as pm, repo
 from app.models import PersonObs
 from app.stages import pose
-from app.stages.pose import RoleBox, RoleBoxes
+from app.stages.pose import FrameRoles, RoleBox, RoleFrames
 
 
 # --- synthetic bodies ------------------------------------------------------
@@ -321,11 +321,11 @@ class StubCtx(jobs.StageContext):
         return b"\xff\xd8fake"
 
     def generate_json(self, purpose, parts, schema, **kwargs):
-        self.calls.append((purpose, parts[0]["type"], schema))
-        return RoleBoxes(people=[  # [ymin, xmin, ymax, xmax] on 0-1000
+        self.calls.append((purpose, [p["type"] for p in parts], schema))
+        return RoleFrames(images=[FrameRoles(image=1, people=[  # [ymin, xmin, ymax, xmax] on 0-1000
             RoleBox(label="P2", role="patient", box_2d=[100, 600, 900, 900]),
             RoleBox(label="P1", role="caregiver", box_2d=[100, 100, 900, 400]),
-        ])
+        ])])
 
 
 def test_assign_roles_matches_gemini_boxes(fake_video, monkeypatch):
@@ -339,7 +339,7 @@ def test_assign_roles_matches_gemini_boxes(fake_video, monkeypatch):
                             PersonObs(label="P2", role="patient", description="seated")])
     roles = {t["person_idx"]: t["role"] for t in repo.get_tracks(video["id"])}
     assert roles == {0: "caregiver", 1: "patient"}
-    assert len(ctx.calls) == 1 and ctx.calls[0][1] == "image"
+    assert len(ctx.calls) == 1 and ctx.calls[0][1].count("image") == 1  # both tracks fit in one still
 
 
 def test_extract_real_mediapipe_on_a_short_clip(migrated, tmp_path, monkeypatch):
@@ -449,3 +449,18 @@ def test_off_centre_share_is_of_standing_time_and_blank_without_it(fake_video):
         assert row["patient_standing_s"] == pytest.approx(2.0) and row["patient_off_center_share"] == pytest.approx(0.1)
         assert row["patient_off_center_s"] == pytest.approx(0.2)
         assert client.get(f"/api/safety/videos/{vid}/summary").json()["tracks"][0]["standing_s"] == pytest.approx(2.0)
+
+
+def test_role_stills_cover_tracks_that_are_never_in_view_together():
+    # Tracks 0 and 1 overlap in time; track 2 appears only later: two stills, one call.
+    def frame(idx, x0):
+        return {"person_idx": idx, "visibility": 0.9, "bbox_x0": x0, "bbox_y0": 0.1, "bbox_x1": x0 + 0.2,
+                "bbox_y1": 0.9}
+    by_time = {1.0: {0: frame(0, 0.1), 1: frame(1, 0.5)}, 2.0: {0: frame(0, 0.1), 1: frame(1, 0.5)},
+               8.0: {2: frame(2, 0.3)}}
+    tracks = [{"person_idx": 0, "first_t": 0.0, "last_t": 3.0, "n_frames": 30},
+              {"person_idx": 1, "first_t": 0.0, "last_t": 3.0, "n_frames": 25},
+              {"person_idx": 2, "first_t": 7.0, "last_t": 9.0, "n_frames": 20}]
+    stills = pose.pick_stills(by_time, tracks)
+    assert [sorted(present) for _, present in stills] == [[0, 1], [2]]
+    assert len(pose.pick_stills(by_time, tracks, limit=1)) == 1

@@ -75,8 +75,19 @@ def schema_statements() -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
+# Any fixed number: the advisory lock that lets one server at a time apply the schema.
+MIGRATE_LOCK = 4_718_203_651
+
+
 def migrate() -> None:
-    """Apply schema.sql. Safe to run repeatedly."""
+    """Apply schema.sql. Safe to run repeatedly, and from several servers starting at the
+    same moment on one database: they take turns. Without that, two sessions running the
+    same CREATE TABLE IF NOT EXISTS for a table that does not exist yet can collide, and the
+    loser fails to start."""
     with psycopg.connect(config.DATABASE_URL, autocommit=True) as conn:
-        for stmt in schema_statements():
-            conn.execute(stmt)
+        conn.execute("SELECT pg_advisory_lock(%s)", (MIGRATE_LOCK,))
+        try:
+            for stmt in schema_statements():
+                conn.execute(stmt)
+        finally:
+            conn.execute("SELECT pg_advisory_unlock(%s)", (MIGRATE_LOCK,))

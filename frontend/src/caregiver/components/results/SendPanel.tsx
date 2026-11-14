@@ -223,7 +223,9 @@ function Decide({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
     actions = (
       <>
         <p className="text-[15px] leading-relaxed text-ink">
-          We suggest sending this one to your nurse.{canRecord ? " You can record again first if you'd rather." : ""}
+          {attempt.ai_assessment === "passed"
+            ? `We suggest sending this one to your nurse.${canRecord ? " You can record again first if you'd rather." : ""}`
+            : `The automatic check still found something to work on, listed below. You can send this one to your nurse as it is${canRecord ? ", or record again first" : ""}.`}
         </p>
         {error ? <ErrorNote message={error} /> : null}
         <Button onClick={() => send({})} loading={sending} size="xl" className="w-full">

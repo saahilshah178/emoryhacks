@@ -142,3 +142,15 @@ def test_scoring_rules():
     advisory = high.model_copy(update={"source": "pose", "counts_toward_score": False})
     assert scoring.score(rb, _timeline(), _evaluation(["passed"] * 4), [advisory]).overall == "passed"
     assert scoring.score(rb, _timeline(), _evaluation(["passed"] * 4, skill_match=False), []).overall == "failed"
+
+
+def test_several_servers_can_apply_the_schema_at_once(migrated):
+    """Servers that start together on one database take turns applying the schema, so none of
+    them fails on a statement another is running."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app import db
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for future in [pool.submit(db.migrate) for _ in range(4)]:
+            future.result()

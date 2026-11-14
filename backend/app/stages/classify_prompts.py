@@ -30,8 +30,8 @@ How to decide:
 - confidence (0 to 1): how sure you are. Lower it when several skills are shown with similar emphasis,
   when the people or the key movement are hard to see, or when the video is very short.
 - alternatives: other slugs that are plausible, best first. Leave it empty if nothing else fits.
-- summary: one or two sentences saying what is physically done, in plain words. Do not mention captions,
-  on-screen text, the narrator, camera work or what anyone is wearing.
+- summary: one or two sentences saying what is physically done, in plain words. Do not mention what anyone
+  says, captions, on-screen text, the narrator, camera work or what anyone is wearing.
 - order_matters: true when the steps must happen in a fixed sequence for safety or correctness (for
   example locking wheelchair brakes before standing the person, or removing the first glove before the
   second). False only when the parts can be done in any order.

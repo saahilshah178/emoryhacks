@@ -14,6 +14,13 @@ from app.stages import sight
     ("Cue and assist patient to stand", ["cue"]),
     ("Caregiver tells the patient to look forward, then says \"1, 2, 3\".", ["tells", "says"]),
     ("Caregiver calls out for a colleague.", ["calls out"]),
+    # Added with the rubric's sight-only repair: real misses in rubrics written from narrated videos.
+    ("Caregiver calls for help while staying with the patient.", ["calls for help"]),
+    ("Caregiver fails to call for assistance before lifting.", ["call for assistance"]),
+    ("Caregiver yells for a colleague.", ["yells"]),
+    ("Communicate the plan to establish consent.", ["communicate", "consent"]),
+    ("Caregiver gets the patient's permission before moving them.", ["permission"]),
+    ("The caregiver encourages the person and reassures them.", ["encourages", "reassures"]),
 ])
 def test_speech_is_found(text, words):
     assert sight.spoken_words(text) == words
@@ -30,6 +37,8 @@ def test_speech_is_found(text, words):
     "Patient slides slowly down the caregiver's leg to a seated position on the floor.",
     "The patient is hurt or cannot get up unaided after being lowered.",
     "Caregiver looks at the patient's face and checks them over before moving them.",
+    "The care plan calls for a gait belt.",
+    "Press the call bell to summon assistance.",
     "",
 ])
 def test_actions_that_are_not_speech_pass(text):

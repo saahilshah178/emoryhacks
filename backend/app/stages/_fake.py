@@ -16,11 +16,14 @@ PEOPLE = [
     PersonObs(label="P2", role="patient", description="Seated older adult in a light top who is being assisted"),
 ]
 
+# (title, description, critical, applies_when). Sight-only like a real rubric: a recording is
+# graded without sound. The last step is only sometimes needed, to show applies_when.
 _STEPS = [
-    ("Prepare and explain", "Position yourself in front of the person and explain what will happen.", False),
-    ("Position feet and hands", "Feet flat and under the knees; hands on the armrests or thighs.", True),
-    ("Assist to stand", "Cue the person to lean forward and rise, supporting at the waist.", True),
-    ("Check balance", "Pause upright and confirm the person is steady before moving on.", False),
+    ("Face the person", "Stand in front of the person, within arm's reach, before they move.", False, ""),
+    ("Position feet and hands", "Feet flat and under the knees; hands on the armrests or thighs.", True, ""),
+    ("Assist to stand", "The person leans forward and rises while you support them at the waist.", True, ""),
+    ("Steady the person", "Keep both hands at the person's waist until they stop swaying.", False,
+     "the person sways or looks unsteady once standing"),
 ]
 
 
@@ -36,11 +39,11 @@ def rubric(ctx, classification=None) -> Rubric:
     duration = max(ctx.duration, 8.0)
     span = duration / len(_STEPS)
     steps = []
-    for i, (title, description, critical) in enumerate(_STEPS):
+    for i, (title, description, critical, applies_when) in enumerate(_STEPS):
         steps.append(RubricStep(
             step_id=f"s{i + 1}", order=i + 1, title=title, description=description,
             start_s=round(i * span, 1), end_s=round((i + 1) * span, 1), critical=critical,
-            order_dependent=True, must_follow=[f"s{i}"] if i else [],
+            order_dependent=True, must_follow=[f"s{i}"] if i else [], applies_when=applies_when,
             evals=StepEval(
                 pass_criteria=[f"The caregiver visibly completes: {title.lower()}."],
                 fail_criteria=[f"The step is skipped or done unsafely: {title.lower()}."],

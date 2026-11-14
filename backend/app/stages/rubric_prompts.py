@@ -1,26 +1,38 @@
-"""Prompt text for the rubric stage (see rubric.py for how the two passes fit together).
+"""Prompt text for the rubric stage (see rubric.py for how the passes fit together).
 
-The rubric is written from an edited instructional video but is used to grade a plain,
-single-take webcam recording of a caregiver. Every prompt therefore insists that steps
-and criteria describe only what a person does, says or handles, never how the video
-was produced.
+The rubric is written from an edited instructional video with sound, but is used to grade
+a plain, single-take webcam recording of a caregiver with its sound removed. Every prompt
+therefore insists that steps and criteria describe only what a viewer can see a person do
+or handle, never anything said or heard, and never how the video was produced.
 """
 from __future__ import annotations
+
+import json
 
 from .. import catalog
 from ..models import Classification
 
 _GRADING_TARGET = """\
 How the rubric will be used: a caregiver will later film themselves performing this skill
-with a single fixed webcam, in one continuous take, with sound, in an ordinary room. That
-recording has no captions, no title cards, no narrator, no close-ups and no camera cuts,
-and the caregiver and patient will be different people wearing different clothes. Each
-step will be graded passed, failed or unverified from that recording alone. So every
-title, description and criterion must describe what a person physically does, says, or
-handles, and must be judgeable from such a recording. Never mention captions, on-screen
-text, the narrator, the instructor's identity or clothing, the camera, close-ups or
-editing. Spoken actions (explaining the procedure, asking about pain or dizziness,
-counting "1, 2, 3") are allowed because the grader hears the audio."""
+with a single fixed webcam, in one continuous take, in an ordinary room, and that recording
+is graded WITHOUT SOUND. It has no captions, no title cards, no narrator, no close-ups and
+no camera cuts, and the caregiver and patient will be different people wearing different
+clothes. Each step will be graded from those silent pictures alone. So every title,
+description, criterion, cue, condition and safety point must be something a viewer can
+see: where people are, how their bodies move, what their hands do, what they handle. Never
+mention captions, on-screen text, the narrator, the instructor's identity or clothing, the
+camera, close-ups or editing.
+
+Use the narration of this video to understand what is being demonstrated and why, and to
+notice when a step is only sometimes needed, but never make anything said or heard into a
+step or a criterion: nothing about asking, telling, explaining, greeting, instructing,
+reassuring, counting aloud, calling out, or what can be heard. When the demonstration does
+something by talking:
+- if it has a visible counterpart, write only what is seen: the patient's hands on the
+  armrests (not the instruction to hold them), the caregiver crouching to look at the
+  patient's face (not asking how they feel), a hand placed on the patient's shoulder;
+- if nothing about it can be seen (greeting, explaining the procedure, asking about pain),
+  leave it out and say so in notes."""
 
 
 def skill_context(classification: Classification) -> str:
@@ -53,13 +65,14 @@ Produce the rubric:
 
 STEPS
 - List the distinct actions of the maneuver in the order the demonstration performs them,
-  usually 4 to 10 steps. A step is one thing the caregiver does (or says) that a grader
-  can check, such as "Lock the wheelchair brakes" or "Ask the patient about dizziness".
+  usually 4 to 10 steps. A step is one thing the caregiver visibly does that a grader can
+  check with the sound off, such as "Lock the wheelchair brakes" or "Place the patient's
+  feet flat under the knees".
 - Give each safety-critical action (locking brakes, applying a gait belt, supporting the
   head) a step of its own: write "Lock the wheelchair brakes" as one step, never
   "Position the wheelchair, lock brakes and clear footrests". To stay within 10 steps,
-  merge only routine preparation (hand hygiene, privacy, introductions) or routine
-  finishing actions (call light, hand hygiene).
+  merge only routine preparation (hand hygiene, privacy curtain) or routine finishing
+  actions (call light, hand hygiene).
 - Leave out intro and outro cards, narration over still images, talk about the product
   or channel, advertising, and anything not performed on screen.
 - Leave out repeated demonstrations and "wrong way" demonstrations. A wrong-way
@@ -75,14 +88,13 @@ TIMESTAMPS
   the action, end_s when it is complete. Do not use mm:ss strings.
 
 EVALS for each step, each item one short concrete sentence:
-- pass_criteria: 2 to 4 things that must be observed for the step to pass (body
-  positions, hand placement, objects used, words spoken).
-- fail_criteria: 2 to 4 observable errors, including the unsafe ways to do the step.
+- pass_criteria: 2 to 4 things that must be seen for the step to pass (body positions,
+  hand placement, objects used, how the patient moves).
+- fail_criteria: 2 to 4 visible errors, including the unsafe ways to do the step.
 - unverified_when: 1 to 3 situations in which a webcam recording cannot show whether
   the step was done (the relevant hands, feet, equipment or face are out of frame or
-  blocked; for a spoken step, the recording has no audio or the speech is inaudible).
-  Never list the recording ending or stopping: a step the recording does not reach was
-  not performed, and is failed.
+  blocked). Never list the recording ending or stopping: a step the recording does not
+  reach was not performed, and is failed.
 - visual_cues: 1 to 3 things that show where in a recording this step happens.
 
 CRITICAL
@@ -92,18 +104,35 @@ CRITICAL
   supported). Expect roughly a third to a half of steps to be critical. Courtesy and
   preparation steps are usually not critical.
 
+APPLIES_WHEN
+- Leave applies_when empty for almost every step: empty means every attempt must show
+  the step. A core action of the maneuver is never conditional, and a critical step
+  almost never is. A wrongly conditional step lets a caregiver skip something that matters.
+- Fill it only for a step that is needed depending on how things turn out (pressing the
+  call bell after a fall is needed when the patient is hurt or cannot get up unaided), on
+  equipment or a setting an ordinary practice room may not have (a call light, bed brakes,
+  wheelchair footrests), or on something that may already be in place (non-skid footwear
+  the patient may already be wearing). The narration often reveals this ("if she can't get
+  up, call for help"), and then the step is conditional even though the demonstration
+  performs it.
+- Write the situation in which the step IS needed as one short clause that reads well
+  after "Only needed when" and that can be seen in a silent recording: "the patient cannot
+  get up unaided", "the wheelchair has footrests", "the patient is not wearing non-skid
+  footwear". Never a condition about what anyone says, hears or feels.
+
 PREREQUISITES
 - prerequisites lists the numbers of the earlier steps that must be completed before
   this step for safety or correctness (for example "stand up" requires "lock the
   brakes"). List only direct, real dependencies and only earlier step numbers. Leave it
-  empty for a step that could be done at any time (such as talking to the patient).
+  empty for a step that could be done at any time (such as closing the privacy curtain).
 
 ALSO
-- safety_criteria: 3 to 6 points about the patient's safety to watch for throughout the
-  whole skill (the patient stays centred over their base of support, no signs of pain or
-  distress, the caregiver keeps a straight back and wide stance, and so on).
+- safety_criteria: 3 to 6 points about the patient's safety that can be seen throughout
+  the whole skill (the patient stays centred over their base of support, no grimacing or
+  sagging at the knees, the caregiver keeps a straight back and wide stance, and so on).
 - order_matters: true when performing the steps out of sequence would be unsafe or wrong.
-- notes: one or two sentences on what you left out (intro, wrong-way demonstration...).
+- notes: one or two sentences on what you left out (intro, wrong-way demonstration,
+  anything that was only said).
 """
 
 
@@ -133,10 +162,55 @@ first look and may be off by several seconds:
 {" ".join(context)}
 
 For each listed step, find exactly when it is performed. start_s is the moment the
-caregiver begins the action (first movement toward it, or first words of it for a spoken
-step). end_s is the moment it is complete, before the next step begins. If an action is
+caregiver begins the action (first movement toward it). end_s is the moment it is
+complete, before the next step begins. If an action is
 shown more than once, choose the main demonstration and ignore replays, close-up repeats
 and "wrong way" demonstrations. Answer in numeric seconds from the start of the full
 video, between {clip[0]:.0f} and {clip[1]:.0f}. Return one entry per listed step number;
 set found to false for a step that is not performed in this clip.
+"""
+
+
+def sight_prompt(skill_name: str, steps: list, pieces: list[dict]) -> str:
+    """Repair pass: rewrite the pieces of a draft rubric that depend on speech. steps are the
+    draft steps (for context); pieces are {id, where, text, words}, where says which step and
+    field the text comes from."""
+    listed = "\n".join(
+        f'  {s.number}. "{s.title}": {s.description}'
+        + (f" Only needed when {s.applies_when}." if s.applies_when.strip() else "")
+        for s in steps
+    )
+    parts = "\n".join(
+        f"  {p['id']}, {p['where']}, flagged {', '.join(p['words'])}: {json.dumps(p['text'])}"
+        for p in pieces
+    )
+    return f"""\
+You are a nursing educator fixing a grading rubric for the caregiving skill: {skill_name}.
+
+Caregivers' recordings of this skill are graded with the sound removed, so every part of
+the rubric must be something a viewer can see in a silent video. The parts listed below
+depend on speech or sound; the flagged words show why.
+
+The rubric's steps, for context:
+{listed}
+
+Parts to fix (id, where it is, flagged words, text):
+{parts}
+
+For each part, return its id with a rewrite that can be judged with the sound off, or with
+empty text to delete it:
+- When what is said has a visible counterpart, write that instead: the patient's hands on
+  the armrests rather than the caregiver telling them to hold the armrests, the caregiver
+  crouching to look at the patient's face rather than asking how they feel, the patient
+  leaning forward and rising rather than a count of three.
+- When nothing about it can be seen, return empty text.
+- Keep the part's form: a title is a short imperative phrase of at most 7 words, a
+  description or criterion is one short sentence, and a condition (applies_when) is one
+  short clause that reads well after "Only needed when".
+- A rewrite must not use the flagged words or any other word about speech or hearing
+  (ask, tell, say, explain, instruct, cue, count, call out, hear, listen, words).
+
+remove_steps: the numbers of the steps that are only something said, with nothing a viewer
+could see (such as greeting the patient or explaining the procedure), and of steps whose
+condition cannot be seen. Those steps are removed whole, so leave their parts out of fixes.
 """

@@ -163,6 +163,7 @@ def _reply(*items):
     return assess.AssessReply(
         observed=[assess.Observed(start_s=0, end_s=1, action="walks in")], people=[], skill_match=True,
         steps=[assess.StepAssessment(step_id=i, performed=s is not None, start_s=s, end_s=e, timing_confidence_pct=90,
+                                     situation_came_up=None,
                                      evidence="seen", status="passed", confidence_pct=90, feedback="Good.", note="")
                for i, s, e in items],
         overall_feedback="Fine.")

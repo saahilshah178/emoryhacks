@@ -22,7 +22,10 @@ from .routers import accounts, attempts, jobs, people, review, safety, skills, v
 async def lifespan(app: FastAPI):
     config.ensure_dirs()
     db.migrate()
-    builtin.ensure()  # the nine standard skills, on any database, without a Gemini call
+    # The nine standard skills, on any database, without a Gemini call. A database that has an
+    # earlier revision of one, unchanged by a nurse, gets the revised rubric as a new version.
+    for line in builtin.describe(builtin.ensure()):
+        print(f"standard skills: {line}", flush=True)
     pipeline.resume_interrupted()  # grading cut short by the last shutdown carries on where it stopped
     yield
     db.close()

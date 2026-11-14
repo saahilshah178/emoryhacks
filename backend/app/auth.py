@@ -74,6 +74,16 @@ def end_session(token: str | None) -> None:
         _cache.pop(key, None)
 
 
+def end_other_sessions(user_id, keep_token: str | None) -> None:
+    """Sign the user out everywhere except the session that holds keep_token. Used after a
+    password change, so whoever else had the old password is signed out with it."""
+    keep = _token_hash(keep_token) if keep_token else ""
+    db.execute("DELETE FROM sessions WHERE user_id=%s AND token_hash <> %s", (user_id, keep))
+    with _cache_lock:
+        for key in [k for k, (u, _) in _cache.items() if u["id"] == user_id and k != keep]:
+            _cache.pop(key, None)
+
+
 def forget_cached(user_id=None) -> None:
     """Drop cached users so the next request reads them again (after a profile or org change)."""
     with _cache_lock:

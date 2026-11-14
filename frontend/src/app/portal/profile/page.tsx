@@ -9,6 +9,7 @@ import { api, errorMessage } from "@/lib/api";
 import { useTitle } from "@/lib/hooks";
 import type { User } from "@/lib/types";
 import { useAuth, useUser } from "@/shared/AuthProvider";
+import { ChangePasswordCard } from "@/shared/ChangePasswordCard";
 
 function NameEditor({ user, onDone }: { user: User; onDone: () => void }) {
   const { setUser } = useAuth();
@@ -82,7 +83,7 @@ export default function ProfilePage() {
     <div className="space-y-5">
       <PortalHeading title="Profile" description="Your details and how far along you are." />
 
-      {/* One column on a phone; on a laptop, who you are on the left and your progress on the right. */}
+      {/* One column on a phone; on a laptop, who you are on the left, your progress and password on the right. */}
       <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
         <div className="space-y-5">
           {editing ? (
@@ -119,23 +120,27 @@ export default function ProfilePage() {
           </Card>
         </div>
 
-        <Card className="p-5">
-          <Row icon={ShieldCheck} label="Skills verified">
-            {counts ? (
-              <>
-                <p className="text-sm font-medium tabular-nums text-navy">
-                  {counts.verified} of {counts.total}
-                  {counts.in_review > 0 ? ` · ${counts.in_review} with a nurse` : ""}
-                </p>
-                <ProgressBar className="mt-2" value={counts.verified} max={counts.total} label="Skills verified" />
-              </>
-            ) : error ? (
-              <ErrorNote className="mt-1" message={error} onRetry={reload} />
-            ) : (
-              <Skeleton className="mt-1 h-8" />
-            )}
-          </Row>
-        </Card>
+        <div className="space-y-5">
+          <Card className="p-5">
+            <Row icon={ShieldCheck} label="Skills verified">
+              {counts ? (
+                <>
+                  <p className="text-sm font-medium tabular-nums text-navy">
+                    {counts.verified} of {counts.total}
+                    {counts.in_review > 0 ? ` · ${counts.in_review} with a nurse` : ""}
+                  </p>
+                  <ProgressBar className="mt-2" value={counts.verified} max={counts.total} label="Skills verified" />
+                </>
+              ) : error ? (
+                <ErrorNote className="mt-1" message={error} onRetry={reload} />
+              ) : (
+                <Skeleton className="mt-1 h-8" />
+              )}
+            </Row>
+          </Card>
+
+          <ChangePasswordCard />
+        </div>
       </div>
     </div>
   );

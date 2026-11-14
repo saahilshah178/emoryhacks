@@ -9,9 +9,8 @@ import { errorMessage } from "@/lib/api";
 import { useAuth } from "./AuthProvider";
 import { APP_NAME } from "./brand";
 import { Logo } from "./Logo";
+import { MIN_PASSWORD } from "./password";
 import { homeUrlFor, LOGIN_PATH, SIGNUP_PATH, type Role } from "./urls";
-
-const MIN_PASSWORD = 8;
 
 const roles: Array<{ id: Role; title: string; subtitle: string; icon: typeof Stethoscope }> = [
   {

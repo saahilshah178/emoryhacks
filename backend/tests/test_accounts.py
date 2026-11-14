@@ -121,6 +121,46 @@ def test_profile_and_agency_edits(migrated):
     assert caregiver.patch("/api/org", json={"name": "Nope"}).status_code == 403
 
 
+def test_changing_a_password_needs_the_current_one(migrated):
+    client, user = _signup("caregiver")
+    login = {"email": user["email"], "password": "long-enough"}
+    # A second device signed in to the same account.
+    other = _anonymous()
+    assert other.post("/api/auth/login", json=login).status_code == 200
+
+    wrong = client.post("/api/auth/password", json={"current_password": "not-my-password", "new_password": "a-new-password"})
+    assert wrong.status_code == 400 and "current password" in wrong.json()["detail"]
+    short = client.post("/api/auth/password", json={"current_password": "long-enough", "new_password": "short"})
+    assert short.status_code == 422 and "at least 8" in short.json()["detail"]
+    same = client.post("/api/auth/password", json={"current_password": "long-enough", "new_password": "long-enough"})
+    assert same.status_code == 422 and "different" in same.json()["detail"]
+    # None of those changed anything.
+    assert _anonymous().post("/api/auth/login", json=login).status_code == 200
+    assert other.get("/api/auth/me").status_code == 200
+
+    done = client.post("/api/auth/password", json={"current_password": "long-enough", "new_password": "a-new-password"})
+    assert done.status_code == 200 and done.json() == {"ok": True}
+    # The old password no longer works, the new one does.
+    assert _anonymous().post("/api/auth/login", json=login).status_code == 401
+    assert _anonymous().post("/api/auth/login", json={**login, "password": "a-new-password"}).status_code == 200
+    # The session that changed it stays signed in; the other device is signed out.
+    assert client.get("/api/auth/me").json()["email"] == user["email"]
+    assert other.get("/api/auth/me").status_code == 401
+    # Only the scrypt hash is stored.
+    stored = db.fetch_one("SELECT password_hash FROM users WHERE id=%s", (user["id"],))["password_hash"]
+    assert stored.startswith("scrypt$") and "a-new-password" not in stored
+
+
+def test_changing_a_password_needs_a_session_and_touches_no_one_else(migrated):
+    assert _anonymous().post("/api/auth/password", json={"current_password": "x", "new_password": "a-new-password"}).status_code == 401
+    one, first = _signup("caregiver")
+    two, second = _signup("nurse")
+    assert one.post("/api/auth/password", json={"current_password": "long-enough", "new_password": "only-mine-changed"}).status_code == 200
+    # The other account keeps its password and its session.
+    assert _anonymous().post("/api/auth/login", json={"email": second["email"], "password": "long-enough"}).status_code == 200
+    assert two.get("/api/auth/me").json()["email"] == second["email"]
+
+
 def test_caregiver_attempt_is_filed_under_their_account(graded):
     attempt = graded["caregiver_client"].get(f"/api/attempts/{graded['attempt_id']}").json()
     assert attempt["caregiver_id"] == graded["caregiver"]["id"]

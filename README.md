@@ -54,6 +54,7 @@ Gemini calls stop when the spend recorded in the database reaches `GEMINI_BUDGET
 | Backend function | Screen |
 | --- | --- |
 | Sign up, log in, log out | `/signup`, `/login`, the account menu |
+| Change your password (the current one is required) | Portal → Profile |
 | Record or upload a reference video; detect the skill; write steps and criteria | Dashboard → Skills → New skill |
 | Skill with timestamped steps, criteria, versions | Dashboard → Skills → a skill |
 | Edit a skill, its steps, criteria, prerequisites and caregiver-facing text | "Edit skill" on a skill |
@@ -100,6 +101,7 @@ All routes are under `/api`, return JSON, and need a session (cookie, or `Author
 | --- | --- |
 | `POST /auth/signup`, `/auth/login`, `/auth/logout` | Accounts. Signup takes `{role, name, email, password}`. |
 | `GET /auth/session`, `GET /auth/me`, `PATCH /auth/me` | Who is signed in; edit name, title, credentials, notification preferences |
+| `POST /auth/password` | Change the signed-in user's password: `{current_password, new_password}`. The current password must be right. The user's other sessions are ended. |
 | `PATCH /org` | Rename the agency (nurse) |
 | `POST /videos` | Multipart upload: `file`, `kind` (`reference`, nurses only, or `attempt`), and for an attempt `skill_id`. Returns `{video_id, job_id, attempt_id}`. |
 | `GET /jobs/{id}` | Pipeline progress: `status` (`queued`, `running`, `done`, `error`), `stages[]`, `error`, `skill_id`, `attempt_id`. Poll until done. |

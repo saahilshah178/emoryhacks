@@ -6,6 +6,7 @@ POST  /api/auth/logout                                 -> {ok}; clears the cooki
 GET   /api/auth/me                                     -> user, with org {id, name, is_sample}; 401 if signed out
 GET   /api/auth/session                                -> {user} or {user: null}; never 401
 PATCH /api/auth/me       {name, title, credentials, prefs}  prefs are merged
+POST  /api/auth/password {current_password, new_password} -> {ok}; signs out the user's other sessions
 PATCH /api/org           {name}                        nurses only
 
 Everyone who signs up joins the default agency, so a new nurse and a new caregiver can
@@ -39,6 +40,11 @@ class ProfilePatch(BaseModel):
     title: str | None = Field(default=None, max_length=80)
     credentials: str | None = Field(default=None, max_length=40)
     prefs: dict[str, bool] | None = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class OrgPatch(BaseModel):
@@ -118,6 +124,23 @@ def patch_me(body: ProfilePatch, user: dict = Depends(auth.current_user)):
         db.execute(f"UPDATE users SET {', '.join(sets)} WHERE id=%s", (*params, user["id"]))
         auth.forget_cached(user["id"])
     return auth.public(auth.get_user(user["id"]))
+
+
+@router.post("/auth/password")
+def change_password(body: PasswordChange, request: Request, user: dict = Depends(auth.current_user)):
+    """Change the signed-in user's password. The current password has to be given as well,
+    so a session left open on a shared device is not enough to take the account over.
+    Every other session of the user is ended; the one making the request stays signed in."""
+    row = db.fetch_one("SELECT password_hash FROM users WHERE id=%s", (user["id"],))
+    if not row or not auth.verify_password(body.current_password, row["password_hash"]):
+        raise HTTPException(400, "Your current password isn't right.")
+    if len(body.new_password) < auth.MIN_PASSWORD:
+        raise HTTPException(422, f"Choose a password of at least {auth.MIN_PASSWORD} characters.")
+    if body.new_password == body.current_password:
+        raise HTTPException(422, "Choose a new password that is different from your current one.")
+    db.execute("UPDATE users SET password_hash=%s WHERE id=%s", (auth.hash_password(body.new_password), user["id"]))
+    auth.end_other_sessions(user["id"], auth.token_from(request))
+    return {"ok": True}
 
 
 @router.patch("/org")

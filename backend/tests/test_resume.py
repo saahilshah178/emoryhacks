@@ -146,7 +146,7 @@ def test_an_expired_upload_is_uploaded_again_and_the_call_repeated(migrated, mon
 
 
 def test_a_cached_upload_from_another_key_is_not_reused(migrated, monkeypatch):
-    video = repo.create_video("attempt", "/tmp/none.mp4", "x", {"duration_s": 5})
+    video = repo.create_video("reference", "/tmp/none.mp4", "x", {"duration_s": 5})
     future = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=30)
     db.execute("UPDATE videos SET gemini_file_name='files/old', gemini_file_uri='u-old', gemini_file_expires=%s, "
                "gemini_file_key='0badc0de' WHERE id=%s", (future, video["id"]))

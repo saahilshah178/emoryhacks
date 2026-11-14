@@ -21,7 +21,9 @@ import datetime as dt
 import hashlib
 import json
 import math
+import os
 import re
+import tempfile
 import threading
 import time
 import uuid
@@ -30,7 +32,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from . import config, db
+from . import config, db, media
 
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 
@@ -134,10 +136,11 @@ def _seconds(text: str | None) -> float | None:
     return float(text.rstrip("s")) if text else None
 
 
-def estimate_input_tokens(parts: list[dict], video_seconds: float = 0.0) -> int:
+def estimate_input_tokens(parts: list[dict], video_seconds: float = 0.0, audio: bool = True) -> int:
     """Input tokens a request will be billed for, roughly: frames times tokens per frame at the
     part's resolution, the audio track, images, and about four characters per text token.
-    video_seconds is the length of a video part that has no end offset."""
+    video_seconds is the length of a video part that has no end offset. audio=False leaves the
+    sound out: a caregiver's attempt is uploaded without it (see ensure_file)."""
     total = 0
     for p in parts:
         kind = p.get("type")
@@ -148,7 +151,7 @@ def estimate_input_tokens(parts: list[dict], video_seconds: float = 0.0) -> int:
             length = max(1.0, (end if end is not None else video_seconds) - start)
             fps = float(proc.get("fps") or 1.0)
             per_frame = config.VIDEO_TOKENS_PER_FRAME.get(p.get("resolution", "low"), 70)
-            total += int(length * (fps * per_frame + config.AUDIO_TOKENS_PER_SECOND))
+            total += int(length * (fps * per_frame + (config.AUDIO_TOKENS_PER_SECOND if audio else 0)))
         elif kind == "image":
             total += config.IMAGE_TOKENS.get(p.get("resolution", "high"), 1100)
         else:
@@ -162,9 +165,9 @@ def price(model: str) -> tuple[float, float]:
 
 
 def estimate_usd(parts: list[dict], model: str = "main", output_tokens: int = DEFAULT_EXPECTED_OUTPUT,
-                 video_seconds: float = 0.0) -> float:
+                 video_seconds: float = 0.0, audio: bool = True) -> float:
     price_in, price_out = price(model)
-    return (estimate_input_tokens(parts, video_seconds) * price_in + output_tokens * price_out) / 1_000_000
+    return (estimate_input_tokens(parts, video_seconds, audio) * price_in + output_tokens * price_out) / 1_000_000
 
 
 # --- file upload cache ----------------------------------------------------
@@ -175,6 +178,10 @@ FILE_MIN_REMAINING = dt.timedelta(hours=2)
 
 def _cached_handle_usable(video: dict, now: dt.datetime) -> bool:
     expires = video.get("gemini_file_expires")
+    # A caregiver's attempt is graded by sight only: a handle that may carry its sound (true, or
+    # NULL for one made before sound was removed) is never reused for one.
+    if video.get("kind") == "attempt" and video.get("gemini_file_audio") is not False:
+        return False
     return bool(video.get("gemini_file_uri") and expires and expires - now > FILE_MIN_REMAINING
                 and video.get("gemini_file_key") in (None, key_id()))
 
@@ -196,21 +203,41 @@ def ensure_file(video: dict, *, verify: bool = False, force: bool = False) -> tu
     The cached handle on the videos row is used while it has more than two hours to live and
     was made with the current API key (a file uploaded with another key is not visible to this
     one). verify also asks Gemini whether it still has the file, which is worth one cheap
-    request when a job resumes on a handle that may be days old. force always uploads again."""
+    request when a job resumes on a handle that may be days old. force always uploads again.
+
+    A caregiver's attempt is uploaded without its audio track, so the model cannot hear it
+    (the stored file keeps its sound for the nurse). If that copy cannot be made, nothing is
+    uploaded and media.MediaError is raised. A reference video is uploaded as it is."""
     with _upload_guard:
         lock = _upload_locks.setdefault(str(video["id"]), threading.Lock())
     with lock:
         now = dt.datetime.now(dt.timezone.utc)
         if not force:
-            fresh = db.fetch_one("SELECT gemini_file_name, gemini_file_uri, gemini_file_expires, gemini_file_key "
-                                 "FROM videos WHERE id=%s", (video["id"],))
+            fresh = db.fetch_one("SELECT gemini_file_name, gemini_file_uri, gemini_file_expires, gemini_file_key, "
+                                 "gemini_file_audio FROM videos WHERE id=%s", (video["id"],))
             if fresh:  # another thread may have uploaded it since this row was read
                 video.update(fresh)
             if _cached_handle_usable(video, now) and (not verify or _handle_alive(video.get("gemini_file_name"))):
                 return video["gemini_file_uri"], video.get("mime") or "video/mp4"
 
         c = client()
-        f = c.files.upload(file=video["path"], config={"mime_type": video.get("mime") or "video/mp4"})
+        has_sound = media.has_audio(video["path"])
+        silent_copy = None
+        try:
+            upload_path = video["path"]
+            if video.get("kind") == "attempt" and has_sound:
+                config.TMP_DIR.mkdir(parents=True, exist_ok=True)
+                fd, silent_copy = tempfile.mkstemp(prefix="silent-", suffix=".mp4", dir=config.TMP_DIR)
+                os.close(fd)
+                media.strip_audio(video["path"], silent_copy)
+                upload_path, has_sound = silent_copy, False
+            f = c.files.upload(file=upload_path, config={"mime_type": video.get("mime") or "video/mp4"})
+        finally:
+            if silent_copy:
+                try:
+                    os.unlink(silent_copy)
+                except OSError:
+                    pass
         deadline = time.time() + 600
         while not f.state or f.state.name not in ("ACTIVE", "FAILED"):
             if time.time() > deadline:
@@ -221,12 +248,12 @@ def ensure_file(video: dict, *, verify: bool = False, force: bool = False) -> tu
             raise GeminiError(f"Gemini failed to process the uploaded video {video['path']}")
         expires = getattr(f, "expiration_time", None) or now + dt.timedelta(hours=46)
         db.execute(
-            "UPDATE videos SET gemini_file_name=%s, gemini_file_uri=%s, gemini_file_expires=%s, gemini_file_key=%s "
-            "WHERE id=%s",
-            (f.name, f.uri, expires, key_id(), video["id"]),
+            "UPDATE videos SET gemini_file_name=%s, gemini_file_uri=%s, gemini_file_expires=%s, gemini_file_key=%s, "
+            "gemini_file_audio=%s WHERE id=%s",
+            (f.name, f.uri, expires, key_id(), has_sound, video["id"]),
         )
         video.update(gemini_file_name=f.name, gemini_file_uri=f.uri, gemini_file_expires=expires,
-                     gemini_file_key=key_id())
+                     gemini_file_key=key_id(), gemini_file_audio=has_sound)
         return f.uri, f.mime_type or "video/mp4"
 
 

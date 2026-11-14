@@ -10,7 +10,8 @@ def clip_estimate(ctx, start_s: float, end_s: float, fps: float, resolution: str
                   prompt_chars: int = 3000, output_tokens: int = 1200, model: str = "main") -> float:
     """Rough cost of one call on a clip of ctx's video, without uploading anything."""
     part = gemini.video_part("estimate", resolution=resolution, start_s=start_s, end_s=end_s, fps=fps)
-    return gemini.estimate_usd([part, gemini.text_part("x" * prompt_chars)], model, output_tokens, ctx.duration)
+    return gemini.estimate_usd([part, gemini.text_part("x" * prompt_chars)], model, output_tokens, ctx.duration,
+                               audio=getattr(ctx, "hears_sound", True))
 
 
 def how_many_fit(ctx, estimates: Sequence[float], reserve_usd: float = 0.0) -> int:

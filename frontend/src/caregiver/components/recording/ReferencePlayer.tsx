@@ -1,8 +1,11 @@
 "use client";
 
+import { useMemo, useRef } from "react";
 import { Play, RotateCcw, Video } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
+import { referenceChapters } from "@/components/media/chapters";
+import { StepChapters, useCurrentChapter, useRevealInList } from "@/components/media/StepChapters";
 import { VideoFrame } from "@/components/media/VideoFrame";
 import { StepChecklist } from "@/caregiver/components/recording/StepChecklist";
 import { useVideoSegments } from "@/lib/segment";
@@ -19,6 +22,10 @@ export function ReferencePlayer({
 }) {
   const player = useVideoSegments();
   const available = Boolean(skill.video?.available);
+  const chapters = useMemo(() => referenceChapters(skill.steps), [skill.steps]);
+  const current = useCurrentChapter(chapters, player.playhead, player.play);
+  const listRef = useRef<HTMLDivElement>(null);
+  useRevealInList(listRef, current.id);
   // Shown once: under the video on a laptop, after the steps on a phone.
   const actions = (
     <>
@@ -59,6 +66,20 @@ export function ReferencePlayer({
             }
           />
 
+          {available && skill.video ? (
+            <Card className="p-4">
+              <StepChapters
+                chapters={chapters}
+                duration={skill.video.duration_s}
+                time={player.playhead}
+                activeId={current.id}
+                onSelect={current.select}
+                label="Steps in the demonstration"
+                emptyText="Your nurse hasn't marked where each step is in this video yet. Watch it from the start."
+              />
+            </Card>
+          ) : null}
+
           {available ? (
             <Button variant="secondary" size="lg" className="w-full" onClick={() => player.play(0)}>
               {player.playing || player.time > 0 ? (
@@ -74,12 +95,19 @@ export function ReferencePlayer({
         </div>
 
         <div className="space-y-5">
-          <Card className="p-4 lg:p-5">
-            <StepChecklist
-              steps={skill.steps}
-              orderMatters={skill.order_matters}
-              onPlay={available ? player.play : undefined}
-            />
+          {/* On a laptop the steps scroll in their own box, which follows the step playing. */}
+          <Card className="overflow-hidden">
+            <div
+              ref={listRef}
+              className="p-4 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto lg:overscroll-contain lg:p-5"
+            >
+              <StepChecklist
+                steps={skill.steps}
+                orderMatters={skill.order_matters}
+                onPlay={available ? player.play : undefined}
+                activeId={available ? current.id : null}
+              />
+            </div>
           </Card>
 
           <div className="flex flex-col gap-3 lg:hidden">{actions}</div>

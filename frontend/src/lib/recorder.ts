@@ -191,6 +191,9 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
         setPhase("ready");
         return;
       }
+      // The camera isn't needed to watch the take back, so it is switched off; reset() turns
+      // it on again for another take.
+      closeCamera();
       setRecording({
         blob,
         url: URL.createObjectURL(blob),
@@ -200,7 +203,7 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
       });
       setPhase("recorded");
     },
-    [stopTimer],
+    [closeCamera, stopTimer],
   );
 
   const stop = useCallback(() => {
@@ -285,6 +288,7 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
       }
       const accept = () => {
         stop();
+        closeCamera();
         discard();
         setProblem(null);
         setFileProblem(null);
@@ -303,7 +307,7 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
         () => setFileProblem(uploadTooLarge(file.size)),
       );
     },
-    [discard, stop],
+    [closeCamera, discard, stop],
   );
 
   const remaining = Math.max(0, maxSeconds - seconds);

@@ -23,7 +23,7 @@ export function Logo({
       </span>
       <span
         className={cn(
-          "truncate text-[15px] font-semibold tracking-tight",
+          "truncate font-display text-[16px] font-semibold tracking-tight",
           light ? "text-white" : "text-navy",
           nameClassName,
         )}

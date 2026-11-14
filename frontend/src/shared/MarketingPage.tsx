@@ -1,11 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { CircleCheck } from "lucide-react";
-import { useAuth } from "./AuthProvider";
 import { APP_NAME, APP_TAGLINE } from "./brand";
 import { PublicHeader } from "./PublicHeader";
-import { homeUrlFor, LOGIN_PATH, SIGNUP_PATH } from "./urls";
 
 const steps = [
   {
@@ -49,56 +46,6 @@ const badge = {
   danger: "bg-danger-bg text-danger",
 };
 
-function AccountActions({
-  stacked = false,
-  invert = false,
-}: {
-  stacked?: boolean;
-  invert?: boolean;
-}) {
-  const primary = invert
-    ? "bg-white text-navy hover:bg-teal-soft"
-    : "bg-teal text-white shadow-[0_1px_2px_rgba(23,50,77,0.12)] hover:bg-teal-hover";
-  const secondary = invert
-    ? "text-white hover:bg-white/10"
-    : "text-navy hover:bg-secondary";
-
-  const { user } = useAuth();
-  const wide = stacked ? "w-full sm:w-auto" : "";
-
-  if (user) {
-    return (
-      <div className={`flex ${stacked ? "w-full flex-col sm:w-auto sm:flex-row" : "flex-wrap"} items-stretch gap-2 sm:items-center`}>
-        <Link
-          href={homeUrlFor(user.role)}
-          className={`inline-flex h-12 items-center justify-center rounded-[12px] px-5 text-sm font-semibold transition-colors ${wide} ${primary}`}
-        >
-          {user.role === "nurse" ? "Open your dashboard" : "Open your portal"}
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`flex ${stacked ? "w-full flex-col sm:w-auto sm:flex-row" : "flex-wrap"} items-stretch gap-2 sm:items-center`}
-    >
-      <Link
-        href={SIGNUP_PATH}
-        className={`inline-flex h-12 items-center justify-center rounded-[12px] px-5 text-sm font-semibold transition-colors ${wide} ${primary}`}
-      >
-        Create account
-      </Link>
-      <Link
-        href={LOGIN_PATH}
-        className={`inline-flex h-12 items-center justify-center rounded-[12px] px-4 text-sm font-semibold transition-colors ${wide} ${secondary}`}
-      >
-        Log in
-      </Link>
-    </div>
-  );
-}
-
 export function MarketingPage() {
   const needsNurse = queue.filter((item) => item.tone !== "success").length;
 
@@ -113,20 +60,17 @@ export function MarketingPage() {
           <div className="relative mx-auto grid max-w-[1120px] items-center gap-6 px-5 pb-10 pt-6 sm:gap-8 sm:px-6 sm:pb-14 sm:pt-8 md:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)] md:gap-12 md:pb-20 md:pt-12">
             <div className="min-w-0 md:order-2">
               <h1 className="text-balance text-[1.85rem] font-semibold leading-[1.14] tracking-[-0.035em] text-navy sm:text-[2.6rem] sm:leading-[1.1] lg:text-[2.85rem] lg:leading-[1.08]">
-                Know a caregiver is ready before they work independently.
+                Better Caregivers.
+                <br />
+                <em>Faster.</em>
               </h1>
               <p className="mt-3 hidden max-w-md text-[17px] leading-7 text-ink-secondary sm:mt-4 sm:block">
                 {APP_NAME} helps nurses verify essential caregiving skills with
                 AI-assisted video review — so safety issues surface before the first
                 unsupervised shift.
               </p>
-
-              <div className="mt-5 sm:mt-7">
-                <AccountActions stacked />
-              </div>
               <p className="mt-3 max-w-md text-sm leading-6 text-ink-secondary">
-                A nurse still makes the call. AI findings are recommendations, not
-                certifications.
+                AI findings are recommendations, not certifications.
               </p>
             </div>
 
@@ -173,7 +117,7 @@ export function MarketingPage() {
                       Wheelchair brakes not locked · 0:04–0:09
                     </p>
                     <p className="mt-1 text-xs leading-5 text-ink-secondary">
-                      Both brake levers stay up through the pivot. A nurse still makes the call.
+                      Both brake levers stay up through the pivot.
                     </p>
                   </div>
                   <p className="mt-4 flex items-center gap-2 text-xs text-ink-secondary">
@@ -211,15 +155,12 @@ export function MarketingPage() {
 
         <section id="for-teams" className="scroll-mt-24 border-t border-border bg-navy text-white">
           <div className="mx-auto max-w-[720px] px-5 py-16 sm:px-6 md:py-20">
-            <h2 className="text-3xl font-semibold tracking-[-0.03em]">A nurse still makes the call</h2>
+            <h2 className="text-3xl font-semibold tracking-[-0.03em]">For nurses</h2>
             <p className="mt-4 text-[15px] leading-7 text-white/80">
               Open a side-by-side review, jump to flagged timestamps, and approve or request
               retraining. Caregivers practice against a checklist first. You remain the only
               person who can certify a skill.
             </p>
-            <div className="mt-8">
-              <AccountActions stacked invert />
-            </div>
           </div>
         </section>
       </main>
@@ -232,12 +173,6 @@ export function MarketingPage() {
               Built for home-care agencies. Nurses remain the certifying authority.
             </p>
           </div>
-          <Link
-            href={SIGNUP_PATH}
-            className="inline-flex h-11 w-fit items-center text-sm font-semibold text-teal hover:text-teal-hover"
-          >
-            Create account
-          </Link>
         </div>
       </footer>
     </div>

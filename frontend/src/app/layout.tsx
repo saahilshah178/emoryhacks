@@ -1,12 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { DM_Sans, Fraunces } from "next/font/google";
 import { APP_NAME, APP_TAGLINE } from "@/shared/brand";
 import { Providers } from "@/app/providers";
 import "./globals.css";
 
-const inter = Inter({
+// Body text and interface.
+const dmSans = DM_Sans({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-dm-sans",
+});
+
+// Headings and the brand name.
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  axes: ["opsz"],
+  variable: "--font-fraunces",
 });
 
 export const metadata: Metadata = {
@@ -30,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
+    <html lang="en" className={`${dmSans.variable} ${fraunces.variable} h-full antialiased`}>
       <body className="min-h-full w-full bg-page font-sans text-ink">
         <a
           href="#main"

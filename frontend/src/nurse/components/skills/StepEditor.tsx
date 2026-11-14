@@ -6,12 +6,15 @@ import { Badge, Button, Field, Input, Textarea } from "@/components/ui";
 import { TimeChip } from "@/components/media/TimeChip";
 import { api, errorMessage } from "@/lib/api";
 import { formatClock } from "@/lib/format";
+import { appliesWhen } from "@/lib/steps";
 import type { Skill, SkillStep, StepEvals, Video } from "@/lib/types";
 import { isTimed, sameList, tenth, toLines, toList } from "./text";
 
 type Draft = {
   title: string;
   description: string;
+  /** The situation the step is needed in; empty for a step every recording must show. */
+  appliesWhen: string;
   critical: boolean;
   start: string;
   end: string;
@@ -22,7 +25,9 @@ type Draft = {
   cues: string;
 };
 
-type StepPatch = Partial<Pick<SkillStep, "title" | "description" | "critical" | "start_s" | "end_s" | "must_follow">> & {
+type StepPatch = Partial<
+  Pick<SkillStep, "title" | "description" | "applies_when" | "critical" | "start_s" | "end_s" | "must_follow">
+> & {
   evals?: StepEvals;
 };
 
@@ -35,6 +40,7 @@ function fromStep(step: SkillStep, steps: SkillStep[]): Draft {
   return {
     title: step.title,
     description: step.description,
+    appliesWhen: appliesWhen(step),
     critical: step.critical,
     start: tenth(step.start_s),
     end: tenth(step.end_s),
@@ -50,6 +56,7 @@ function sameDraft(a: Draft, b: Draft) {
   return (
     a.title === b.title &&
     a.description === b.description &&
+    a.appliesWhen === b.appliesWhen &&
     a.critical === b.critical &&
     a.start === b.start &&
     a.end === b.end &&
@@ -69,6 +76,9 @@ function buildPatch(step: SkillStep, draft: Draft, original: Draft): { patch: St
   if (title !== step.title) patch.title = title;
   const description = draft.description.trim();
   if (description !== step.description) patch.description = description;
+  // An empty condition is sent as "", which makes the step always needed again.
+  const condition = draft.appliesWhen.trim();
+  if (condition !== appliesWhen(step)) patch.applies_when = condition;
   if (draft.critical !== step.critical) patch.critical = draft.critical;
 
   if (draft.start !== original.start || draft.end !== original.end) {
@@ -200,6 +210,17 @@ export function StepEditor({
             onChange={(event) => change({ description: event.target.value })}
           />
         </Field>
+        <Field
+          label="Only needed when"
+          hint="Leave empty if every recording must show this step. Otherwise write something that can be seen in the recording."
+          className="md:col-span-2"
+        >
+          <Input
+            value={draft.appliesWhen}
+            onChange={(event) => change({ appliesWhen: event.target.value })}
+            placeholder="For example: the patient is hurt or can't get up after being lowered"
+          />
+        </Field>
 
         <div className="md:col-span-2">
           <p className="mb-1.5 text-sm font-medium text-ink">Where it happens in the reference video</p>
@@ -281,6 +302,9 @@ export function StepEditor({
           )}
         </fieldset>
 
+        <p className="text-xs text-ink-secondary md:col-span-2">
+          The automatic check watches recordings without sound, so write criteria that can be seen.
+        </p>
         <Field label="Passes when" hint="One item per line.">
           <Textarea rows={3} value={draft.pass} onChange={(event) => change({ pass: event.target.value })} />
         </Field>

@@ -2,11 +2,13 @@ import { Badge } from "@/components/ui";
 import { TimeChip } from "@/components/media/TimeChip";
 import { cn } from "@/lib/cn";
 import { hasSpan } from "@/lib/format";
+import { onlyNeededWhen } from "@/lib/steps";
 import type { SkillStep } from "@/lib/types";
 
 /**
  * The skill's steps, numbered. Timed steps get a chip that plays that stretch of the
  * reference video (pass the play function from useVideoSegments as onPlay).
+ * A step that is only needed in some situations says when, in both forms.
  * compact: titles only, for a reminder under the camera. activeId highlights the step the
  * video is showing; each item carries data-step-id for useRevealInList.
  */
@@ -39,6 +41,7 @@ export function StepChecklist({
         <ol className={cn("mt-3", compact ? "space-y-2" : "space-y-3")}>
           {ordered.map((step, index) => {
             const on = step.step_id === activeId;
+            const condition = onlyNeededWhen(step);
             return (
               <li
                 key={step.step_id}
@@ -70,6 +73,7 @@ export function StepChecklist({
                   {!compact && step.description ? (
                     <p className="mt-0.5 text-sm leading-relaxed text-ink-secondary">{step.description}</p>
                   ) : null}
+                  {condition ? <p className="mt-0.5 text-xs leading-relaxed text-ink-secondary">{condition}</p> : null}
                   {!compact && hasSpan(step.start_s, step.end_s) ? (
                     <TimeChip
                       className={cn("mt-1.5", on && "bg-white")}

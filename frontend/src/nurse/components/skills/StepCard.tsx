@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui";
 import { TimeChip } from "@/components/media/TimeChip";
 import { thumbUrl } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { onlyNeededWhen } from "@/lib/steps";
 import type { SkillStep, StepEvals, Video } from "@/lib/types";
 import { SkillThumb } from "./SkillThumb";
 import { isTimed, stepFrameTime } from "./text";
@@ -41,6 +42,7 @@ export function StepCard({
     .map((id) => steps.find((other) => other.step_id === id))
     .filter((other): other is SkillStep => Boolean(other));
   const panelId = `criteria-${step.step_id}`;
+  const condition = onlyNeededWhen(step);
 
   return (
     <article
@@ -81,6 +83,7 @@ export function StepCard({
             </div>
           </div>
           {step.description ? <p className="mt-1 text-sm text-ink-secondary">{step.description}</p> : null}
+          {condition ? <p className="mt-2 text-xs text-ink-secondary">{condition}</p> : null}
           {after.length > 0 ? (
             <p className="mt-2 text-xs text-ink-secondary">
               <span className="font-medium text-ink">Must come after:</span>{" "}

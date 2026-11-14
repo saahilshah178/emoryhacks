@@ -18,9 +18,9 @@ function ctaFor(skill: MySkill): Cta {
   if (skill.ready_attempt_id) {
     return {
       icon: Send,
-      title: `Ready to send: ${skill.name}`,
-      body: "Your recording passed the automatic check. Send it to your nurse so they can make the final decision.",
-      primary: { href: resultsHref(skill.id, skill.ready_attempt_id), label: "Review and send" },
+      title: `Good enough to send: ${skill.name}`,
+      body: "Your recording scored high enough to send to your nurse. You can send it, or record again to do better.",
+      primary: { href: resultsHref(skill.id, skill.ready_attempt_id), label: "See your result" },
     };
   }
   if (skill.state === "needs_practice") {

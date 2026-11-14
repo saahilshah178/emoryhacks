@@ -27,7 +27,7 @@ def test_a_graded_attempt_waits_for_the_caregiver(agency):
     assert (attempt["submitted_at"], attempt["submit_kind"], attempt["submit_note"]) == (None, None, "")
     assert attempt["submission"] == {
         "can_submit": True, "can_force": False, "submit_pct": 80, "force_pct": 50,
-        "reason": "You scored 92%, which meets the 80% your nurse asks for. You can send it for review."}
+        "reason": "You scored 92%. That is good enough to send to your nurse, who asks for 80%."}
     assert attempt["policy"] == {"max_attempts": None, "submit_pct": 80, "force_pct": 50}
     assert attempt["attempts"] == {"used": 1, "allowed": None, "left": None}
     # the nurse's lists leave it out, unless she asks for everything; she can still open it
@@ -93,7 +93,7 @@ def test_force_submit_needs_a_note_and_is_marked(agency):
     (49.5, {}, "You scored 49.5%, which is under the 50% needed to send it."),
     (95, {"skill_match": False}, "The automatic check could not find this skill in the video, so it cannot be "
                                  "sent."),
-    (None, {"job": "running"}, "This recording is still being checked. You can send it once the check has finished."),
+    (None, {"job": "running"}, "This recording is still being checked. You can choose whether to send it once the check has finished."),
     (None, {"job": "error"}, "This recording could not be checked, so it cannot be sent."),
 ])
 def test_attempts_that_cannot_be_sent(agency, score, kwargs, expected):
@@ -311,6 +311,11 @@ def test_a_recorded_attempt_through_the_pipeline_is_not_sent_until_the_caregiver
     assert agency.nurse.get("/api/overview").json()["counts"]["pending"] == 0
     # whatever the canned grade was, a score over the bar can be sent
     db.execute("UPDATE attempts SET score_pct=88, skill_match=true WHERE id=%s", (body["attempt_id"],))
+    # at or above the bar it is still not sent: it waits, and the nurse sees nothing, until the caregiver presses send
+    graded = client.get(f"/api/attempts/{body['attempt_id']}").json()
+    assert graded["submission"]["can_submit"] and graded["review_state"] == "unsubmitted"
+    assert graded["submitted_at"] is None
+    assert agency.nurse.get("/api/attempts?state=pending").json() == []
     assert _submit(client, body["attempt_id"]).json()["review_state"] == "pending"
     assert [a["id"] for a in agency.nurse.get("/api/attempts?state=pending").json()] == [body["attempt_id"]]
 

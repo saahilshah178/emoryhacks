@@ -31,11 +31,11 @@ function Standing({ skill, standing }: { skill: Skill; standing: MySkill }) {
 
   if (standing.ready_attempt_id) {
     return (
-      <Notice icon={<Send className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden />} title="You have a recording ready to send">
+      <Notice icon={<Send className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden />} title="You have a recording that is good enough to send">
         <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
-          It passed the automatic check. Send it to your nurse, or record a new one if you&apos;d like to do better.
+          It scored high enough to send to your nurse. You can send it, or record a new one if you&apos;d like to do better.
         </p>
-        {link(standing.ready_attempt_id, "Review and send it")}
+        {link(standing.ready_attempt_id, "See your result")}
       </Notice>
     );
   }
@@ -130,7 +130,7 @@ export function SkillIntro({
           <div className="flex flex-col gap-3 lg:flex-row">
             {resultId ? (
               <Button href={resultsHref(skill.id, resultId)} className="w-full lg:w-auto" size="xl">
-                {blocked.ready_attempt_id ? "Review and send your recording" : "See your results"}
+                {blocked.ready_attempt_id ? "See your result" : "See your results"}
               </Button>
             ) : null}
             <Button href="/portal/skills" variant="secondary" size="lg" className="w-full lg:min-h-14 lg:w-auto">

@@ -1,18 +1,17 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, StateBadge } from "@/components/ui";
-import { skillHref } from "@/caregiver/skills";
+import { skillHref, skillPriority } from "@/caregiver/skills";
+import { attemptsLeftLine, readyToSend, skillAllowance, skillStateForCaregiver } from "@/caregiver/status";
 import { cn } from "@/lib/cn";
 import { plural } from "@/lib/format";
-import { categoryLabel, skillState } from "@/lib/status";
-import type { MySkill, SkillState } from "@/lib/types";
-
-// What needs the caregiver first: a nurse's request, then anything not tried, then the rest.
-const order: SkillState[] = ["needs_practice", "not_started", "in_review", "verified"];
+import { categoryLabel } from "@/lib/status";
+import type { MySkill } from "@/lib/types";
 
 /** Every skill with its state on one card, the ones that need the caregiver at the top. */
 export function SkillsAtAGlance({ skills, className }: { skills: MySkill[]; className?: string }) {
-  const sorted = [...skills].sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state));
+  // Stable: skills that need the same thing keep the API's order.
+  const sorted = [...skills].sort((a, b) => skillPriority(a) - skillPriority(b));
 
   return (
     <Card className={className}>
@@ -28,19 +27,22 @@ export function SkillsAtAGlance({ skills, className }: { skills: MySkill[]; clas
       <CardBody>
         <ul className="overflow-hidden rounded-[12px] border border-border">
           {sorted.map((skill, index) => {
-            const state = skillState[skill.state];
+            const state = skillStateForCaregiver[skill.state];
+            const ready = Boolean(skill.ready_attempt_id);
+            const left = skill.state === "verified" ? null : attemptsLeftLine(skillAllowance(skill));
             return (
               <li key={skill.id} className={cn(index > 0 && "border-t border-border")}>
                 <Link href={skillHref(skill)} className="flex items-center gap-3 bg-white px-4 py-3 hover:bg-page">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-ink">{skill.name}</p>
-                    <p className="text-xs text-ink-muted">
+                    <p className="truncate text-xs text-ink-muted">
                       {categoryLabel[skill.category] ?? skill.category} · {plural(skill.step_count, "step")}
+                      {left ? <span className={cn(skill.attempts_left === 0 && skill.state !== "in_review" && "text-danger")}> · {left}</span> : null}
                     </p>
                   </div>
-                  <StateBadge entry={state} />
-                  <span className="hidden w-32 shrink-0 items-center justify-end gap-1.5 text-sm font-medium text-teal xl:inline-flex">
-                    {state.action}
+                  <StateBadge entry={ready && skill.state === "practicing" ? readyToSend : state} />
+                  <span className="hidden w-36 shrink-0 items-center justify-end gap-1.5 text-sm font-medium text-teal xl:inline-flex">
+                    {ready ? readyToSend.action : state.action}
                     <ArrowRight className="h-4 w-4" aria-hidden />
                   </span>
                 </Link>

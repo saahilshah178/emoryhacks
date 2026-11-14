@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { BadgeCheck, CircleAlert, RotateCcw, Video, type LucideIcon } from "lucide-react";
+import { BadgeCheck, CircleAlert, RotateCcw, Send, Video, type LucideIcon } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, EmptyState, ErrorNote, Skeleton } from "@/components/ui";
 import { resultsHref } from "@/caregiver/skills";
+import { formatScore } from "@/caregiver/status";
 import { cn } from "@/lib/cn";
 import { formatDateTime, relativeTime } from "@/lib/format";
 import { useApi } from "@/lib/hooks";
@@ -13,31 +14,63 @@ const SHOWN = 6;
 
 type Update = { id: string; time: string; title: string; detail: string; href: string; icon: LucideIcon; tone: string };
 
-/** What happened to a recording after it was sent, in the caregiver's words. */
-const afterSending: Record<AttemptSummary["review_state"], string> = {
-  processing: "It is being checked now.",
-  error: "It couldn't be checked. Please record it again.",
-  unsubmitted: "It is checked and has not been sent to a nurse yet.",
-  pending: "It is with a nurse for review.",
-  superseded: "You sent a newer recording, so a nurse will review that one instead.",
-  approved: "A nurse has since verified it.",
-  retraining: "A nurse has since asked you to practice it again.",
+/** What became of a recording once it was checked, in the caregiver's words. */
+function afterRecording(attempt: AttemptSummary): string {
+  const score = attempt.score_pct !== null ? `It scored ${formatScore(attempt.score_pct)}. ` : "";
+  switch (attempt.review_state) {
+    case "processing":
+      return "It is being checked now.";
+    case "error":
+      return "It couldn't be checked, so it didn't use an attempt. Please record it again.";
+    case "unsubmitted":
+      if (attempt.submission.can_submit) return `${score}It's ready to send to your nurse.`;
+      if (attempt.submission.can_force) return `${score}You can record it again, or send it anyway with a note.`;
+      return `${score}That's under what can be sent, so give it another try.`;
+    default:
+      return `${score}You sent it to your nurse.`;
+  }
+}
+
+/** What happened to a recording after it was sent. */
+const afterSending: Partial<Record<AttemptSummary["review_state"], string>> = {
+  pending: "It is with your nurse for review.",
+  superseded: "You sent a newer recording later, so your nurse will review that one instead.",
+  approved: "Your nurse has since verified it.",
+  retraining: "Your nurse has since asked you to practice it again.",
 };
 
-/** Each recording the caregiver sent, and each decision a nurse made on one, newest first. */
+/**
+ * Each recording the caregiver made, each one they sent, and each decision a nurse made on
+ * one, newest first.
+ */
 function updatesFrom(attempts: AttemptSummary[]): Update[] {
   const updates: Update[] = [];
   for (const attempt of attempts) {
     const href = resultsHref(attempt.skill_id, attempt.id);
+    const failed = attempt.review_state === "error";
     updates.push({
-      id: `${attempt.id}-sent`,
+      id: `${attempt.id}-recorded`,
       time: attempt.created_at,
-      title: `You sent a recording of ${attempt.skill_name}`,
-      detail: afterSending[attempt.review_state],
+      title: failed ? `Your recording of ${attempt.skill_name} couldn't be checked` : `You recorded ${attempt.skill_name}`,
+      detail: afterRecording(attempt),
       href,
-      icon: attempt.review_state === "error" ? CircleAlert : Video,
-      tone: attempt.review_state === "error" ? "bg-danger-bg text-danger" : "bg-info-bg text-info",
+      icon: failed ? CircleAlert : Video,
+      tone: failed ? "bg-danger-bg text-danger" : "bg-info-bg text-info",
     });
+    if (attempt.submitted_at) {
+      const forced = attempt.submit_kind === "forced";
+      updates.push({
+        id: `${attempt.id}-sent`,
+        time: attempt.submitted_at,
+        title: forced ? `You sent ${attempt.skill_name} to your nurse anyway` : `You sent ${attempt.skill_name} to your nurse`,
+        detail: `${afterSending[attempt.review_state] ?? ""}${
+          forced && attempt.review_state === "pending" ? " They can see your note." : ""
+        }`.trim(),
+        href,
+        icon: Send,
+        tone: attempt.review_state === "superseded" ? "bg-secondary text-ink-secondary" : "bg-teal-soft text-teal",
+      });
+    }
     if (attempt.reviewed_at && (attempt.review_state === "approved" || attempt.review_state === "retraining")) {
       const nurse = attempt.reviewer_name || "A nurse";
       const approved = attempt.review_state === "approved";
@@ -71,7 +104,7 @@ export function RecentUpdates({ className }: { className?: string }) {
         {data ? (
           data.length === 0 ? (
             <EmptyState title="Nothing yet">
-              When you send a recording, it appears here, followed by your nurse&apos;s decision.
+              When you record a skill, it appears here. So do the recordings you send and your nurse&apos;s decisions.
             </EmptyState>
           ) : (
             updatesFrom(data).map((update) => {

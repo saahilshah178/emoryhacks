@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import auth, config, gemini, jobs, media, repo
+from .. import auth, builtin, config, gemini, jobs, media, repo
 from ..models import Classification, SkillPatch, StepPatch
 from ..stages import rubric
 
@@ -112,8 +112,12 @@ def regenerate(skill_id: str, user: dict = Depends(auth.nurse)):
 
 @router.delete("/{skill_id}")
 def delete_skill(skill_id: str, user: dict = Depends(auth.nurse)):
-    """Delete this version of the skill, with the attempts graded against it."""
-    _skill_or_404(skill_id, user)
+    """Delete this version of the skill, with the attempts graded against it. The last
+    version of a standard skill stays: the list caregivers work from never loses one."""
+    skill = _skill_or_404(skill_id, user)
+    if builtin.is_builtin(skill["slug"]) and len(skill["versions"]) <= 1:
+        raise HTTPException(409, f"{skill['name']} is one of the standard skills, so its last version "
+                                 "can't be deleted. You can edit its steps or record a new reference instead.")
     if not repo.delete_skill(skill_id):
         raise HTTPException(404, "Skill not found")
     return {"deleted": True}

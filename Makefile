@@ -1,4 +1,4 @@
-.PHONY: run dev web db migrate test seed sample logins e2e repose fake-demo cost
+.PHONY: run dev web db migrate test skills seed sample logins e2e repose fake-demo cost
 
 # Start everything: the API and the web app. Open the address the web app prints
 # (http://localhost:3000, or the next free port). The API takes any free local port and is
@@ -29,7 +29,14 @@ migrate:
 test:
 	uv run pytest -q
 
-# Run the primary reference videos through the nurse pipeline (real Gemini calls)
+# Add any of the nine standard skills this database does not have yet (no Gemini calls; the
+# API does the same when it starts). `make skills ARGS=check` checks the file they come from,
+# `make skills ARGS=export` rewrites it from this database.
+skills:
+	cd backend && uv run python -m scripts.builtin_skills $(ARGS)
+
+# Build the nine rubrics again from the primary reference videos (real Gemini calls). Only
+# needed to replace the standard ones; `make skills ARGS=export` then saves the result.
 seed:
 	cd backend && uv run python -m scripts.seed_reference
 

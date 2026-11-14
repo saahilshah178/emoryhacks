@@ -494,7 +494,7 @@ export function ResultsSkeleton() {
 
 /** A caregiver's result for one attempt (GET /attempts/{id}), in every state it can be in. */
 export function AssessmentResults({ attemptId, skillId }: { attemptId: string; skillId: string }) {
-  const { data: attempt, error, loading, reload, setData } = useApi<Attempt>(`/attempts/${attemptId}`);
+  const { data: attempt, error, status, loading, reload, setData } = useApi<Attempt>(`/attempts/${attemptId}`);
   const { reload: reloadSkills } = useCaregiver();
   useTitle(attempt ? `${attempt.skill_name} result` : "Result");
 
@@ -503,7 +503,11 @@ export function AssessmentResults({ attemptId, skillId }: { attemptId: string; s
       return (
         <div className="space-y-4 py-6">
           <h1 className="text-xl font-semibold text-navy">We couldn&apos;t open this result</h1>
-          <ErrorNote message={error} onRetry={reload} />
+          {status === 404 ? (
+            <ErrorNote message="We couldn't find that recording. The link may be old, or the recording may not be yours." />
+          ) : (
+            <ErrorNote message={error} onRetry={reload} />
+          )}
           <Button href="/portal/skills" variant="secondary" size="lg" className="w-full lg:w-auto">
             Back to my skills
           </Button>

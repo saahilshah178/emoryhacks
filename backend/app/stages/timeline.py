@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from .. import config, gemini
 from ..models import OrderViolation, Rubric, RubricStep, Timeline, TimelineStep
 from . import _budget, _fake, assess, timeline_prompts
-from .evaluate_prompts import sight_only
+from .evaluate_prompts import HEARD_NOTE, heard_only, sight_only
 
 MIN_SPAN_S = 1.0           # a found step lasts at least this long
 ORDER_TOLERANCE_S = 1.0    # starts closer than this are not an order violation
@@ -65,18 +65,22 @@ def run(ctx, rubric: Rubric, refine: bool | None = None) -> Timeline:
         refine = sample_fps(duration) < REFINE_BELOW_FPS
     if refine:
         steps = _refine_all(ctx, rubric, steps)
-    return build_timeline(rubric, steps, not_needed_from(rubric, reply))
+    # A recording that does not show the skill leaves no step out (evaluate.build_evaluation).
+    return build_timeline(rubric, steps, not_needed_from(rubric, reply) if reply.skill_match else ())
 
 
 def not_needed_from(rubric: Rubric, reply: assess.AssessReply) -> set[str]:
-    """Steps the whole-video reply found not needed, as evaluate settles them (assess.not_needed):
-    a conditional step not done whose situation did not come up, or that the model called not needed."""
+    """Steps left out of this attempt, so not missing: those the whole-video reply found not
+    needed, as evaluate settles them (assess.not_needed: a conditional step not done whose
+    situation did not come up, or that the model called not needed), and those that can only
+    be heard (evaluate_prompts.heard_only), which it was not asked about."""
     by_id = {s.step_id: s for s in rubric.steps}
     first: dict[str, assess.StepAssessment] = {}
     for s in reply.steps:
         first.setdefault(s.step_id.strip(), s)
-    return {i for i, s in first.items()
-            if i in by_id and assess.not_needed(by_id[i], s.status, s.performed, s.situation_came_up)}
+    return ({i for i, s in first.items()
+             if i in by_id and assess.not_needed(by_id[i], s.status, s.performed, s.situation_came_up)}
+            | {s.step_id for s in rubric.steps if heard_only(s)})
 
 
 def located_from(reply: assess.AssessReply) -> list[_Located]:
@@ -121,6 +125,9 @@ def clean_steps(rubric: Rubric, located: list[_Located], duration: float) -> lis
     steps = []
     for rs in rubric.steps:
         item = first.get(rs.step_id)
+        if heard_only(rs):  # never asked about: no video can show it
+            steps.append(TimelineStep(step_id=rs.step_id, found=False, note=HEARD_NOTE))
+            continue
         if item is None:
             steps.append(TimelineStep(step_id=rs.step_id, found=False, note="Not reported by the model."))
             continue
@@ -180,7 +187,7 @@ def _refine(ctx, rs: RubricStep, step: TimelineStep) -> TimelineStep:
             [ctx.video_part(resolution="low", start_s=clip_start, end_s=clip_end, fps=REFINE_FPS),
              gemini.text_part(prompt)],
             _RefineReply, model="main", thinking="low", max_output_tokens=REFINE_MAX_TOKENS,
-            optional=True, expect_output_tokens=600,
+            optional=True, expect_output_tokens=600, timeout=assess.CLIP_TIMEOUT_S,
         )
     except (gemini.BudgetExceeded, gemini.JobBudgetExceeded):
         raise

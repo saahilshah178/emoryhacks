@@ -31,6 +31,14 @@ MAX_FRAMES = 240
 MIN_FPS = 0.5
 MAX_OUTPUT_TOKENS = 9000   # thinking plus reply; a typical reply with thinking is 2,000 to 4,000
 EXPECTED_OUTPUT_TOKENS = 3500
+# Request timeouts for the calls that grade a caregiver's attempt, so a request that hangs is
+# retried in minutes rather than after the client's default of ten. The whole-video call
+# normally answers in 17 to 26 s for a recording up to 90 s (frames are capped at MAX_FRAMES,
+# so a longer one costs little more); clip and text calls in under 10 s. A timeout is retried
+# like any network error (gemini._call). Reference-video calls keep the default.
+WHOLE_VIDEO_TIMEOUT_S = 240.0
+CLIP_TIMEOUT_S = 90.0
+TEXT_TIMEOUT_S = 60.0
 
 Situation = Literal["yes", "no", "cannot_tell"]
 
@@ -134,6 +142,6 @@ def assess(ctx, rubric: Rubric) -> AssessReply:
             [ctx.video_part(resolution="low", fps=sample_fps(duration)),
              gemini.text_part(assess_prompts.assess_prompt(ctx.skill or {}, rubric, duration))],
             AssessReply, model="main", thinking="medium", max_output_tokens=MAX_OUTPUT_TOKENS,
-            expect_output_tokens=EXPECTED_OUTPUT_TOKENS,
+            expect_output_tokens=EXPECTED_OUTPUT_TOKENS, timeout=WHOLE_VIDEO_TIMEOUT_S,
         )
     return cache[key]

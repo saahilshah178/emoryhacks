@@ -33,7 +33,8 @@ _PURPOSE_RULE = """\
 
 # Caregivers often start recording part-way in. A step before the first thing the recording
 # shows is judged on its result when that is in view, and is unverified (not failed) when
-# nothing of it can be seen; evaluate.apply_recording_start does the same in code.
+# nothing of it can be seen. This is the model's call alone: a step failed as not done has no
+# evidence times whether or not it could be seen, so code has nothing to tell them apart by.
 _START_RULES = [
     "- A step that comes before the first thing the recording shows: if its result is already in",
     "  place when the recording begins (the caregiver is already holding the patient the way the",
@@ -115,6 +116,18 @@ def sight_only(items: list[str]) -> list[str]:
     """The items that can be judged by sight: any that sight.spoken_words finds speech in are
     left out, so a rubric written before grading went silent never asks the model to listen."""
     return [t for t in items if not sight.spoken_words(t)]
+
+
+# The timeline note for a step that can only be heard: it was not looked for.
+HEARD_NOTE = "Not checked: this step is about something said, and the check watches without sound."
+
+
+def heard_only(step: RubricStep) -> bool:
+    """A step the check cannot see: its title depends on speech and none of its pass criteria
+    can be judged by sight ("Ask about home stair railing" in a rubric written before grading
+    went silent, or typed in by a nurse). Such a step is never sent to the model; it is left
+    out of the score for a nurse to hear (evaluate.heard_result)."""
+    return bool(sight.spoken_words(step.title)) and not sight_only(step.evals.pass_criteria)
 
 
 def _step_block(step: RubricStep) -> str:

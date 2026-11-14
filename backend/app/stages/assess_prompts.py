@@ -5,12 +5,14 @@ from __future__ import annotations
 
 from ..models import Rubric
 from .evaluate_prompts import (
-    _GROUND_RULES, _PURPOSE_RULE, _WHOLE_VIDEO_RULES, _bullet, _feedback_rule, _rules, _step_block, sight_only,
+    _GROUND_RULES, _PURPOSE_RULE, _WHOLE_VIDEO_RULES, _bullet, _feedback_rule, _rules, _step_block, heard_only,
+    sight_only,
 )
 
 
 def assess_prompt(skill: dict, rubric: Rubric, duration: float) -> str:
-    steps = sorted(rubric.steps, key=lambda s: s.order)
+    # A step that can only be heard is not graded by the model (evaluate.heard_result).
+    steps = [s for s in sorted(rubric.steps, key=lambda s: s.order) if not heard_only(s)]
     safety = ("\n".join(f"  - {c}" for c in sight_only(rubric.safety_criteria))
               or "  (none listed; use general patient safety)")
     return f"""\

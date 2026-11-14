@@ -4,7 +4,8 @@ identify the people, flag patient-safety problems, and double-check unclear step
   run(ctx, rubric, timeline) -> Evaluation
       One Gemini pass over the whole attempt, then a closer second look (model "strong",
       higher frame rate and resolution, just the step's clip) at every step that came back
-      unverified, below MIN_CONFIDENCE, or failed while critical.
+      unverified, below MIN_CONFIDENCE, or failed while critical. A step the recording
+      stopped before is failed in code (see apply_recording_end) rather than re-examined.
   confirm_pose_flags(ctx, rubric, flags) -> list[SafetyFlag]
       Pose readings are noisy, so a pose-derived flag only counts once Gemini sees the
       same problem on the clip around it.
@@ -13,6 +14,7 @@ Owned by branch feat/evaluate.
 """
 from __future__ import annotations
 
+from collections.abc import Collection
 from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel, Field
@@ -28,6 +30,9 @@ MIN_CONFIDENCE = 0.7          # below this a step gets a second look
 MAX_DOUBLE_CHECKS = 6         # per attempt, to bound cost and latency
 MAX_FLAG_CHECKS = 3           # pose candidates confirmed per attempt
 CLIP_PAD_S = 3.0              # seconds added either side of a step's time range
+MAX_CLIP_S = 60.0             # a step's clip takes in first-pass evidence only up to this length
+WHOLE_VIDEO_FPS = 1.0         # frame rate when a second look has to watch the whole video
+RECORDING_END_SLACK_S = 4.0   # located steps ending this close to the end mean the recording stopped there
 FLAG_PAD_S = 2.0              # seconds added either side of a pose flag
 HIGH_RES_MIN_HEIGHT = 600     # video at least this tall is double-checked at high resolution
 DOUBLE_CHECK_MAX_TOKENS = 6000  # thinking plus reply for one second look on the strong model
@@ -43,8 +48,9 @@ class StepJudgement(BaseModel):
 
     step_id: str
     evidence: str = Field(description="what was actually seen or heard")
-    evidence_start_s: int = Field(description="whole seconds from the start of the video")
-    evidence_end_s: int = Field(description="whole seconds from the start of the video")
+    # No default, so the schema keeps them required; null says the step was not seen at all.
+    evidence_start_s: int | None = Field(description="whole seconds from the start of the video; null when not seen")
+    evidence_end_s: int | None = Field(description="whole seconds from the start of the video; null when not seen")
     status: Status
     confidence_pct: int = Field(description="0 to 100: how sure you are of the status")
     feedback: str = Field(description="one or two sentences to the caregiver")
@@ -91,9 +97,12 @@ def run(ctx, rubric: Rubric, timeline: Timeline) -> Evaluation:
         GradeReply, model="main", thinking="medium",
     )
     evaluation = build_evaluation(reply, rubric, ctx.duration)
-    # Steps of a different skill are not worth a closer look.
-    if evaluation.skill_match and _double_check(ctx, rubric, timeline, evaluation):
-        evaluation.overall_feedback = _rewrite_feedback(ctx, rubric, evaluation)
+    if not evaluation.skill_match:  # steps of a different skill are not worth a closer look
+        return evaluation
+    not_reached = apply_recording_end(rubric, timeline, evaluation, ctx.duration)
+    rechecked = _double_check(ctx, rubric, timeline, evaluation, skip=set(not_reached))
+    if not_reached or rechecked:
+        evaluation.overall_feedback = _rewrite_feedback(ctx, rubric, timeline, evaluation)
     return evaluation
 
 
@@ -187,17 +196,54 @@ def build_evaluation(reply: GradeReply, rubric: Rubric, duration: float) -> Eval
     )
 
 
+def steps_after_recording_end(rubric: Rubric, timeline: Timeline, duration: float) -> list[str]:
+    """Steps the recording stopped before: every step after the last one the timeline located
+    (in rubric order), provided the located steps run to within RECORDING_END_SLACK_S of the
+    end of the video. Empty when nothing was located or the duration is unknown."""
+    located = [t for t in timeline.steps if t.found and t.start_s is not None]
+    order = [s.step_id for s in sorted(rubric.steps, key=lambda s: s.order)]
+    positions = [order.index(t.step_id) for t in located if t.step_id in order]
+    if duration <= 0 or not positions:
+        return []
+    last_end = max(t.end_s if t.end_s is not None else t.start_s for t in located)
+    if last_end < duration - RECORDING_END_SLACK_S:
+        return []
+    return order[max(positions) + 1:]
+
+
+def apply_recording_end(rubric: Rubric, timeline: Timeline, evaluation: Evaluation, duration: float) -> list[str]:
+    """A step not performed in this attempt is failed, and that includes a recording that
+    stops before it; unverified is only for a step that may have happened out of view. So an
+    unverified step the recording stopped before (see steps_after_recording_end) becomes
+    failed. Changes evaluation in place and returns the ids it changed."""
+    titles = {s.step_id: s.title for s in rubric.steps}
+    tail = set(steps_after_recording_end(rubric, timeline, duration))
+    changed = []
+    for i, r in enumerate(evaluation.steps):
+        if r.step_id in tail and r.status == "unverified":
+            evaluation.steps[i] = r.model_copy(update={
+                "status": "failed", "confidence": 0.9, "evidence_start_s": None, "evidence_end_s": None,
+                "evidence": "The recording ends before this step.",
+                "feedback": f'The recording stopped before you did "{titles[r.step_id]}". '
+                            "Keep recording until you have finished every step.",
+            })
+            changed.append(r.step_id)
+    return changed
+
+
 # --- double-check ----------------------------------------------------------------
 def needs_double_check(result: StepResult, step: RubricStep) -> bool:
     return (result.status == "unverified" or result.confidence < MIN_CONFIDENCE
             or (result.status == "failed" and step.critical))
 
 
-def pick_double_checks(rubric: Rubric, evaluation: Evaluation) -> list[str]:
+def pick_double_checks(rubric: Rubric, evaluation: Evaluation, skip: Collection[str] = ()) -> list[str]:
     """Step ids to look at again, most important first, at most MAX_DOUBLE_CHECKS:
-    failed critical steps, then other critical steps, then the rest, least confident first."""
+    failed critical steps, then other critical steps, then the rest, least confident first.
+    Steps in skip are already settled and never picked."""
     steps = {s.step_id: s for s in rubric.steps}
-    candidates = [r for r in evaluation.steps if r.step_id in steps and needs_double_check(r, steps[r.step_id])]
+    candidates = [r for r in evaluation.steps
+                  if r.step_id in steps and r.step_id not in skip and needs_double_check(r, steps[r.step_id])]
     candidates.sort(key=lambda r: (
         not (r.status == "failed" and steps[r.step_id].critical), not steps[r.step_id].critical, r.confidence,
     ))
@@ -206,19 +252,20 @@ def pick_double_checks(rubric: Rubric, evaluation: Evaluation) -> list[str]:
 
 def step_window(step_id: str, rubric: Rubric, timeline: Timeline, result: StepResult | None,
                 duration: float) -> tuple[float, float]:
-    """The clip to re-examine for a step, padded by CLIP_PAD_S.
+    """The clip to re-examine for a step.
 
-    Uses the timeline's range when the step was located, else the first pass's evidence
-    times, else the gap between the nearest located neighbours in rubric order (the whole
-    video when there are none, or when the neighbours are out of order)."""
+    A step the timeline located: its range. A step it did not locate: the gap between the
+    located steps before and after it in rubric order (from the end of the latest one before
+    to the start of the earliest one after), running to the start or end of the video when
+    one side has none. Either way the clip is widened to take in the first pass's evidence
+    times when they lie outside it, as long as it stays within MAX_CLIP_S, then padded by
+    CLIP_PAD_S. When no other step was located, or the gap is empty, the clip is the whole
+    video."""
     end_cap = duration if duration > 0 else float("inf")
     located = {t.step_id: t for t in timeline.steps if t.found and t.start_s is not None}
     t = located.get(step_id)
     if t is not None:
         lo, hi = t.start_s, t.end_s if t.end_s is not None else t.start_s
-    elif result is not None and result.evidence_start_s is not None:
-        lo = result.evidence_start_s
-        hi = result.evidence_end_s if result.evidence_end_s is not None else lo
     else:
         order = [s.step_id for s in sorted(rubric.steps, key=lambda s: s.order)]
         idx = order.index(step_id) if step_id in order else 0
@@ -226,13 +273,21 @@ def step_window(step_id: str, rubric: Rubric, timeline: Timeline, result: StepRe
         after = [located[i] for i in order[idx + 1:] if i in located]
         lo = max((b.end_s if b.end_s is not None else b.start_s) for b in before) if before else 0.0
         hi = min(a.start_s for a in after) if after else end_cap
-        if hi <= lo:
-            lo, hi = 0.0, end_cap
+        if not (before or after) or hi <= lo:
+            return (0.0, round(duration, 1)) if duration > 0 else (0.0, 60.0)
+    if result is not None and result.evidence_start_s is not None and result.evidence_end_s is not None:
+        wide_lo, wide_hi = min(lo, result.evidence_start_s), max(hi, result.evidence_end_s)
+        if wide_hi - wide_lo <= MAX_CLIP_S:
+            lo, hi = wide_lo, wide_hi
     lo = max(0.0, lo - CLIP_PAD_S)
     hi = min(end_cap, hi + CLIP_PAD_S)
     if hi == float("inf"):
         hi = lo + 60.0
     return round(lo, 1), round(max(hi, lo + 1.0), 1)
+
+
+def is_whole_video(start: float, end: float, duration: float) -> bool:
+    return duration > 0 and start <= 0 and end >= duration
 
 
 def clip_sampling(length_s: float) -> float:
@@ -245,10 +300,18 @@ def clip_sampling(length_s: float) -> float:
 
 
 def _double_check_one(ctx, step: RubricStep, start: float, end: float) -> StepResult:
+    """One second look. The whole video is watched at a low frame rate and medium resolution
+    to bound its cost; a step's own clip gets denser frames."""
+    whole = is_whole_video(start, end, ctx.duration)
+    if whole:
+        video = ctx.video_part(resolution="medium", start_s=start, end_s=end, fps=WHOLE_VIDEO_FPS)
+    else:
+        video = ctx.video_part(resolution=_clip_resolution(ctx), start_s=start, end_s=end,
+                               fps=clip_sampling(end - start))
     j = ctx.generate_json(
         f"evaluate_double_check:{step.step_id}",
-        [ctx.video_part(resolution=_clip_resolution(ctx), start_s=start, end_s=end, fps=clip_sampling(end - start)),
-         {"type": "text", "text": prompts.double_check_prompt(ctx.skill or {}, step, start, end, ctx.duration)}],
+        [video,
+         {"type": "text", "text": prompts.double_check_prompt(ctx.skill or {}, step, start, end, ctx.duration, whole)}],
         # thinking "medium" on an ambiguous clip has used 20k thought tokens (about $0.40 a step)
         StepJudgement, model="strong", thinking="low", max_output_tokens=DOUBLE_CHECK_MAX_TOKENS,
     )
@@ -262,20 +325,34 @@ def _clip_resolution(ctx) -> str:
     return "high" if int(ctx.video.get("height") or 0) >= HIGH_RES_MIN_HEIGHT else "medium"
 
 
-def _double_check(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evaluation) -> bool:
-    """Re-grade the picked steps concurrently and replace their results in place.
-    A step whose second look fails keeps its first result. Returns True if any status changed."""
-    picked = pick_double_checks(rubric, evaluation)
+def better_supported(before: StepResult, after: StepResult, whole_video: bool) -> StepResult:
+    """Which of two looks at a step to keep. The result is marked double_checked either way.
+
+    The second look wins when it agrees, or when the first could not settle the step. A
+    second look that could not see the step on a partial clip says nothing about the rest of
+    the video, so it never overturns a passed or failed first verdict. Otherwise, when they
+    disagree, the more confident one is kept (the second look on a tie)."""
+    if after.status == before.status or before.status == "unverified":
+        return after
+    if (after.status == "unverified" and not whole_video) or after.confidence < before.confidence:
+        note = f' A closer second look said "{after.status}" ({round(after.confidence * 100)}% sure) and was not kept.'
+        return before.model_copy(update={"double_checked": True, "evidence": (before.evidence + note).strip()})
+    return after
+
+
+def _double_check(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evaluation,
+                  skip: Collection[str] = ()) -> bool:
+    """Re-grade the picked steps concurrently and keep the better-supported look at each, in
+    place. A step whose second look fails keeps its first result. Returns True if any status changed."""
+    picked = pick_double_checks(rubric, evaluation, skip)
     if not picked:
         return False
     changed = False
     steps = {s.step_id: s for s in rubric.steps}
     index = {r.step_id: i for i, r in enumerate(evaluation.steps)}
+    windows = {i: step_window(i, rubric, timeline, evaluation.steps[index[i]], ctx.duration) for i in picked}
     with ThreadPoolExecutor(max_workers=len(picked), thread_name_prefix="double_check") as pool:
-        futures = {}
-        for step_id in picked:
-            start, end = step_window(step_id, rubric, timeline, evaluation.steps[index[step_id]], ctx.duration)
-            futures[step_id] = pool.submit(_double_check_one, ctx, steps[step_id], start, end)
+        futures = {i: pool.submit(_double_check_one, ctx, steps[i], *windows[i]) for i in picked}
     for step_id, future in futures.items():
         before = evaluation.steps[index[step_id]]
         try:
@@ -283,23 +360,30 @@ def _double_check(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evaluatio
         except Exception as exc:
             ctx.log(f"double-check of {step_id} failed, keeping first result: {type(exc).__name__}: {exc}")
             continue
-        evaluation.steps[index[step_id]] = after
-        changed = changed or after.status != before.status
-        ctx.log(f"double-check {step_id}: {before.status} ({before.confidence}) -> {after.status} ({after.confidence})")
+        kept = better_supported(before, after, is_whole_video(*windows[step_id], ctx.duration))
+        evaluation.steps[index[step_id]] = kept
+        changed = changed or kept.status != before.status
+        ctx.log(f"double-check {step_id}: {before.status} ({before.confidence}) -> {after.status} "
+                f"({after.confidence}), kept {kept.status}")
     return changed
 
 
-def _rewrite_feedback(ctx, rubric: Rubric, evaluation: Evaluation) -> str:
-    """The first-pass summary can describe a step whose result the second look changed, so
-    write it again from the final step results. Text only: no video is sent."""
+def _rewrite_feedback(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evaluation) -> str:
+    """The first-pass summary can describe a step whose result changed afterwards, so write it
+    again from the final step results, the order problems and the safety flags. Text only: no
+    video is sent."""
     titles = {s.step_id: s.title for s in rubric.steps}
     lines = "\n".join(f"- {titles.get(r.step_id, r.step_id)}: {r.status}. {r.feedback}" for r in evaluation.steps)
+    problems = [f"- Order: {v.message}" for v in timeline.order_violations]
+    problems += [f"- Safety ({f.severity}): {f.description}" for f in evaluation.safety_flags if f.severity != "low"]
     prompt = (
         f"A caregiver trainee attempted the skill \"{(ctx.skill or {}).get('name', 'this skill')}\". "
-        f"Final result for each step:\n{lines}\n\n"
+        f"Final result for each step:\n{lines}\n"
+        f"Other problems seen:\n{chr(10).join(problems) or '- none'}\n\n"
         "Write two or three plain, encouraging sentences addressed to the caregiver as \"you\": what went well, "
-        "then the one or two most important things to fix or to record again so they can be seen. "
-        "Use only the results above. Do not mention scores, step numbers or AI. Reply with the sentences only."
+        "then the one or two most important things to fix or to record again so they can be seen. If other "
+        "problems are listed, mention the most important one. "
+        "Use only what is listed above. Do not mention scores, step numbers or AI. Reply with the sentences only."
     )
     try:
         text = ctx.generate_text("evaluate_summary", [{"type": "text", "text": prompt}], thinking="low",
@@ -326,7 +410,11 @@ def _confirm_one(ctx, rubric: Rubric, flag: SafetyFlag) -> SafetyFlag:
     if not reply.observed:
         return flag
     seen_start, seen_end = _clamp_span(reply.start_s, reply.end_s, ctx.duration)
+    # Gemini is asked about the patient, not about the tracked person, and a bare "track N"
+    # label means that track's role is unknown, so it may not be the person Gemini saw.
+    label = None if (flag.person_label or "").startswith("track ") else flag.person_label
     return flag.model_copy(update={
+        "person_label": label,
         "kind": reply.kind if reply.kind != "other" else flag.kind,
         "severity": reply.severity,
         "start_s": seen_start if seen_start is not None else flag.start_s,

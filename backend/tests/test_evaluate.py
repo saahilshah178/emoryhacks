@@ -108,7 +108,7 @@ def test_fake_path_makes_no_calls():
 # --- run: double-check --------------------------------------------------------------
 def test_double_check_picks_unclear_steps_and_replaces_them(real_ai):
     reply = grade_reply(steps=[
-        judgement("s1", "failed", 95),       # failed critical -> checked
+        judgement("s1", "failed", 95, start=30, end=34),  # failed critical -> checked
         judgement("s2", "passed", 50),       # low confidence -> checked
         judgement("s3", "passed", 95),
         judgement("s4", "unverified", 80),   # unverified -> checked
@@ -172,9 +172,31 @@ def test_window_for_unlocated_step_lies_between_neighbours():
     timeline = GLOVE_MISSING_TIMELINE.model_copy(deep=True)
     timeline.steps[5].start_s, timeline.steps[5].end_s = 40.0, 44.0
     assert evaluate.step_window("s4", GLOVE_REMOVAL, timeline, None, 60.0) == (20.0, 43.0)
-    result = StepResult(step_id="s4", status="unverified", confidence=0.3, feedback="",
-                        evidence_start_s=30.0, evidence_end_s=32.0)
-    assert evaluate.step_window("s4", GLOVE_REMOVAL, timeline, result, 60.0) == (27.0, 35.0)
+    # First-pass evidence inside the gap does not narrow it; evidence outside widens it, up to MAX_CLIP_S.
+    def seen(start, end):
+        return StepResult(step_id="s4", status="unverified", confidence=0.3, feedback="",
+                          evidence_start_s=start, evidence_end_s=end)
+    assert evaluate.step_window("s4", GLOVE_REMOVAL, timeline, seen(30.0, 32.0), 60.0) == (20.0, 43.0)
+    assert evaluate.step_window("s4", GLOVE_REMOVAL, timeline, seen(45.0, 50.0), 60.0) == (20.0, 53.0)
+    timeline.steps[5].start_s, timeline.steps[5].end_s = 90.0, 95.0
+    assert evaluate.step_window("s4", GLOVE_REMOVAL, timeline, seen(5.0, 8.0), 120.0) == (20.0, 93.0)
+
+
+def test_window_for_a_located_step_takes_in_evidence_seen_elsewhere():
+    # The timeline put s1 at 29-36 but the first pass saw it at 40-44: the clip covers both.
+    result = StepResult(step_id="s1", status="passed", confidence=0.6, feedback="",
+                        evidence_start_s=40.0, evidence_end_s=44.0)
+    assert evaluate.step_window("s1", GLOVE_REMOVAL, GLOVE_TIMELINE, result, 70.0) == (26.0, 47.0)
+    assert evaluate.step_window("s1", GLOVE_REMOVAL, GLOVE_TIMELINE, None, 70.0) == (26.0, 39.0)
+
+
+def test_unseen_step_keeps_no_evidence_times(real_ai):
+    """Evidence times are nullable, so a step nobody saw is not saved at 0-0."""
+    unseen = StepJudgement(step_id="s6", evidence="not seen", evidence_start_s=None, evidence_end_s=None,
+                           status="failed", confidence_pct=90, feedback="Wash your hands.")
+    result = evaluate.to_step_result(unseen, 60.0)
+    assert (result.evidence_start_s, result.evidence_end_s) == (None, None)
+    assert StepJudgement.model_json_schema()["required"].count("evidence_start_s") == 1
 
 
 # --- confirm_pose_flags -------------------------------------------------------------
@@ -217,12 +239,8 @@ def test_scoring_reasons_and_review():
     assert (ok.overall, ok.score_pct, ok.needs_nurse_review) == ("passed", 100.0, False)
 
     one_minor = scoring.score(rubric, timeline, _ev(["passed"] * 5 + ["unverified"]), [])
-    assert one_minor.overall == "passed" and not one_minor.needs_nurse_review and one_minor.score_pct == 91.7
-
-    medium = SafetyFlag(kind="patient_off_center", severity="medium", start_s=3, description="leans left")
-    flagged = scoring.score(rubric, timeline, _ev(["passed"] * 6), [medium, medium])
-    assert flagged.overall == "passed" and flagged.needs_nurse_review
-    assert flagged.reasons.count("Safety point for a nurse to review: leans left") == 1
+    assert one_minor.overall == "passed" and one_minor.score_pct == 91.7
+    assert one_minor.needs_nurse_review  # nobody saw s6, so a nurse should
 
     missing = scoring.score(rubric, GLOVE_MISSING_TIMELINE, _ev(["passed", "passed", "passed", "failed", "failed", "passed"]), [])
     assert missing.overall == "failed"
@@ -270,3 +288,179 @@ def test_double_check_uses_high_resolution_for_webcam_sized_video(real_ai):
     checks = [c for c in ctx.calls if c["purpose"].startswith("evaluate_double_check")]
     assert checks and all(c["video"]["resolution"] == "high" for c in checks)
     assert all(c["max_output_tokens"] == evaluate.DOUBLE_CHECK_MAX_TOKENS for c in checks)
+
+
+# --- scoring: safety flags, order confidence, combined fraction --------------------------
+def _flag(kind="patient_off_center", severity="medium", start=10.0, end=12.0, description="leans left", **kw):
+    return SafetyFlag(kind=kind, severity=severity, start_s=start, end_s=end, description=description, **kw)
+
+
+def test_counted_patient_flags_lower_the_score_and_medium_sends_for_review():
+    rubric, timeline, all_passed = GLOVE_REMOVAL, GLOVE_TIMELINE, _ev(["passed"] * 6)
+
+    medium = scoring.score(rubric, timeline, all_passed, [_flag(), _flag()])  # the same flag twice counts once
+    assert (medium.overall, medium.score_pct, medium.needs_nurse_review) == ("unverified", 90.0, True)
+    assert medium.reasons == ["Patient safety concern for a nurse to review: leans left"]
+
+    high = scoring.score(rubric, timeline, all_passed, [_flag(kind="patient_distress", severity="high")])
+    assert (high.overall, high.score_pct) == ("failed", 75.0)
+
+    low = scoring.score(rubric, timeline, all_passed, [_flag(severity="low", description="grimaces")])
+    assert (low.overall, low.score_pct, low.needs_nurse_review) == ("passed", 95.0, False)
+    assert low.reasons == ["All steps met the criteria.", "Minor safety point: grimaces"]
+
+
+def test_flags_not_about_the_patient_keep_the_result():
+    caregiver = _flag(kind="unsafe_caregiver_posture", description="pulls on the arm")
+    sc = scoring.score(GLOVE_REMOVAL, GLOVE_TIMELINE, _ev(["passed"] * 6), [caregiver])
+    assert (sc.overall, sc.score_pct, sc.needs_nurse_review) == ("passed", 90.0, True)
+    assert sc.reasons[1] == "Safety point for a nurse to review: pulls on the arm"
+    clutter = _flag(kind="environment_hazard", severity="low", description="clutter")
+    assert scoring.score(GLOVE_REMOVAL, GLOVE_TIMELINE, _ev(["passed"] * 6), [clutter]).score_pct == 100.0
+
+
+def test_flags_that_do_not_count_change_nothing():
+    advisory = [_flag(severity=s, source="pose", counts_toward_score=False) for s in ("high", "medium", "low")]
+    sc = scoring.score(GLOVE_REMOVAL, GLOVE_TIMELINE, _ev(["passed"] * 6), advisory)
+    assert (sc.overall, sc.score_pct, sc.needs_nurse_review, sc.reasons) == (
+        "passed", 100.0, False, ["All steps met the criteria."])
+
+
+def test_one_event_flagged_by_gemini_and_pose_counts_once_at_its_highest_severity():
+    gemini_flag = _flag(severity="medium", start=10, end=14, description="Patient leans hard left.")
+    confirmed = _flag(severity="high", start=12, end=15, description="Patient slides off the seat.",
+                      source="pose_confirmed")
+    later = _flag(severity="medium", start=40, end=42, description="Leans again.")
+    sc = scoring.score(GLOVE_REMOVAL, GLOVE_TIMELINE, _ev(["passed"] * 6), [gemini_flag, confirmed, later])
+    assert sc.overall == "failed" and sc.score_pct == 65.0  # 100 - 25 (high) - 10 (the later medium)
+    assert sc.reasons[0] == "Safety risk: Patient slides off the seat."
+
+
+def test_order_violation_fails_only_when_the_timeline_was_sure_of_both_steps():
+    violation = OrderViolation(step_id="s2", expected_after="s1", message='"Peel" came before "Pinch".')
+    sure = Timeline(steps=GLOVE_TIMELINE.steps, order_violations=[violation])  # both at confidence 0.8
+    failed = scoring.score(GLOVE_REMOVAL, sure, _ev(["passed"] * 6), [])
+    assert (failed.overall, failed.score_pct) == ("failed", 85.0)  # never 100 for a failed attempt
+
+    steps = [t.model_copy(update={"confidence": 0.3}) if t.step_id == "s1" else t for t in GLOVE_TIMELINE.steps]
+    unsure = scoring.score(GLOVE_REMOVAL, Timeline(steps=steps, order_violations=[violation]), _ev(["passed"] * 6), [])
+    assert (unsure.overall, unsure.score_pct, unsure.needs_nurse_review) == ("unverified", 100.0, True)
+    assert unsure.reasons == ['Steps may be out of order: "Peel" came before "Pinch".']
+
+
+def test_many_steps_failed_or_unseen_together_need_review():
+    rubric = GLOVE_REMOVAL.model_copy(deep=True)
+    extra = [rubric.steps[2].model_copy(update={"step_id": f"s{i}", "order": i}) for i in (7, 8)]
+    rubric.steps.extend(extra)  # 8 steps; s3, s6, s7 and s8 are not critical
+    statuses = ["passed", "passed", "failed", "passed", "passed", "failed", "unverified", "unverified"]
+    sc = scoring.score(rubric, GLOVE_TIMELINE, _ev(statuses), [])
+    assert (sc.overall, sc.needs_nurse_review, sc.score_pct) == ("unverified", True, 62.5)
+    assert sc.reasons == ["4 of 8 steps were not done correctly or could not be seen."]
+
+
+def test_critical_step_passed_with_low_confidence_needs_review():
+    ev = _ev(["passed"] * 6)
+    ev.steps[0] = ev.steps[0].model_copy(update={"confidence": 0.4})
+    sc = scoring.score(GLOVE_REMOVAL, GLOVE_TIMELINE, ev, [])
+    assert sc.overall == "unverified" and sc.reasons[0].endswith('"Pinch the first glove at the wrist".')
+
+
+# --- second look: keep the better-supported verdict ---------------------------------
+def _result(status, confidence, evidence="seen"):
+    return StepResult(step_id="s1", status=status, confidence=confidence, feedback="", evidence=evidence)
+
+
+def test_better_supported_keeps_a_confident_first_verdict():
+    keep = evaluate.better_supported(_result("failed", 0.95), _result("passed", 0.4), whole_video=False)
+    assert keep.status == "failed" and keep.double_checked
+    assert 'second look said "passed" (40% sure)' in keep.evidence
+    assert evaluate.better_supported(_result("passed", 0.5), _result("failed", 0.9), False).status == "failed"
+    assert evaluate.better_supported(_result("unverified", 0.9), _result("passed", 0.6), False).status == "passed"
+    same = evaluate.better_supported(_result("passed", 0.6), _result("passed", 0.9, "closer"), False)
+    assert same.evidence == "closer"
+
+
+def test_unseen_on_a_partial_clip_never_overturns_a_verdict():
+    before = _result("failed", 0.6)
+    assert evaluate.better_supported(before, _result("unverified", 0.95), whole_video=False).status == "failed"
+    assert evaluate.better_supported(before, _result("unverified", 0.95), whole_video=True).status == "unverified"
+
+
+def test_double_check_of_an_unlocated_step_with_no_located_neighbours_watches_the_whole_video(real_ai):
+    timeline = Timeline(steps=[TimelineStep(step_id=s.step_id, found=False) for s in GLOVE_REMOVAL.steps])
+    reply = grade_reply(steps=[judgement(f"s{i}", "passed", 95) for i in range(1, 6)]
+                        + [judgement("s6", "unverified", 80, start=None, end=None)])
+    ctx = StubCtx(answer_with(reply), duration=70.0)
+    ctx.video = {"height": 720}
+    evaluate.run(ctx, GLOVE_REMOVAL, timeline)
+    [check] = [c for c in ctx.calls if c["purpose"].startswith("evaluate_double_check")]
+    v = check["video"]
+    assert (v["start_s"], v["end_s"], v["fps"], v["resolution"]) == (0.0, 70.0, evaluate.WHOLE_VIDEO_FPS, "medium")
+
+
+def test_double_check_prompt_fails_an_absent_step_only_on_the_whole_video():
+    step = GLOVE_REMOVAL.steps[0]
+    clip = evaluate.prompts.double_check_prompt(GLOVE_SKILL, step, 20, 40, 70)
+    whole = evaluate.prompts.double_check_prompt(GLOVE_SKILL, step, 0, 70, 70, whole_video=True)
+    assert "does not appear in this clip at all" in clip and "recording ends before it" not in clip
+    assert "the whole 70-second video" in whole and "recording ends before it" in whole
+
+
+def test_grade_prompt_fails_a_step_that_was_never_performed():
+    prompt = evaluate.prompts.grade_prompt(GLOVE_SKILL, GLOVE_REMOVAL, GLOVE_TIMELINE, 70)
+    assert "or the recording ends before it" in prompt
+    assert "A step the recording\n     ends before is failed, not unverified" in prompt
+    assert "use null for both" in prompt
+
+
+# --- a recording that stops early -----------------------------------------------------
+STOPPED_AFTER_S3 = Timeline(steps=[
+    TimelineStep(step_id="s1", found=True, start_s=5, end_s=12, confidence=0.8),
+    TimelineStep(step_id="s2", found=True, start_s=12, end_s=17, confidence=0.8),
+    TimelineStep(step_id="s3", found=True, start_s=17, end_s=23, confidence=0.8),
+    *[TimelineStep(step_id=f"s{i}", found=False) for i in (4, 5, 6)],
+])
+
+
+def test_steps_after_the_recording_ends():
+    assert evaluate.steps_after_recording_end(GLOVE_REMOVAL, STOPPED_AFTER_S3, 24.0) == ["s4", "s5", "s6"]
+    assert evaluate.steps_after_recording_end(GLOVE_REMOVAL, STOPPED_AFTER_S3, 60.0) == []  # it kept going
+    assert evaluate.steps_after_recording_end(GLOVE_REMOVAL, GLOVE_MISSING_TIMELINE, 25.0) == []  # s6 was found
+    nothing = Timeline(steps=[TimelineStep(step_id=s.step_id, found=False) for s in GLOVE_REMOVAL.steps])
+    assert evaluate.steps_after_recording_end(GLOVE_REMOVAL, nothing, 24.0) == []
+
+
+def test_steps_the_recording_stopped_before_are_failed_without_a_second_look(real_ai):
+    reply = grade_reply(steps=[judgement(f"s{i}", "passed", 95) for i in (1, 2, 3)]
+                        + [judgement(f"s{i}", "unverified", 80, start=None, end=None) for i in (4, 5)])  # s6 omitted
+    ctx = StubCtx(answer_with(reply), duration=24.0)
+    ev = evaluate.run(ctx, GLOVE_REMOVAL, STOPPED_AFTER_S3)
+    assert [r.status for r in ev.steps] == ["passed"] * 3 + ["failed"] * 3
+    assert ev.steps[3].evidence == "The recording ends before this step." and ev.steps[3].evidence_start_s is None
+    assert not any(c["purpose"].startswith("evaluate_double_check") for c in ctx.calls)
+    assert ev.overall_feedback == "Rewritten summary."
+    sc = scoring.score(GLOVE_REMOVAL, STOPPED_AFTER_S3, ev, [])
+    assert sc.overall == "failed" and sc.score_pct == 50.0
+
+
+def test_rewritten_summary_is_told_about_order_problems_and_safety_flags(real_ai):
+    violation = OrderViolation(step_id="s2", expected_after="s1", message='"Peel" came before "Pinch".')
+    timeline = Timeline(steps=GLOVE_TIMELINE.steps, order_violations=[violation])
+    reply = grade_reply(steps=[judgement(f"s{i}", "passed", 95) for i in range(1, 6)] + [judgement("s6", "passed", 40)],
+                        safety_flags=[FlagObservation(kind="patient_distress", severity="medium", start_s=3,
+                                                      description="Says their wrist hurts.")])
+    ctx = StubCtx(answer_with(reply, second=lambda step_id: judgement(step_id, "failed", 90)), duration=70.0)
+    prompts_sent = []
+    ctx.generate_text = lambda purpose, parts, **kw: prompts_sent.append(parts[0]["text"]) or "Summary."
+    evaluate.run(ctx, GLOVE_REMOVAL, timeline)
+    [prompt] = prompts_sent
+    assert '- Order: "Peel" came before "Pinch".' in prompt and "- Safety (medium): Says their wrist hurts." in prompt
+
+
+def test_confirmed_flag_on_a_track_with_no_known_role_drops_the_track_label(real_ai):
+    flag = _pose_flag("medium", 10).model_copy(update={"person_label": "track 0"})
+    named = _pose_flag("medium", 30).model_copy(update={"person_label": "patient (track 1)"})
+    ctx = StubCtx(lambda *a: FlagCheckReply(observed=True, kind="patient_unsteady", severity="high",
+                                            description="The patient sways."))
+    out = evaluate.confirm_pose_flags(ctx, GLOVE_REMOVAL, [flag, named])
+    assert [f.person_label for f in out] == [None, "patient (track 1)"]

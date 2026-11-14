@@ -127,9 +127,15 @@ def test_scoring_rules():
     assert scoring.score(rb, _timeline(), _evaluation(["passed", "unverified", "passed", "passed"]), []).overall == "unverified"
     assert scoring.score(rb, _timeline(), _evaluation(["failed", "passed", "passed", "passed"]), []).overall == "passed"
     violation = OrderViolation(step_id="s3", expected_after="s2", message="s3 before s2")
-    assert scoring.score(rb, _timeline(violations=[violation]), _evaluation(["passed"] * 4), []).overall == "failed"
+    unsure = _timeline(violations=[violation])  # timeline confidence 0: the violation only asks for review
+    assert scoring.score(rb, unsure, _evaluation(["passed"] * 4), []).overall == "unverified"
+    sure = unsure.model_copy(update={"steps": [t.model_copy(update={"confidence": 0.9}) for t in unsure.steps]})
+    out_of_order = scoring.score(rb, sure, _evaluation(["passed"] * 4), [])
+    assert out_of_order.overall == "failed" and out_of_order.score_pct < 100
     high = SafetyFlag(kind="patient_distress", severity="high", start_s=1, description="grimacing")
     assert scoring.score(rb, _timeline(), _evaluation(["passed"] * 4), [high]).overall == "failed"
+    medium = high.model_copy(update={"severity": "medium"})
+    assert scoring.score(rb, _timeline(), _evaluation(["passed"] * 4), [medium]).overall == "unverified"
     advisory = high.model_copy(update={"source": "pose", "counts_toward_score": False})
     assert scoring.score(rb, _timeline(), _evaluation(["passed"] * 4), [advisory]).overall == "passed"
     assert scoring.score(rb, _timeline(), _evaluation(["passed"] * 4, skill_match=False), []).overall == "failed"

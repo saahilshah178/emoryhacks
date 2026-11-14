@@ -2,7 +2,6 @@
 
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { AvatarButton } from "@/caregiver/components/layout/AvatarButton";
 import { BottomNav } from "@/caregiver/components/layout/BottomNav";
 import { mainNav, profileNav } from "@/caregiver/nav";
 import { cn } from "@/lib/cn";
@@ -21,8 +20,8 @@ function isImmersivePath(pathname: string) {
 /**
  * The frame around every portal page.
  *
- * Phone and tablet: the brand and the profile at the top, the pages along the bottom, and
- * one narrow column of content.
+ * Phone and tablet: the brand and the account menu (profile, sign out) at the top, the
+ * pages along the bottom, and one narrow column of content.
  *
  * Laptop and wider (the `lg` width): the same frame as the nurse dashboard. A white rail
  * with the brand and the pages, a top bar with the account menu, and the page in a wide
@@ -49,7 +48,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-30 w-full border-b border-border bg-white lg:hidden">
           <div className="flex h-16 w-full items-center justify-between gap-3 px-4 sm:px-6">
             <Logo href="/portal" onClick={brand.onClick} />
-            <AvatarButton />
+            <AccountMenu links={[profileNav]} role="Caregiver" />
           </div>
         </header>
 

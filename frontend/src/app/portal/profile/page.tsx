@@ -5,11 +5,9 @@ import { Building2, CalendarClock, Mail, Pencil, ShieldCheck } from "lucide-reac
 import { Avatar, Button, Card, ErrorNote, Field, Input, ProgressBar, Skeleton } from "@/components/ui";
 import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
 import { useCaregiver } from "@/caregiver/context/CaregiverContext";
-import { practiceHref, recommendedSkill } from "@/caregiver/skills";
 import { api, errorMessage } from "@/lib/api";
 import { useTitle } from "@/lib/hooks";
 import type { User } from "@/lib/types";
-import { APP_NAME } from "@/shared/brand";
 import { useAuth, useUser } from "@/shared/AuthProvider";
 
 function NameEditor({ user, onDone }: { user: User; onDone: () => void }) {
@@ -77,10 +75,8 @@ function Row({ icon: Icon, label, children }: { icon: typeof Building2; label: s
 export default function ProfilePage() {
   useTitle("Profile");
   const user = useUser();
-  const { signOut } = useAuth();
-  const { skills, counts, error, reload } = useCaregiver();
+  const { counts, error, reload } = useCaregiver();
   const [editing, setEditing] = useState(false);
-  const next = recommendedSkill(skills);
 
   return (
     <div className="space-y-5">
@@ -123,39 +119,23 @@ export default function ProfilePage() {
           </Card>
         </div>
 
-        <div className="space-y-5">
-          <Card className="p-5">
-            <Row icon={ShieldCheck} label="Skills verified">
-              {counts ? (
-                <>
-                  <p className="text-sm font-medium tabular-nums text-navy">
-                    {counts.verified} of {counts.total}
-                    {counts.in_review > 0 ? ` · ${counts.in_review} with a nurse` : ""}
-                  </p>
-                  <ProgressBar className="mt-2" value={counts.verified} max={counts.total} label="Skills verified" />
-                </>
-              ) : error ? (
-                <ErrorNote className="mt-1" message={error} onRetry={reload} />
-              ) : (
-                <Skeleton className="mt-1 h-8" />
-              )}
-            </Row>
-          </Card>
-
-          <div className="rounded-[12px] border border-border bg-teal-soft p-5 shadow-[var(--shadow-card)]">
-            <p className="text-sm leading-relaxed text-navy">
-              {APP_NAME} is here to help you feel ready, not to test you. A nurse always makes the final call on
-              every skill.
-            </p>
-          </div>
-
-          <Button href={next ? practiceHref(next.id) : "/portal/skills"} size="xl" className="w-full">
-            Continue practicing
-          </Button>
-          <Button variant="ghost" size="lg" className="w-full" onClick={() => void signOut()}>
-            Sign out
-          </Button>
-        </div>
+        <Card className="p-5">
+          <Row icon={ShieldCheck} label="Skills verified">
+            {counts ? (
+              <>
+                <p className="text-sm font-medium tabular-nums text-navy">
+                  {counts.verified} of {counts.total}
+                  {counts.in_review > 0 ? ` · ${counts.in_review} with a nurse` : ""}
+                </p>
+                <ProgressBar className="mt-2" value={counts.verified} max={counts.total} label="Skills verified" />
+              </>
+            ) : error ? (
+              <ErrorNote className="mt-1" message={error} onRetry={reload} />
+            ) : (
+              <Skeleton className="mt-1 h-8" />
+            )}
+          </Row>
+        </Card>
       </div>
     </div>
   );

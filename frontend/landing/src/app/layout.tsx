@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { APP_NAME, APP_TAGLINE } from "@/config/branding";
+import { APP_NAME, APP_TAGLINE } from "@/shared/brand";
 import { Providers } from "@/app/providers";
 import "./globals.css";
 

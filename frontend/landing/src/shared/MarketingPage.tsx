@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { CircleCheck } from "lucide-react";
+import { useAuth } from "./AuthProvider";
 import { APP_NAME, APP_TAGLINE } from "./brand";
 import { PublicHeader } from "./PublicHeader";
-import { LOGIN_PATH, SIGNUP_PATH } from "./urls";
+import { homeUrlFor, LOGIN_PATH, SIGNUP_PATH } from "./urls";
 
 const steps = [
   {
@@ -61,22 +63,38 @@ function AccountActions({
     ? "text-white hover:bg-white/10"
     : "text-navy hover:bg-secondary";
 
+  const { user } = useAuth();
+  const wide = stacked ? "w-full sm:w-auto" : "";
+
+  if (user) {
+    return (
+      <div className={`flex ${stacked ? "w-full flex-col sm:w-auto sm:flex-row" : "flex-wrap"} items-stretch gap-2 sm:items-center`}>
+        <Link
+          href={homeUrlFor(user.role)}
+          className={`inline-flex h-12 items-center justify-center rounded-[12px] px-5 text-sm font-semibold transition-colors ${wide} ${primary}`}
+        >
+          {user.role === "nurse" ? "Open your dashboard" : "Open your portal"}
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`flex ${stacked ? "w-full flex-col sm:w-auto sm:flex-row" : "flex-wrap"} items-stretch gap-2 sm:items-center`}
     >
-      <a
+      <Link
         href={SIGNUP_PATH}
-        className={`inline-flex h-12 items-center justify-center rounded-[12px] px-5 text-sm font-semibold transition-colors ${stacked ? "w-full sm:w-auto" : ""} ${primary}`}
+        className={`inline-flex h-12 items-center justify-center rounded-[12px] px-5 text-sm font-semibold transition-colors ${wide} ${primary}`}
       >
         Create account
-      </a>
-      <a
+      </Link>
+      <Link
         href={LOGIN_PATH}
-        className={`inline-flex h-12 items-center justify-center rounded-[12px] px-4 text-sm font-semibold transition-colors ${stacked ? "w-full sm:w-auto" : ""} ${secondary}`}
+        className={`inline-flex h-12 items-center justify-center rounded-[12px] px-4 text-sm font-semibold transition-colors ${wide} ${secondary}`}
       >
         Log in
-      </a>
+      </Link>
     </div>
   );
 }
@@ -152,7 +170,7 @@ export function MarketingPage() {
                   </ul>
                   <div className="mt-3 rounded-[12px] border border-danger/20 bg-danger-bg px-3.5 py-3">
                     <p className="text-xs font-semibold text-danger">
-                      Wheelchair brakes not locked — 0:04
+                      Wheelchair brakes not locked · 0:04–0:09
                     </p>
                     <p className="mt-1 text-xs leading-5 text-ink-secondary">
                       Both brake levers stay up through the pivot. A nurse still makes the call.
@@ -214,12 +232,12 @@ export function MarketingPage() {
               Built for home-care agencies. Nurses remain the certifying authority.
             </p>
           </div>
-          <a
+          <Link
             href={SIGNUP_PATH}
             className="inline-flex h-11 w-fit items-center text-sm font-semibold text-teal hover:text-teal-hover"
           >
             Create account
-          </a>
+          </Link>
         </div>
       </footer>
     </div>

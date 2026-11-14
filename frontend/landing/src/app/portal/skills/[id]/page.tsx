@@ -1,48 +1,55 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import Link from "next/link";
+import { useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { Button, ErrorNote, Skeleton } from "@/components/ui";
 import { SkillCheckClient } from "@/app/portal/skills/[id]/skill-check-client";
-import { Button } from "@/caregiver/components/ui/Button";
 import { useCaregiver } from "@/caregiver/context/CaregiverContext";
+import { practiceHref } from "@/caregiver/skills";
+import { useApi, useTitle } from "@/lib/hooks";
+import type { Skill } from "@/lib/types";
 
 export default function SkillCheckPage() {
-  const params = useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { skills } = useCaregiver();
-  const skill = skills.find((item) => item.id === params.id);
+  const { data: skill, error, reload } = useApi<Skill>(`/skills/${id}`);
+  const outdated = skill !== undefined && skill.latest_id !== skill.id;
+  useTitle(skill?.name ?? "Practice");
 
-  if (!skill) {
-    return (
-      <div className="space-y-4 py-10 text-center">
-        <h1 className="text-xl font-bold text-navy">We couldn&apos;t find that skill</h1>
-        <p className="text-sm text-text-secondary">
-          Let&apos;s head back and pick another one to practice.
-        </p>
-        <Button href="/portal/skills">Back to My Skills</Button>
-      </div>
-    );
-  }
+  // An older version of a skill: practise its newest version instead.
+  useEffect(() => {
+    if (skill && skill.latest_id !== skill.id) router.replace(practiceHref(skill.latest_id));
+  }, [skill, router]);
 
-  if (skill.status === "verified") {
+  if (skill === undefined && error) {
     return (
       <div className="space-y-4 py-6">
-        <h1 className="text-2xl font-bold text-navy">{skill.name}</h1>
-        <p className="text-sm leading-relaxed text-text-secondary">
-          A nurse has already verified this skill. You can still review the
-          assessment or practice again anytime.
-        </p>
-        <Button href={`/portal/skills/${skill.id}/results`} className="w-full">
-          View results
+        <h1 className="text-xl font-semibold text-navy">We couldn&apos;t open this skill</h1>
+        <ErrorNote message={error} onRetry={reload} />
+        <Button href="/portal/skills" variant="secondary" size="lg" className="w-full">
+          Back to my skills
         </Button>
-        <Link
-          href="/portal/skills"
-          className="block text-center text-sm font-semibold text-teal"
-        >
-          Choose a different skill
-        </Link>
       </div>
     );
   }
 
-  return <SkillCheckClient skill={skill} />;
+  if (skill === undefined || outdated) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-1.5" />
+        <Skeleton className="h-9 w-2/3" />
+        <Skeleton className="h-24" />
+        <Skeleton className="h-14" />
+      </div>
+    );
+  }
+
+  return (
+    <SkillCheckClient
+      key={skill.id}
+      skill={skill}
+      standing={skills.find((item) => item.id === skill.id || item.slug === skill.slug)}
+    />
+  );
 }

@@ -1,279 +1,183 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Circle, RotateCcw, Square, UserRound } from "lucide-react";
-import { Button } from "@/caregiver/components/ui/Button";
+import { useEffect, useRef } from "react";
+import { Circle, FileVideo, Square, VideoOff } from "lucide-react";
+import { Button, Card } from "@/components/ui";
 import { CoachingCue } from "@/caregiver/components/recording/CoachingCue";
-import { formatTimer } from "@/caregiver/lib/format";
-import { APP_NAME } from "@/config/branding";
-import type { Skill } from "@/caregiver/types/skill";
+import { StepChecklist } from "@/caregiver/components/recording/StepChecklist";
+import { formatClock } from "@/lib/format";
+import { useRecorder, type Recording } from "@/lib/recorder";
+import type { Skill } from "@/lib/types";
 
-type Phase = "preparing" | "ready" | "recording" | "stopped";
+/** The server needs at least this much video to grade. */
+const MIN_SECONDS = 2;
 
+/**
+ * The camera preview and the record button. Nothing is analysed here: the video is
+ * checked after it is sent. Hands the finished take (or a chosen file) to onRecorded.
+ * The camera is released when this component unmounts.
+ */
 export function CameraStage({
   skill,
-  onContinue,
+  onRecorded,
   onBack,
-  onRecordingReady,
 }: {
   skill: Skill;
-  onContinue: () => void;
+  onRecorded: (recording: Recording) => void;
   onBack: () => void;
-  onRecordingReady: (objectUrl: string | null) => void;
 }) {
-  const liveRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<number | null>(null);
+  // Destructured once: the result holds the preview ref, so its other fields are read as plain values.
+  const { previewRef, phase, problem, seconds, recording, start, stop, useFile: chooseFile } = useRecorder({
+    facingMode: "user",
+  });
+  const fileInput = useRef<HTMLInputElement>(null);
 
-  const [phase, setPhase] = useState<Phase>("preparing");
-  const [seconds, setSeconds] = useState(0);
-  const [cameraError, setCameraError] = useState(false);
-  const [cue, setCue] = useState<string | null>(null);
-
-  const stopTimer = useCallback(() => {
-    if (timerRef.current) {
-      window.clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
+  // A finished take (or a chosen file) moves the wizard on to the review step.
   useEffect(() => {
-    let cancelled = false;
+    if (recording) onRecorded(recording);
+  }, [recording, onRecorded]);
 
-    async function startCamera() {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraError(true);
-        setPhase("ready");
-        return;
-      }
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 720 }, height: { ideal: 1280 } },
-          audio: true,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (liveRef.current) {
-          liveRef.current.srcObject = stream;
-          await liveRef.current.play().catch(() => undefined);
-        }
-        window.setTimeout(() => {
-          const width = liveRef.current?.videoWidth ?? 0;
-          if (width === 0) setCameraError(true);
-        }, 1200);
-        setPhase("ready");
-      } catch {
-        if (!cancelled) {
-          setCameraError(true);
-          setPhase("ready");
-        }
-      }
-    }
-
-    void startCamera();
-
-    return () => {
-      cancelled = true;
-      stopTimer();
-      recorderRef.current?.stop();
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-    };
-  }, [stopTimer]);
-
-  function startTimer() {
-    setSeconds(0);
-    setCue(null);
-    timerRef.current = window.setInterval(() => {
-      setSeconds((current) => {
-        const next = current + 1;
-        const match = skill.coachingCues.find((item) => item.atSeconds === next);
-        if (match) setCue(match.message);
-        return next;
-      });
-    }, 1000);
-  }
-
-  function startRecording() {
-    chunksRef.current = [];
-    const stream = streamRef.current;
-
-    if (stream && typeof MediaRecorder !== "undefined") {
-      try {
-        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-          ? "video/webm;codecs=vp9"
-          : MediaRecorder.isTypeSupported("video/webm")
-            ? "video/webm"
-            : undefined;
-        const recorder = new MediaRecorder(
-          stream,
-          mimeType ? { mimeType } : undefined,
-        );
-        recorder.ondataavailable = (event) => {
-          if (event.data.size > 0) chunksRef.current.push(event.data);
-        };
-        recorder.start(200);
-        recorderRef.current = recorder;
-      } catch {
-        recorderRef.current = null;
-      }
-    }
-
-    setPhase("recording");
-    startTimer();
-  }
-
-  function stopRecording() {
-    stopTimer();
-    const recorder = recorderRef.current;
-    let finished = false;
-
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      const blob = new Blob(chunksRef.current, {
-        type: recorder?.mimeType || "video/webm",
-      });
-      const url = blob.size > 0 ? URL.createObjectURL(blob) : null;
-      onRecordingReady(url);
-      setPhase("stopped");
-    };
-
-    if (recorder && recorder.state !== "inactive") {
-      recorder.onstop = finish;
-      try {
-        recorder.stop();
-      } catch {
-        finish();
-        return;
-      }
-      window.setTimeout(finish, 1200);
-      return;
-    }
-
-    finish();
-  }
-
-  function retake() {
-    onRecordingReady(null);
-    setCue(null);
-    setSeconds(0);
-    setPhase("ready");
-  }
-
-  const trackingOn = phase === "ready" || phase === "recording";
+  const cues = [...(skill.guide.cues ?? [])].sort((a, b) => a.at_s - b.at_s);
+  const cue = phase === "recording" ? cues.filter((item) => item.at_s <= seconds).at(-1) : undefined;
+  const cameraOn = phase === "ready" || phase === "recording";
 
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-wide text-teal">
-          Your turn
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-navy">
-          Record {skill.name}
-        </h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          {APP_NAME} watches body positioning to offer gentle coaching as you move.
+        <p className="text-xs font-semibold uppercase tracking-wide text-teal">Your turn</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-navy">Record {skill.name.toLowerCase()}</h1>
+        <p className="mt-1 text-sm text-ink-secondary">
+          Set up the camera so your whole body and the space around you are in view. Your movement is checked
+          after you send the video.
         </p>
       </header>
 
       <div className="md:mx-auto md:max-w-[390px]">
-        <div className="relative overflow-hidden rounded-[14px] bg-navy shadow-[0_1px_3px_rgba(23,50,77,0.12)] md:rounded-[28px]">
+        <div className="relative overflow-hidden rounded-[14px] bg-navy shadow-[var(--shadow-card)] md:rounded-[28px]">
           <div className="relative aspect-[3/4] w-full">
-            {cameraError ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_50%_30%,#238C91_0%,#17324D_62%)]">
-                <span className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-dashed border-teal/70 text-teal">
-                  <UserRound className="h-12 w-12" aria-hidden />
-                </span>
-                <p className="px-6 text-center text-sm text-white/80">
-                  Camera preview isn&apos;t available, so we&apos;ll use a practice
-                  view. You can still record a timed run.
-                </p>
+            {phase === "unavailable" ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_50%_30%,#238C91_0%,#17324D_62%)] px-6 text-center">
+                <VideoOff className="h-10 w-10 text-white/70" aria-hidden />
+                <p className="text-sm text-white/85">The camera isn&apos;t available. You can choose a video file instead.</p>
               </div>
             ) : (
               <video
-                ref={liveRef}
-                className="absolute inset-0 h-full w-full object-cover"
+                ref={previewRef}
+                className="absolute inset-0 h-full w-full -scale-x-100 object-cover"
                 muted
                 playsInline
                 autoPlay
+                aria-label="Camera preview"
               />
             )}
 
-            <div className="pointer-events-none absolute inset-6 border border-teal/40">
-              <span className="absolute -left-1 -top-1 h-4 w-4 border-l-2 border-t-2 border-teal" />
-              <span className="absolute -right-1 -top-1 h-4 w-4 border-r-2 border-t-2 border-teal" />
-              <span className="absolute -bottom-1 -left-1 h-4 w-4 border-b-2 border-l-2 border-teal" />
-              <span className="absolute -bottom-1 -right-1 h-4 w-4 border-b-2 border-r-2 border-teal" />
-            </div>
+            {phase === "starting" ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <p className="text-sm text-white/80">Getting your camera ready…</p>
+              </div>
+            ) : null}
 
-            {phase === "recording" && cue ? <CoachingCue message={cue} /> : null}
+            {cameraOn ? (
+              <div className="pointer-events-none absolute inset-6 border border-teal/40" aria-hidden>
+                <span className="absolute -left-1 -top-1 h-4 w-4 border-l-2 border-t-2 border-teal" />
+                <span className="absolute -right-1 -top-1 h-4 w-4 border-r-2 border-t-2 border-teal" />
+                <span className="absolute -bottom-1 -left-1 h-4 w-4 border-b-2 border-l-2 border-teal" />
+                <span className="absolute -bottom-1 -right-1 h-4 w-4 border-b-2 border-r-2 border-teal" />
+              </div>
+            ) : null}
 
-            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-navy/90 to-transparent px-4 pb-4 pt-10">
-              <p className="font-mono text-lg font-semibold tabular-nums text-white">
-                {formatTimer(seconds)}
-              </p>
-              {trackingOn ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-card/95 px-2.5 py-1 text-[11px] font-semibold text-navy">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal opacity-70" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-teal" />
+            {cue ? <CoachingCue message={cue.message} /> : null}
+
+            {cameraOn ? (
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-navy/90 to-transparent px-4 pb-4 pt-10">
+                <p className="font-mono text-lg font-semibold tabular-nums text-white" aria-live="off">
+                  {formatClock(seconds)}
+                </p>
+                {phase === "recording" ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-navy">
+                    <span className="relative flex h-2 w-2" aria-hidden>
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-70" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-danger" />
+                    </span>
+                    Recording
                   </span>
-                  Movement tracking on
-                </span>
-              ) : (
-                <span className="text-xs font-medium text-white/70">Preview</span>
-              )}
-            </div>
+                ) : (
+                  <span className="text-xs font-medium text-white/70">Preview</span>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
 
-      {phase === "preparing" ? (
-        <p className="text-center text-sm text-text-secondary">
-          Getting your camera ready…
+      {problem ? (
+        <p role="alert" className="rounded-[12px] bg-warning-bg px-4 py-3 text-sm text-warning">
+          {problem}
         </p>
       ) : null}
 
-      {phase === "ready" || phase === "preparing" ? (
-        <div className="flex flex-col gap-3">
+      <input
+        ref={fileInput}
+        type="file"
+        accept="video/*"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) chooseFile(file);
+        }}
+      />
+
+      {phase === "recording" ? (
+        <div className="space-y-2">
           <Button
-            onClick={startRecording}
+            onClick={stop}
+            variant="destructive"
             className="w-full"
-            size="lg"
-            disabled={phase === "preparing"}
+            size="xl"
+            disabled={seconds < MIN_SECONDS}
           >
-            <Circle className="h-4 w-4 fill-white" aria-hidden />
-            Start Recording
+            <Square className="h-4 w-4 fill-current" aria-hidden />
+            Stop recording
           </Button>
-          <Button variant="ghost" onClick={onBack} className="w-full">
+          {seconds < MIN_SECONDS ? (
+            <p className="text-center text-xs text-ink-secondary">Keep going for a moment…</p>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {phase !== "unavailable" ? (
+            <Button onClick={start} className="w-full" size="xl" disabled={phase !== "ready"}>
+              <Circle className="h-4 w-4 fill-current" aria-hidden />
+              Start recording
+            </Button>
+          ) : null}
+          <Button
+            variant={phase === "unavailable" ? "primary" : "secondary"}
+            size={phase === "unavailable" ? "xl" : "lg"}
+            className="w-full"
+            onClick={() => fileInput.current?.click()}
+          >
+            <FileVideo className="h-4 w-4" aria-hidden />
+            {phase === "unavailable" ? "Choose a video file" : "Choose a video file instead"}
+          </Button>
+          <Button variant="ghost" size="lg" onClick={onBack} className="w-full">
             Back
           </Button>
         </div>
-      ) : null}
+      )}
 
-      {phase === "recording" ? (
-        <Button onClick={stopRecording} variant="destructive" className="w-full" size="lg">
-          <Square className="h-4 w-4 fill-white" aria-hidden />
-          Stop Recording
-        </Button>
-      ) : null}
-
-      {phase === "stopped" ? (
-        <div className="flex flex-col gap-3">
-          <Button onClick={onContinue} className="w-full" size="lg">
-            Review recording
-          </Button>
-          <Button variant="secondary" onClick={retake} className="w-full">
-            <RotateCcw className="h-4 w-4" aria-hidden />
-            Retake
-          </Button>
-        </div>
+      {cues.length === 0 ? (
+        <Card className="p-4">
+          <StepChecklist
+            steps={skill.steps}
+            orderMatters={skill.order_matters}
+            title="Steps to show"
+            compact
+          />
+        </Card>
       ) : null}
     </div>
   );

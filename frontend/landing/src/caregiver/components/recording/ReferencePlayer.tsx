@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
 import { Play, RotateCcw, Video } from "lucide-react";
-import { Button } from "@/caregiver/components/ui/Button";
-import { Card } from "@/caregiver/components/ui/Card";
+import { Button, Card } from "@/components/ui";
+import { VideoFrame } from "@/components/media/VideoFrame";
 import { StepChecklist } from "@/caregiver/components/recording/StepChecklist";
-import type { Skill } from "@/caregiver/types/skill";
+import { useVideoSegments } from "@/lib/segment";
+import type { Skill } from "@/lib/types";
 
 export function ReferencePlayer({
   skill,
@@ -16,72 +16,60 @@ export function ReferencePlayer({
   onContinue: () => void;
   onBack: () => void;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [playing, setPlaying] = useState(false);
-
-  function replay() {
-    const video = videoRef.current;
-    if (!video) return;
-    video.currentTime = 0;
-    void video.play();
-  }
+  const player = useVideoSegments();
+  const available = Boolean(skill.video?.available);
 
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-wide text-teal">
-          Reference demonstration
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-navy">
-          Watch it once, then try it
+        <p className="text-xs font-semibold uppercase tracking-wide text-teal">Reference demonstration</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-navy">
+          {available ? "Watch it once, then try it" : "Read the steps, then try it"}
         </h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          This is a nurse-approved example of {skill.name.toLowerCase()}.
+        <p className="mt-1 text-sm text-ink-secondary">
+          {available
+            ? `This is your nurse's example of ${skill.name.toLowerCase()}.`
+            : `These are the steps your nurse expects for ${skill.name.toLowerCase()}.`}
         </p>
       </header>
 
-      <Card className="overflow-hidden">
-        {skill.referenceVideo ? (
-          <video
-            ref={videoRef}
-            className="aspect-video w-full bg-navy"
-            src={skill.referenceVideo}
-            controls
-            playsInline
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-          />
-        ) : (
-          <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-navy text-white">
+      <VideoFrame
+        video={skill.video}
+        videoRef={player.ref}
+        missing={
+          <>
             <Video className="h-8 w-8 text-teal" aria-hidden />
-            <p className="text-sm text-white/80">Demonstration coming soon</p>
-          </div>
-        )}
-      </Card>
+            <p className="text-sm text-white/80">
+              {skill.video ? "The demonstration video isn't available right now." : "Demonstration coming soon"}
+            </p>
+          </>
+        }
+      />
 
-      <Button
-        variant="secondary"
-        className="w-full"
-        onClick={replay}
-        disabled={!skill.referenceVideo}
-      >
-        {playing ? (
-          <RotateCcw className="h-4 w-4" aria-hidden />
-        ) : (
-          <Play className="h-4 w-4" aria-hidden />
-        )}
-        Replay the demonstration
-      </Button>
+      {available ? (
+        <Button variant="secondary" size="lg" className="w-full" onClick={() => player.play(0)}>
+          {player.playing || player.time > 0 ? (
+            <RotateCcw className="h-4 w-4" aria-hidden />
+          ) : (
+            <Play className="h-4 w-4" aria-hidden />
+          )}
+          {player.playing || player.time > 0 ? "Replay the demonstration" : "Play the demonstration"}
+        </Button>
+      ) : null}
 
       <Card className="p-4">
-        <StepChecklist steps={skill.steps} />
+        <StepChecklist
+          steps={skill.steps}
+          orderMatters={skill.order_matters}
+          onPlay={available ? player.play : undefined}
+        />
       </Card>
 
       <div className="flex flex-col gap-3">
-        <Button onClick={onContinue} className="w-full" size="lg">
+        <Button onClick={onContinue} className="w-full" size="xl">
           I&apos;m ready to record
         </Button>
-        <Button variant="ghost" onClick={onBack} className="w-full">
+        <Button variant="ghost" size="lg" onClick={onBack} className="w-full">
           Back
         </Button>
       </div>

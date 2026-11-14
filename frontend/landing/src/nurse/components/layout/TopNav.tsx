@@ -4,33 +4,65 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Search, Settings } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { Logo } from "@/nurse/components/layout/Logo";
-import { Avatar } from "@/nurse/components/ui/Avatar";
+import { Avatar } from "@/components/ui";
+import { api } from "@/lib/api";
+import { cn } from "@/lib/cn";
+import { relativeTime } from "@/lib/format";
 import { useDashboard } from "@/nurse/context/DashboardContext";
-import { CURRENT_NURSE, notifications } from "@/nurse/lib/mock-data";
-import { cn } from "@/nurse/lib/cn";
-import { useAuth } from "@/shared/AuthProvider";
+import { useAuth, useUser } from "@/shared/AuthProvider";
+import { Logo } from "@/shared/Logo";
 
 const titles: Record<string, string> = {
-  "/dashboard": "Clinical Dashboard",
-  "/dashboard/pending": "Pending Reviews",
+  "/dashboard": "Clinical dashboard",
+  "/dashboard/pending": "Pending reviews",
   "/dashboard/caregivers": "Caregivers",
-  "/dashboard/verified": "Verified Skills",
-  "/dashboard/safety": "Safety Reports",
+  "/dashboard/skills": "Skills",
+  "/dashboard/skills/new": "New skill",
+  "/dashboard/verified": "Verified skills",
+  "/dashboard/safety": "Safety reports",
   "/dashboard/settings": "Settings",
 };
 
+/** Pages whose lists filter themselves by the search box. Elsewhere the box would do nothing. */
+const searchable = new Set([
+  "/dashboard",
+  "/dashboard/pending",
+  "/dashboard/caregivers",
+  "/dashboard/verified",
+  "/dashboard/skills",
+]);
+
+function titleFor(pathname: string) {
+  const path = pathname.replace(/\/+$/, "") || "/dashboard";
+  if (titles[path]) return titles[path];
+  if (path.startsWith("/dashboard/reviews/")) return "Skill review";
+  if (path.startsWith("/dashboard/caregivers/")) return "Caregiver";
+  if (path.startsWith("/dashboard/safety/videos/")) return "Movement detail";
+  if (path.startsWith("/dashboard/safety/")) return "Safety reports";
+  if (path.startsWith("/dashboard/skills/")) return "Skill";
+  return "Clinical dashboard";
+}
+
 export function TopNav() {
   const pathname = usePathname();
-  const { search, setSearch } = useDashboard();
+  const { search, setSearch, overview, reloadOverview } = useDashboard();
   const { signOut } = useAuth();
+  const user = useUser();
   const [menu, setMenu] = useState<"notifications" | "account" | null>(null);
+  // Which items were unread when the menu was opened: they stay highlighted while it is open,
+  // even though opening it marks them as seen.
+  const [freshIds, setFreshIds] = useState<Set<string>>(() => new Set());
   const notificationsRef = useRef<HTMLDivElement>(null);
   const accountRef = useRef<HTMLDivElement>(null);
   const accountMenuId = useId();
-  const unread = notifications.filter((item) => item.unread).length;
-  const onReview = pathname.startsWith("/dashboard/reviews/");
-  const title = onReview ? "Skill Review" : (titles[pathname] ?? "Clinical Dashboard");
+  const notificationsMenuId = useId();
+
+  const notifications = overview?.notifications ?? [];
+  const unread = overview?.unread ?? 0;
+  const path = pathname.replace(/\/+$/, "") || "/dashboard";
+  const title = titleFor(path);
+  const showSearch = searchable.has(path);
+  const roleLine = [user.credentials, user.title].filter(Boolean).join(" · ") || "Nurse";
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -50,16 +82,34 @@ export function TopNav() {
     };
   }, []);
 
+  function toggleNotifications() {
+    if (menu === "notifications") {
+      setMenu(null);
+      return;
+    }
+    setMenu("notifications");
+    setFreshIds(new Set(notifications.filter((item) => item.unread).map((item) => item.id)));
+    if (unread > 0) {
+      api("/notifications/seen", { method: "POST" })
+        .then(() => reloadOverview())
+        .catch(() => {
+          // Marking as seen is a convenience; the items are still listed if it fails.
+        });
+    }
+  }
+
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 border-b border-border bg-white px-6">
-      <Logo />
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 border-b border-border bg-white px-4 md:px-6">
+      <Logo href="/dashboard" />
       <span className="hidden h-6 w-px shrink-0 bg-border sm:block" aria-hidden />
       <h1 className="min-w-0 truncate text-lg font-semibold text-navy">{title}</h1>
 
-      {!onReview ? (
-        <label className="relative ml-auto hidden w-64 lg:w-96 sm:block">
+      {showSearch ? (
+        <label className="relative ml-auto hidden w-56 sm:block lg:w-72 xl:w-96">
+          <span className="sr-only">Search this page</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-secondary" />
           <input
+            type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search caregivers, skills, or submissions"
@@ -68,48 +118,60 @@ export function TopNav() {
         </label>
       ) : null}
 
-      <div className={cn("relative", onReview ? "ml-auto" : "ml-auto sm:ml-0")} ref={notificationsRef}>
+      <div className={cn("relative", showSearch ? "ml-auto sm:ml-0" : "ml-auto")} ref={notificationsRef}>
         <button
           type="button"
-          onClick={() =>
-            setMenu((current) => (current === "notifications" ? null : "notifications"))
-          }
+          onClick={toggleNotifications}
           className="relative flex h-10 min-w-10 items-center justify-center rounded-[12px] border border-border px-2 text-ink-secondary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30"
           aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
           aria-expanded={menu === "notifications"}
-          aria-haspopup="menu"
+          aria-haspopup="true"
+          aria-controls={notificationsMenuId}
         >
           <Bell className="h-4 w-4" />
-          {unread > 0 && (
-            <span className="ml-1 text-xs font-semibold text-danger">{unread}</span>
-          )}
+          {unread > 0 ? <span className="ml-1 text-xs font-semibold text-danger">{unread}</span> : null}
         </button>
-        {menu === "notifications" && (
-          <div className="absolute right-0 z-30 mt-2 w-[340px] overflow-hidden rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]">
+        {menu === "notifications" ? (
+          <div
+            id={notificationsMenuId}
+            className="absolute right-0 z-30 mt-2 w-[340px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]"
+          >
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <p className="text-sm font-semibold text-ink">Notifications</p>
-              <span className="text-xs text-ink-secondary">{unread} unread</span>
+              <span className="text-xs text-ink-secondary">
+                {freshIds.size > 0 ? `${freshIds.size} new` : "All caught up"}
+              </span>
             </div>
-            <ul className="max-h-80 overflow-auto">
-              {notifications.map((item) => (
-                <li key={item.id}>
-                  <Link
-                    href={item.href ?? "/dashboard/pending"}
-                    onClick={() => setMenu(null)}
-                    className={cn(
-                      "block px-4 py-3 hover:bg-secondary",
-                      item.unread && "bg-teal-soft/40",
-                    )}
-                  >
-                    <p className="text-sm font-medium text-ink">{item.title}</p>
-                    <p className="mt-0.5 text-xs text-ink-secondary">{item.body}</p>
-                    <p className="mt-1 text-[11px] text-ink-secondary">{item.relativeLabel}</p>
+            {notifications.length === 0 ? (
+              <div className="px-4 py-6 text-center">
+                <p className="text-sm font-medium text-ink">Nothing needs you right now</p>
+                <p className="mt-1 text-xs text-ink-secondary">
+                  New submissions and safety concerns waiting for review appear here. Choose which ones in{" "}
+                  <Link href="/dashboard/settings" onClick={() => setMenu(null)} className="font-medium text-teal hover:underline">
+                    Settings
                   </Link>
-                </li>
-              ))}
-            </ul>
+                  .
+                </p>
+              </div>
+            ) : (
+              <ul className="max-h-80 overflow-auto">
+                {notifications.map((item) => (
+                  <li key={item.id} className="border-b border-border last:border-b-0">
+                    <Link
+                      href={item.attempt_id ? `/dashboard/reviews/${item.attempt_id}` : "/dashboard/pending"}
+                      onClick={() => setMenu(null)}
+                      className={cn("block px-4 py-3 hover:bg-secondary", freshIds.has(item.id) && "bg-teal-soft/40")}
+                    >
+                      <p className="text-sm font-medium text-ink">{item.title}</p>
+                      <p className="mt-0.5 text-xs text-ink-secondary">{item.body}</p>
+                      <p className="mt-1 text-[11px] text-ink-secondary">{relativeTime(item.time)}</p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-        )}
+        ) : null}
       </div>
 
       <div className="relative" ref={accountRef}>
@@ -122,15 +184,11 @@ export function TopNav() {
           onClick={() => setMenu((current) => (current === "account" ? null : "account"))}
           className="flex shrink-0 items-center gap-2.5 rounded-[12px] p-1 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 md:pr-2"
         >
-          <span className="hidden text-right md:block">
-            <span className="block whitespace-nowrap text-sm font-medium text-ink">
-              {CURRENT_NURSE.name}
-            </span>
-            <span className="block whitespace-nowrap text-xs text-ink-secondary">
-              {CURRENT_NURSE.credentials}
-            </span>
+          <span className="hidden max-w-[180px] text-right md:block">
+            <span className="block truncate text-sm font-medium text-ink">{user.name}</span>
+            <span className="block truncate text-xs text-ink-secondary">{user.credentials || user.title || "Nurse"}</span>
           </span>
-          <Avatar name={CURRENT_NURSE.name} initials="PC" />
+          <Avatar name={user.name} />
           <ChevronDown
             className={cn(
               "hidden h-4 w-4 shrink-0 text-ink-secondary transition-transform duration-150 md:block",
@@ -138,7 +196,7 @@ export function TopNav() {
             )}
           />
         </button>
-        {menu === "account" && (
+        {menu === "account" ? (
           <div
             id={accountMenuId}
             role="menu"
@@ -146,11 +204,10 @@ export function TopNav() {
             className="absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]"
           >
             <div className="border-b border-border px-4 py-3">
-              <p className="text-sm font-semibold text-ink">{CURRENT_NURSE.name}</p>
-              <p className="text-xs text-ink-secondary">
-                {CURRENT_NURSE.credentials} · {CURRENT_NURSE.title}
-              </p>
-              <p className="mt-0.5 truncate text-xs text-ink-secondary">{CURRENT_NURSE.email}</p>
+              <p className="truncate text-sm font-semibold text-ink">{user.name}</p>
+              <p className="text-xs text-ink-secondary">{roleLine}</p>
+              <p className="mt-0.5 truncate text-xs text-ink-secondary">{user.email}</p>
+              <p className="mt-0.5 truncate text-xs text-ink-secondary">{user.org.name}</p>
             </div>
             <Link
               role="menuitem"
@@ -164,14 +221,14 @@ export function TopNav() {
             <button
               type="button"
               role="menuitem"
-              onClick={signOut}
+              onClick={() => void signOut()}
               className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-ink hover:bg-secondary focus-visible:bg-secondary focus-visible:outline-none"
             >
               <LogOut className="h-4 w-4 text-ink-secondary" />
               Sign out
             </button>
           </div>
-        )}
+        ) : null}
       </div>
     </header>
   );

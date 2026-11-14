@@ -1,5 +1,7 @@
+"use client";
+
 import { OverviewPage } from "@/nurse/components/dashboard/OverviewPage";
 
-export default function RootPage() {
+export default function DashboardPage() {
   return <OverviewPage />;
 }

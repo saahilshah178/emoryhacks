@@ -1,18 +1,14 @@
 "use client";
 
-import Link from "next/link";
+import { useTitle } from "@/lib/hooks";
 import { SafetyOverview } from "@/nurse/components/dashboard/SafetyOverview";
-import { Card, CardBody, CardHeader, CardTitle } from "@/nurse/components/ui/Card";
-import { StatusBadge } from "@/nurse/components/ui/StatusBadge";
-import { useDashboard } from "@/nurse/context/DashboardContext";
-import { formatDateTime } from "@/nurse/lib/format";
-import { getCaregiver, getSkill } from "@/nurse/lib/mock-data";
+import { MovementTable } from "@/nurse/components/safety/MovementTable";
+import { OpenIssues } from "@/nurse/components/safety/OpenIssues";
+import { StoragePanel } from "@/nurse/components/safety/StoragePanel";
+import { TrendsPanel } from "@/nurse/components/safety/TrendsPanel";
 
 export default function SafetyPage() {
-  const { submissions } = useDashboard();
-  const open = submissions.filter(
-    (item) => item.reviewStatus === "pending" && item.safetyIssues.length > 0,
-  );
+  useTitle("Safety reports");
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6">
@@ -22,53 +18,22 @@ export default function SafetyPage() {
 
       <SafetyOverview />
 
-      <Card>
-        <CardHeader>
-          <div>
-            <CardTitle>Open critical issues</CardTitle>
-            <p className="mt-1 text-sm text-ink-secondary">
-              {open.length === 0
-                ? "No open safety flags in the current queue."
-                : "Jump into a review to watch the flagged moment on the timeline."}
-            </p>
-          </div>
-        </CardHeader>
-        <CardBody className="space-y-3">
-          {open.map((item) => {
-            const caregiver = getCaregiver(item.caregiverId);
-            const skill = getSkill(item.skillId);
-            return (
-              <div
-                key={item.id}
-                className="rounded-[12px] border border-danger/15 bg-danger-bg/50 p-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-ink">
-                      {caregiver?.name} · {skill?.name}
-                    </p>
-                    <p className="mt-1 text-xs text-ink-muted">{formatDateTime(item.submittedAt)}</p>
-                  </div>
-                  <StatusBadge status="safety_concern" />
-                </div>
-                <ul className="mt-3 space-y-1 text-sm text-ink">
-                  {item.safetyIssues.map((issue) => (
-                    <li key={issue.id}>
-                      {issue.title} — {issue.detail}
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href={`/dashboard/reviews/${item.id}`}
-                  className="mt-3 inline-flex text-sm font-medium text-teal hover:underline"
-                >
-                  Open skill review
-                </Link>
-              </div>
-            );
-          })}
-        </CardBody>
-      </Card>
+      <OpenIssues />
+
+      <section aria-labelledby="movement-data" className="space-y-4">
+        <div>
+          <h2 id="movement-data" className="text-base font-semibold text-navy">
+            Movement data
+          </h2>
+          <p className="mt-1 text-sm text-ink-secondary">
+            Balance, trunk lean and joint angles measured by body tracking on every processed video. These are
+            measurements to guide your review, not findings anyone has confirmed on video.
+          </p>
+        </div>
+        <MovementTable />
+        <TrendsPanel />
+        <StoragePanel />
+      </section>
     </div>
   );
 }

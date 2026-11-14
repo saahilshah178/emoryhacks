@@ -1,49 +1,85 @@
-import { Clock3, HeartHandshake, Shield } from "lucide-react";
-import { Card } from "@/caregiver/components/ui/Card";
-import { Button } from "@/caregiver/components/ui/Button";
-import type { Skill } from "@/caregiver/types/skill";
+import Link from "next/link";
+import { CheckCircle2, Clock3, HeartHandshake, Hourglass, Shield } from "lucide-react";
+import { Button, Card } from "@/components/ui";
+import { resultsHref } from "@/caregiver/skills";
+import type { MySkill, Skill } from "@/lib/types";
 
 export function SkillIntro({
   skill,
+  standing,
   onContinue,
 }: {
   skill: Skill;
+  /** The caregiver's standing on this skill, when the portal knows it. */
+  standing: MySkill | undefined;
   onContinue: () => void;
 }) {
+  const minutes = skill.guide.estimated_minutes;
+  const explanation = skill.guide.explanation || skill.summary;
+  const already = standing && (standing.state === "verified" || standing.state === "in_review") ? standing : null;
+
   return (
     <div className="space-y-5">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-navy">
-          {skill.name}
-        </h1>
-        <p className="mt-2 text-[15px] leading-relaxed text-ink-secondary">
-          {skill.explanation}
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight text-navy">{skill.name}</h1>
+        {explanation ? (
+          <p className="mt-2 text-[15px] leading-relaxed text-ink-secondary">{explanation}</p>
+        ) : null}
       </header>
 
       <p className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink-secondary">
-        <span className="inline-flex items-center gap-1.5 font-medium text-navy">
-          <Clock3 className="h-4 w-4 text-teal" aria-hidden />
-          {skill.estimatedMinutes} minutes
-        </span>
+        {minutes > 0 ? (
+          <span className="inline-flex items-center gap-1.5 font-medium text-navy">
+            <Clock3 className="h-4 w-4 text-teal" aria-hidden />
+            About {minutes} {minutes === 1 ? "minute" : "minutes"}
+          </span>
+        ) : null}
         <span className="inline-flex items-center gap-1.5 font-medium text-navy">
           <HeartHandshake className="h-4 w-4 text-teal" aria-hidden />
           Practice, not a test
         </span>
       </p>
 
-      <Card className="flex gap-3 bg-info-bg p-4">
-        <Shield className="mt-0.5 h-5 w-5 shrink-0 text-info" aria-hidden />
-        <div>
-          <p className="text-sm font-semibold text-navy">Safety reminder</p>
-          <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
-            {skill.safetyReminder}
-          </p>
-        </div>
-      </Card>
+      {already ? (
+        <Card className="flex gap-3 p-4">
+          {already.state === "verified" ? (
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden />
+          ) : (
+            <Hourglass className="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden />
+          )}
+          <div>
+            <p className="text-sm font-semibold text-navy">
+              {already.state === "verified" ? "A nurse has verified this skill" : "Your last recording is with a nurse"}
+            </p>
+            <p className="mt-1 text-sm leading-relaxed text-ink-secondary">
+              {already.state === "verified"
+                ? "You can still practice it again any time."
+                : "You can practice again while you wait. Your nurse will see your newest recording."}
+            </p>
+            {already.attempt_id ? (
+              <Link
+                href={resultsHref(skill.id, already.attempt_id)}
+                className="mt-2 inline-block text-sm font-semibold text-teal"
+              >
+                View your result
+              </Link>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
 
-      <Button onClick={onContinue} className="w-full" size="lg">
-        Watch the demonstration
+      {skill.guide.safety_reminder.trim() ? (
+        <div className="flex gap-3 rounded-[12px] border border-border shadow-[var(--shadow-card)] bg-info-bg p-4">
+          <Shield className="mt-0.5 h-5 w-5 shrink-0 text-info" aria-hidden />
+          <div>
+            <p className="text-sm font-semibold text-navy">Safety reminder</p>
+            <p className="mt-1 text-sm leading-relaxed text-ink-secondary">{skill.guide.safety_reminder}</p>
+          </div>
+        </div>
+      ) : null}
+
+      <Button onClick={onContinue} className="w-full" size="xl">
+        {skill.video ? "Watch the demonstration" : "See the steps"}
       </Button>
     </div>
   );

@@ -1,73 +1,85 @@
-import { Clock3, RotateCcw, Video } from "lucide-react";
-import { Button } from "@/caregiver/components/ui/Button";
-import { Card } from "@/caregiver/components/ui/Card";
-import { APP_NAME } from "@/config/branding";
-import type { Skill } from "@/caregiver/types/skill";
+"use client";
+
+import { Clock3, RotateCcw, Send } from "lucide-react";
+import { Badge, Button, Card, ErrorNote } from "@/components/ui";
+import { formatClock } from "@/lib/format";
+import type { Recording } from "@/lib/recorder";
+import type { Skill } from "@/lib/types";
 
 export function ReviewScreen({
   skill,
-  recordingUrl,
+  recording,
+  error,
   onSubmit,
   onRetake,
 }: {
   skill: Skill;
-  recordingUrl: string | null;
+  recording: Recording;
+  /** Why the last upload failed, if it did. */
+  error: string | null;
   onSubmit: () => void;
   onRetake: () => void;
 }) {
   return (
     <div className="space-y-5">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-wide text-teal">
-          Review
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-navy">
-          Looking good — send it when you&apos;re ready
-        </h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          {APP_NAME} will look over your movements, then a nurse makes the final
-          decision.
+        <p className="text-xs font-semibold uppercase tracking-wide text-teal">Review</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-navy">Watch it back, then send it</h1>
+        <p className="mt-1 text-sm text-ink-secondary">
+          An automatic check looks over your movements first, then a nurse makes the final decision.
         </p>
       </header>
 
       <Card className="overflow-hidden">
-        {recordingUrl ? (
-          <video
-            className="aspect-video w-full bg-navy"
-            src={recordingUrl}
-            controls
-            playsInline
-          />
-        ) : (
-          <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-navy text-white">
-            <Video className="h-8 w-8 text-teal" aria-hidden />
-            <p className="text-sm text-white/80">Practice recording ready</p>
-          </div>
-        )}
+        <video
+          className="aspect-video w-full bg-navy"
+          src={recording.url}
+          controls
+          playsInline
+          preload="metadata"
+          aria-label="Your recording"
+          onLoadedMetadata={(event) => {
+            // Chrome reports a fresh WebM recording's length as Infinity until it has seen the
+            // end, which breaks the seek bar. Jumping far ahead makes it work the length out.
+            const video = event.currentTarget;
+            if (video.duration !== Infinity) return;
+            video.addEventListener(
+              "durationchange",
+              () => {
+                video.currentTime = 0;
+              },
+              { once: true },
+            );
+            video.currentTime = 1e9;
+          }}
+        />
         <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <div>
-            <p className="text-sm font-semibold text-navy">{skill.name}</p>
-            <p className="text-xs text-text-secondary">Ready to send to your nurse</p>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-navy">{skill.name}</p>
+            <p className="text-xs text-ink-secondary">
+              {recording.seconds > 0 ? `${formatClock(recording.seconds)} · ` : ""}Ready to send to your nurse
+            </p>
           </div>
-          <span className="rounded-full bg-warning-bg px-2.5 py-1 text-xs font-semibold text-warning">
-            Not submitted
-          </span>
+          <Badge tone="warning">Not sent yet</Badge>
         </div>
       </Card>
 
       <Card className="flex gap-3 p-4">
         <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-info" aria-hidden />
-        <p className="text-sm leading-relaxed text-text-secondary">
-          Submitting does not certify this skill. A nurse will review the recording
-          and let you know what&apos;s next.
+        <p className="text-sm leading-relaxed text-ink-secondary">
+          Submitting does not certify this skill. A nurse will review the recording and let you know what&apos;s
+          next.
         </p>
       </Card>
 
+      {error ? <ErrorNote message={`Your video wasn't sent. ${error}`} /> : null}
+
       <div className="flex flex-col gap-3">
-        <Button onClick={onSubmit} className="w-full" size="lg">
-          Submit for Nurse Review
+        <Button onClick={onSubmit} className="w-full" size="xl">
+          <Send className="h-4 w-4" aria-hidden />
+          {error ? "Try sending again" : "Submit for nurse review"}
         </Button>
-        <Button variant="secondary" onClick={onRetake} className="w-full">
+        <Button variant="secondary" size="lg" onClick={onRetake} className="w-full">
           <RotateCcw className="h-4 w-4" aria-hidden />
           Retake
         </Button>

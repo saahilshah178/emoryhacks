@@ -1,53 +1,47 @@
 "use client";
 
 import { BadgeCheck, ClipboardList, ShieldAlert, Users } from "lucide-react";
-import { Card } from "@/nurse/components/ui/Card";
-import { caregivers } from "@/nurse/lib/mock-data";
+import { Card, Skeleton } from "@/components/ui";
+import { cn } from "@/lib/cn";
+import type { Overview } from "@/lib/types";
 import { useDashboard } from "@/nurse/context/DashboardContext";
-import { cn } from "@/nurse/lib/cn";
 
 const items = [
   {
     key: "caregivers",
-    label: "Total Caregivers",
-    hint: "Active agency roster",
+    label: "Total caregivers",
+    hint: "Everyone on your agency's roster",
     icon: Users,
-    tone: "teal",
+    tone: "bg-teal-soft text-teal",
   },
   {
     key: "pending",
-    label: "Pending Skill Reviews",
+    label: "Pending skill reviews",
     hint: "Waiting on nurse sign-off",
     icon: ClipboardList,
-    tone: "warning",
+    tone: "bg-warning-bg text-warning",
   },
   {
     key: "verified",
-    label: "Verified Skills",
+    label: "Verified skills",
     hint: "Nurse-approved competencies",
     icon: BadgeCheck,
-    tone: "success",
+    tone: "bg-success-bg text-success",
   },
   {
-    key: "flags",
-    label: "Safety Flags",
+    key: "safety_flags",
+    label: "Safety flags",
     hint: "Open issues in the queue",
     icon: ShieldAlert,
-    tone: "danger",
+    tone: "bg-danger-bg text-danger",
   },
-] as const;
+] as const satisfies ReadonlyArray<{ key: keyof Overview["counts"] } & Record<string, unknown>>;
 
 export function KpiCards() {
-  const { pendingCount, verifiedCount, safetyFlagCount } = useDashboard();
-  const values = {
-    caregivers: caregivers.length + 36,
-    pending: pendingCount,
-    verified: verifiedCount,
-    flags: safetyFlagCount,
-  };
+  const { overview } = useDashboard();
 
   return (
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Key figures">
       {items.map((item) => {
         const Icon = item.icon;
         return (
@@ -55,20 +49,14 @@ export function KpiCards() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-ink-secondary">{item.label}</p>
-                <p className="mt-2 text-3xl font-semibold tracking-tight text-navy">
-                  {values[item.key]}
-                </p>
+                {overview ? (
+                  <p className="mt-2 text-3xl font-semibold tracking-tight text-navy">{overview.counts[item.key]}</p>
+                ) : (
+                  <Skeleton className="mt-2 h-9 w-14" />
+                )}
                 <p className="mt-1 text-xs text-ink-muted">{item.hint}</p>
               </div>
-              <span
-                className={cn(
-                  "flex h-10 w-10 items-center justify-center rounded-[12px]",
-                  item.tone === "teal" && "bg-teal-soft text-teal",
-                  item.tone === "warning" && "bg-warning-bg text-warning",
-                  item.tone === "success" && "bg-success-bg text-success",
-                  item.tone === "danger" && "bg-danger-bg text-danger",
-                )}
-              >
+              <span className={cn("flex h-10 w-10 items-center justify-center rounded-[12px]", item.tone)}>
                 <Icon className="h-5 w-5" />
               </span>
             </div>

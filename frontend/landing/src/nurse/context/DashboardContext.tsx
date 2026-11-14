@@ -1,83 +1,53 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
-import { CURRENT_NURSE, HISTORICAL_VERIFIED_COUNT, initialSubmissions } from "@/nurse/lib/mock-data";
-import type { ReviewStatus, Submission } from "@/nurse/lib/types";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { useApi } from "@/lib/hooks";
+import type { Overview } from "@/lib/types";
 
-type Flash = {
-  tone: "success" | "danger" | "info";
-  message: string;
-} | null;
+export type Flash = { tone: "success" | "danger" | "info"; message: string };
 
 type DashboardContextValue = {
-  submissions: Submission[];
+  /**
+   * Counts, safety patterns, activity and notifications for the nurse's agency
+   * (GET /overview). Undefined until it has loaded. Call reloadOverview() after anything
+   * that changes them: a review decision, a new or deleted skill, a roster change.
+   */
+  overview: Overview | undefined;
+  overviewError: string | null;
+  reloadOverview: () => void;
+  /** The search box in the top bar. Lists filter themselves with matchesQuery(search, ...). */
   search: string;
   setSearch: (value: string) => void;
-  flash: Flash;
+  /** A one-line message shown under the top bar until dismissed or replaced. */
+  flash: Flash | null;
+  showFlash: (flash: Flash) => void;
   clearFlash: () => void;
-  getSubmission: (id: string) => Submission | undefined;
-  updateNotes: (id: string, notes: string) => void;
-  resolveReview: (id: string, status: Exclude<ReviewStatus, "pending">, notes: string) => void;
-  pendingCount: number;
-  verifiedCount: number;
-  safetyFlagCount: number;
 };
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
 
+// The overview drives the sidebar badges and the notification bell, so it is kept fresh.
+const REFRESH_MS = 30_000;
+
 export function DashboardProvider({ children }: { children: ReactNode }) {
-  const [submissions, setSubmissions] = useState(initialSubmissions);
+  const { data, error, reload } = useApi<Overview>("/overview", { refreshMs: REFRESH_MS });
   const [search, setSearch] = useState("");
-  const [flash, setFlash] = useState<Flash>(null);
+  const [flash, setFlash] = useState<Flash | null>(null);
+  const clearFlash = useCallback(() => setFlash(null), []);
 
-  const value = useMemo<DashboardContextValue>(() => {
-    const pending = submissions.filter((item) => item.reviewStatus === "pending");
-    const approved = submissions.filter((item) => item.reviewStatus === "approved");
-    const safetyFlagCount = pending.filter((item) => item.safetyIssues.length > 0).length;
-
-    return {
-      submissions,
+  const value = useMemo<DashboardContextValue>(
+    () => ({
+      overview: data,
+      overviewError: error,
+      reloadOverview: reload,
       search,
       setSearch,
       flash,
-      clearFlash: () => setFlash(null),
-      getSubmission: (id) => submissions.find((item) => item.id === id),
-      updateNotes: (id, notes) => {
-        setSubmissions((current) =>
-          current.map((item) => (item.id === id ? { ...item, notes } : item)),
-        );
-      },
-      resolveReview: (id, status, notes) => {
-        setSubmissions((current) =>
-          current.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  reviewStatus: status,
-                  notes,
-                  reviewedBy: `${CURRENT_NURSE.name}, RN`,
-                  reviewedAt: new Date().toISOString(),
-                }
-              : item,
-          ),
-        );
-        setFlash(
-          status === "approved"
-            ? {
-                tone: "success",
-                message: "Skill approved. The caregiver can perform this task independently once scheduled.",
-              }
-            : {
-                tone: "danger",
-                message: "Retraining requested. The caregiver will be notified and this skill stays restricted.",
-              },
-        );
-      },
-      pendingCount: pending.length,
-      verifiedCount: HISTORICAL_VERIFIED_COUNT + approved.length,
-      safetyFlagCount,
-    };
-  }, [flash, search, submissions]);
+      showFlash: setFlash,
+      clearFlash,
+    }),
+    [data, error, reload, search, flash, clearFlash],
+  );
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;
 }

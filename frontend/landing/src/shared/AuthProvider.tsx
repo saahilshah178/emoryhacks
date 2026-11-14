@@ -1,58 +1,74 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { api, ApiError } from "@/lib/api";
+import type { Role, User } from "@/lib/types";
 import { homeUrlFor, landingUrl } from "./urls";
-import { clearSession, readSession, writeSession, type Session } from "./session";
-import type { Role } from "./urls";
 
 type AuthContextValue = {
+  /** False until the first check of who is signed in has finished. */
   ready: boolean;
-  session: Session | null;
-  signIn: (session: Session) => void;
-  signOut: () => void;
+  user: User | null;
+  /** Both throw an ApiError with a sentence for the user when they fail. */
+  signIn: (email: string, password: string) => Promise<User>;
+  signUp: (details: { role: Role; name: string; email: string; password: string }) => Promise<User>;
+  signOut: () => Promise<void>;
+  /** Replace the signed-in user after a profile or agency change. */
+  setUser: (user: User) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const signedOut =
-      new URLSearchParams(window.location.search).get("signedout") === "1";
-    if (signedOut) {
-      clearSession();
-      setSession(null);
-      window.history.replaceState({}, "", "/");
-    } else {
-      setSession(readSession());
+    let cancelled = false;
+    api<{ user: User | null }>("/auth/session")
+      .then((session) => {
+        if (!cancelled) setUser(session.user);
+      })
+      .catch((error) => {
+        // The API is unreachable. The visitor is treated as signed out; protected pages
+        // send them to the login screen, which reports the problem when they try to log in.
+        if (!cancelled && !(error instanceof ApiError)) console.error(error);
+      })
+      .finally(() => {
+        if (!cancelled) setReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    const me = await api<User>("/auth/login", { json: { email, password } });
+    setUser(me);
+    return me;
+  }, []);
+
+  const signUp = useCallback(
+    async (details: { role: Role; name: string; email: string; password: string }) => {
+      const me = await api<User>("/auth/signup", { json: details });
+      setUser(me);
+      return me;
+    },
+    [],
+  );
+
+  const signOut = useCallback(async () => {
+    try {
+      await api("/auth/logout", { method: "POST" });
+    } finally {
+      // A full navigation, so nothing from the signed-in session stays in memory.
+      window.location.assign(landingUrl());
     }
-    setReady(true);
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({
-      ready,
-      session,
-      signIn: (next) => {
-        writeSession(next);
-        setSession(next);
-        window.location.assign(homeUrlFor(next.role));
-      },
-      signOut: () => {
-        clearSession();
-        window.location.assign(landingUrl());
-      },
-    }),
-    [ready, session],
+    () => ({ ready, user, signIn, signUp, signOut, setUser }),
+    [ready, user, signIn, signUp, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -66,8 +82,11 @@ export function useAuth() {
   return context;
 }
 
-export function demoUser(role: Role): Session {
-  return role === "nurse"
-    ? { role, name: "Patricia Chen", email: "p.chen@harborhomecare.example" }
-    : { role, name: "Sarah Chen", email: "s.chen@harborhomecare.example" };
+/** The signed-in user inside /portal and /dashboard, where the layout guarantees there is one. */
+export function useUser(): User {
+  const { user } = useAuth();
+  if (!user) throw new Error("useUser needs a signed-in user");
+  return user;
 }
+
+export { homeUrlFor };

@@ -1,80 +1,128 @@
 "use client";
 
-import { Avatar } from "@/nurse/components/ui/Avatar";
-import { Card, CardBody, CardHeader, CardTitle } from "@/nurse/components/ui/Card";
-import { StatusBadge } from "@/nurse/components/ui/StatusBadge";
+import Link from "next/link";
+import { Avatar, Card, CardBody, CardHeader, CardTitle, EmptyState, Loadable, Skeleton, StateBadge } from "@/components/ui";
+import { formatDateTime, matchesQuery } from "@/lib/format";
+import { useApi, useTitle } from "@/lib/hooks";
+import { aiAssessment } from "@/lib/status";
+import type { AttemptSummary } from "@/lib/types";
 import { useDashboard } from "@/nurse/context/DashboardContext";
-import { formatDateTime, matchesQuery } from "@/nurse/lib/format";
-import { getCaregiver, getSkill, verifiedRecords } from "@/nurse/lib/mock-data";
+
+function reviewer(item: AttemptSummary) {
+  if (!item.reviewer_name) return "";
+  return item.reviewer_credentials ? `${item.reviewer_name}, ${item.reviewer_credentials}` : item.reviewer_name;
+}
 
 export default function VerifiedPage() {
-  const { search, submissions } = useDashboard();
-  const sessionApproved = submissions
-    .filter((item) => item.reviewStatus === "approved")
-    .map((item) => ({
-      id: `session-${item.id}`,
-      caregiverId: item.caregiverId,
-      skillId: item.skillId,
-      approvedAt: item.reviewedAt ?? new Date().toISOString(),
-      approvedBy: item.reviewedBy ?? "Patricia Chen, RN",
-      aiAssessment: item.aiAssessment,
-      notes: item.notes || "Approved from the clinical dashboard.",
-    }));
-  const records = [...sessionApproved, ...verifiedRecords].filter((item) => {
-    const caregiver = getCaregiver(item.caregiverId);
-    const skill = getSkill(item.skillId);
-    return matchesQuery(search, caregiver?.name, skill?.name, item.approvedBy, item.notes);
-  });
+  useTitle("Verified skills");
+  const { search } = useDashboard();
+  const approved = useApi<AttemptSummary[]>("/attempts?state=approved");
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
       <p className="text-sm text-ink-secondary">
-        Competencies signed off by a registered nurse. AI recommendations are recorded for audit.
+        Competencies signed off by a nurse. The AI&apos;s original assessment is kept alongside for the record.
       </p>
-      <Card>
-        <CardHeader>
-          <CardTitle>{records.length} approved competencies</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <div className="overflow-hidden rounded-[12px] border border-border">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-secondary text-xs font-medium uppercase tracking-wide text-ink-secondary">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Caregiver</th>
-                  <th className="px-4 py-3 font-medium">Skill</th>
-                  <th className="px-4 py-3 font-medium">Approved</th>
-                  <th className="px-4 py-3 font-medium">Approved by</th>
-                  <th className="px-4 py-3 font-medium">Original AI</th>
-                  <th className="px-4 py-3 font-medium">Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.map((item) => {
-                  const caregiver = getCaregiver(item.caregiverId);
-                  const skill = getSkill(item.skillId);
-                  return (
-                    <tr key={item.id} className="border-t border-border bg-white">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <Avatar name={caregiver?.name ?? ""} initials={caregiver?.initials} />
-                          <span className="font-medium text-ink">{caregiver?.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-ink">{skill?.name}</td>
-                      <td className="px-4 py-3 text-ink-secondary">{formatDateTime(item.approvedAt)}</td>
-                      <td className="px-4 py-3 text-ink">{item.approvedBy}</td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={item.aiAssessment} />
-                      </td>
-                      <td className="px-4 py-3 text-ink-secondary">{item.notes}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </CardBody>
-      </Card>
+      <Loadable
+        data={approved.data}
+        error={approved.error}
+        loading={approved.loading}
+        reload={approved.reload}
+        skeleton={<Skeleton className="h-72" />}
+      >
+        {(all) => {
+          const rows = all.filter((item) =>
+            matchesQuery(search, item.caregiver_name, item.skill_name, reviewer(item), item.nurse_note),
+          );
+          return (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {rows.length === all.length
+                    ? `${all.length} approved ${all.length === 1 ? "competency" : "competencies"}`
+                    : `${rows.length} of ${all.length} approved competencies`}
+                </CardTitle>
+              </CardHeader>
+              <CardBody>
+                {all.length === 0 ? (
+                  <EmptyState title="No approved skills yet">
+                    When you approve a caregiver&apos;s submission on its review page, it is recorded here with your
+                    name and notes.
+                  </EmptyState>
+                ) : rows.length === 0 ? (
+                  <EmptyState title="No approvals match this search">
+                    Try a caregiver, skill or reviewer name.
+                  </EmptyState>
+                ) : (
+                  <div className="overflow-hidden rounded-[12px] border border-border">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="whitespace-nowrap bg-secondary text-xs font-medium text-ink-secondary">
+                          <tr>
+                            <th className="px-3 py-3 font-medium">Caregiver</th>
+                            <th className="px-3 py-3 font-medium">Skill</th>
+                            <th className="px-3 py-3 font-medium">Approved</th>
+                            <th className="hidden px-3 py-3 font-medium xl:table-cell">Approved by</th>
+                            <th className="px-3 py-3 font-medium">Original AI</th>
+                            <th className="px-3 py-3 font-medium">Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((item) => {
+                            const href = `/dashboard/reviews/${item.id}`;
+                            return (
+                              <tr key={item.id} className="border-t border-border bg-white align-top hover:bg-page">
+                                <td className="px-3 py-3">
+                                  <div className="flex items-center gap-3">
+                                    <span className="hidden xl:block"><Avatar name={item.caregiver_name} /></span>
+                                    <div className="min-w-0">
+                                      <Link href={href} className="whitespace-nowrap font-medium text-ink hover:text-teal">
+                                        {item.caregiver_name}
+                                      </Link>
+                                      {item.caregiver_title ? (
+                                        <p className="text-xs text-ink-muted xl:whitespace-nowrap">{item.caregiver_title}</p>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-3">
+                                  <Link href={href} className="block text-ink hover:text-teal xl:min-w-28">
+                                    {item.skill_name}
+                                  </Link>
+                                </td>
+                                <td className="px-3 py-3 text-ink-secondary">
+                                  <span className="block xl:whitespace-nowrap">{formatDateTime(item.reviewed_at)}</span>
+                                  {/* Below 1280px the reviewer sits under the date instead of in its own column. */}
+                                  {item.reviewer_name ? (
+                                    <span className="mt-0.5 block text-xs text-ink xl:hidden">by {reviewer(item)}</span>
+                                  ) : null}
+                                </td>
+                                <td className="hidden px-3 py-3 text-ink xl:table-cell">
+                                  <span className="block min-w-32">{reviewer(item) || "—"}</span>
+                                </td>
+                                <td className="px-3 py-3">
+                                  {item.ai_assessment ? (
+                                    <StateBadge entry={aiAssessment[item.ai_assessment]} />
+                                  ) : (
+                                    <span className="text-ink-muted">Not graded</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-3 text-ink-secondary">
+                                  <span className="block min-w-28 max-w-sm">{item.nurse_note || "—"}</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </CardBody>
+            </Card>
+          );
+        }}
+      </Loadable>
     </div>
   );
 }

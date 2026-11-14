@@ -1,77 +1,33 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-import { caregiver as caregiverSeed } from "@/caregiver/data/caregiver";
-import { skills as skillsSeed } from "@/caregiver/data/skills";
-import type { CaregiverProfile, Skill, SkillStatus } from "@/caregiver/types/skill";
-
-type RecordingMap = Record<string, string>;
+import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { useApi } from "@/lib/hooks";
+import type { MySkill, MySkills } from "@/lib/types";
 
 type CaregiverContextValue = {
-  caregiver: CaregiverProfile;
-  skills: Skill[];
-  recordings: RecordingMap;
-  saveRecording: (skillId: string, objectUrl: string) => void;
-  submitForReview: (skillId: string) => void;
-  verifiedCount: number;
-  awaitingCount: number;
+  /** The caregiver's skills with their standing on each. Empty until the first answer. */
+  skills: MySkill[];
+  /** How many skills are in each state. Undefined until the first answer. */
+  counts: MySkills["counts"] | undefined;
+  /** True only until the first answer. */
+  loading: boolean;
+  error: string | null;
+  /** Fetch again, e.g. after a submission. What is on screen stays meanwhile. */
+  reload: () => void;
 };
 
 const CaregiverContext = createContext<CaregiverContextValue | null>(null);
 
+/** Loads GET /my/skills once for every page of the portal. */
 export function CaregiverProvider({ children }: { children: ReactNode }) {
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, SkillStatus>>(
-    {},
-  );
-  const [recordings, setRecordings] = useState<RecordingMap>({});
+  const { data, error, loading, reload } = useApi<MySkills>("/my/skills");
 
-  const skills = useMemo(
-    () =>
-      skillsSeed.map((skill) => ({
-        ...skill,
-        status: statusOverrides[skill.id] ?? skill.status,
-      })),
-    [statusOverrides],
+  const value = useMemo<CaregiverContextValue>(
+    () => ({ skills: data?.skills ?? [], counts: data?.counts, loading, error, reload }),
+    [data, loading, error, reload],
   );
 
-  const saveRecording = useCallback((skillId: string, objectUrl: string) => {
-    setRecordings((current) => {
-      const previous = current[skillId];
-      if (previous) URL.revokeObjectURL(previous);
-      return { ...current, [skillId]: objectUrl };
-    });
-  }, []);
-
-  const submitForReview = useCallback((skillId: string) => {
-    setStatusOverrides((current) => ({ ...current, [skillId]: "in_review" }));
-  }, []);
-
-  const verifiedCount = skills.filter((skill) => skill.status === "verified").length;
-  const awaitingCount = skills.filter((skill) => skill.status === "in_review").length;
-
-  const value = useMemo(
-    () => ({
-      caregiver: caregiverSeed,
-      skills,
-      recordings,
-      saveRecording,
-      submitForReview,
-      verifiedCount,
-      awaitingCount,
-    }),
-    [skills, recordings, saveRecording, submitForReview, verifiedCount, awaitingCount],
-  );
-
-  return (
-    <CaregiverContext.Provider value={value}>{children}</CaregiverContext.Provider>
-  );
+  return <CaregiverContext.Provider value={value}>{children}</CaregiverContext.Provider>;
 }
 
 export function useCaregiver() {

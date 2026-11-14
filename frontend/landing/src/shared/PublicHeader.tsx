@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useAuth } from "./AuthProvider";
 import { APP_NAME } from "./brand";
-import { LOGIN_PATH, SIGNUP_PATH } from "./urls";
+import { homeUrlFor, LOGIN_PATH, SIGNUP_PATH } from "./urls";
 import { Logo } from "./Logo";
 
 const links = [
@@ -12,6 +14,7 @@ const links = [
 
 export function PublicHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { user } = useAuth();
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-white pt-[env(safe-area-inset-top)]">
@@ -36,18 +39,29 @@ export function PublicHeader() {
           >
             {menuOpen ? "Close" : "Menu"}
           </button>
-          <a
-            href={LOGIN_PATH}
-            className="inline-flex h-11 items-center rounded-[12px] px-3 text-sm font-semibold text-navy transition-colors hover:bg-secondary"
-          >
-            Log in
-          </a>
-          <a
-            href={SIGNUP_PATH}
-            className="hidden h-11 items-center rounded-[12px] bg-teal px-4 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(23,50,77,0.12)] transition-colors hover:bg-teal-hover sm:inline-flex"
-          >
-            Create account
-          </a>
+          {user ? (
+            <Link
+              href={homeUrlFor(user.role)}
+              className="inline-flex h-11 items-center rounded-[12px] bg-teal px-4 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(23,50,77,0.12)] transition-colors hover:bg-teal-hover"
+            >
+              {user.role === "nurse" ? "Open dashboard" : "Open my portal"}
+            </Link>
+          ) : (
+            <>
+              <Link
+                href={LOGIN_PATH}
+                className="inline-flex h-11 items-center rounded-[12px] px-3 text-sm font-semibold text-navy transition-colors hover:bg-secondary"
+              >
+                Log in
+              </Link>
+              <Link
+                href={SIGNUP_PATH}
+                className="hidden h-11 items-center rounded-[12px] bg-teal px-4 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(23,50,77,0.12)] transition-colors hover:bg-teal-hover sm:inline-flex"
+              >
+                Create account
+              </Link>
+            </>
+          )}
         </div>
       </div>
 

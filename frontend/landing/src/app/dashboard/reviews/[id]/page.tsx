@@ -1,151 +1,128 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
-import { ArrowLeft, Info } from "lucide-react";
-import { MovementPanel } from "@/nurse/components/review/MovementPanel";
-import { ReviewActions } from "@/nurse/components/review/ReviewActions";
-import { SafetyPanel } from "@/nurse/components/review/SafetyPanel";
-import { StepTimeline } from "@/nurse/components/review/StepTimeline";
-import { VideoComparison } from "@/nurse/components/review/VideoComparison";
-import { Avatar } from "@/nurse/components/ui/Avatar";
-import { StatusBadge } from "@/nurse/components/ui/StatusBadge";
-import { useDashboard } from "@/nurse/context/DashboardContext";
-import { formatDateTime } from "@/nurse/lib/format";
-import { getCaregiver, getSkill } from "@/nurse/lib/mock-data";
+import { useParams } from "next/navigation";
+import { ArrowLeft, CircleAlert } from "lucide-react";
+import { JobProgress } from "@/components/media/JobProgress";
+import { Avatar, Button, Card, CardBody, ErrorNote, Loadable, Skeleton, StateBadge } from "@/components/ui";
+import { formatDateTime } from "@/lib/format";
+import { useApi, useJob, useTitle } from "@/lib/hooks";
+import { aiAssessment, reviewState } from "@/lib/status";
+import type { Attempt } from "@/lib/types";
+import { ReviewWorkspace } from "@/nurse/components/review/ReviewWorkspace";
 
-export default function SkillReviewPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const { getSubmission } = useDashboard();
-  const submission = getSubmission(id);
-  const [time, setTime] = useState(0);
-  const [playing, setPlaying] = useState(false);
-
-  useEffect(() => {
-    if (!playing || !submission) return;
-    const timer = window.setInterval(() => {
-      setTime((current) => {
-        if (current >= submission.durationSeconds) {
-          setPlaying(false);
-          return submission.durationSeconds;
-        }
-        return Math.min(submission.durationSeconds, current + 0.1);
-      });
-    }, 100);
-    return () => window.clearInterval(timer);
-  }, [playing, submission]);
-
-  if (!submission) {
-    return (
-      <div className="mx-auto max-w-xl rounded-[12px] border border-border bg-white p-8 text-center">
-        <p className="font-semibold text-ink">Submission not found</p>
-        <p className="mt-2 text-sm text-ink-secondary">
-          It may have been removed from this session. Return to the pending queue.
-        </p>
-        <Link href="/dashboard/pending" className="mt-4 inline-flex text-sm font-medium text-teal">
-          Back to pending reviews
-        </Link>
-      </div>
-    );
-  }
-
-  const caregiver = getCaregiver(submission.caregiverId);
-  const skill = getSkill(submission.skillId);
-  const resolved = submission.reviewStatus !== "pending";
-
-  function seek(value: number) {
-    setPlaying(false);
-    setTime(value);
-  }
+export default function SkillReviewPage() {
+  const { id } = useParams<{ id: string }>();
+  const { data, error, loading, reload } = useApi<Attempt>(`/attempts/${id}`);
+  const processing = data?.review_state === "processing";
+  // While the recording is processed, follow its job and reload the attempt when it is graded.
+  const { job, failed } = useJob(processing && data?.job ? data.job.id : null, () => reload());
+  useTitle(data ? `Review: ${data.skill_name}` : "Skill review");
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
-      <Link
-        href="/dashboard/pending"
-        className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-teal"
-      >
-        <ArrowLeft className="h-4 w-4" />
+      <Link href="/dashboard/pending" className="inline-flex items-center gap-2 text-sm text-ink-secondary hover:text-teal">
+        <ArrowLeft className="h-4 w-4" aria-hidden />
         Back to pending reviews
       </Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <Avatar name={caregiver?.name ?? ""} initials={caregiver?.initials} size="lg" />
-          <div>
-            <h2 className="text-xl font-semibold text-navy">{skill?.name}</h2>
-            <p className="mt-1 text-sm text-ink-secondary">
-              {caregiver?.name} · {caregiver?.role} · Submitted {formatDateTime(submission.submittedAt)}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge status={submission.aiAssessment} />
-          <StatusBadge status={submission.reviewStatus} />
-        </div>
-      </div>
-
-      <div className="flex items-start gap-3 rounded-[12px] border border-info/20 bg-info-bg px-4 py-3">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" />
-        <div>
-          <p className="text-sm font-medium text-ink">AI recommendation — not a certification</p>
-          <p className="mt-1 text-sm text-ink-secondary">{submission.aiRecommendation}</p>
-        </div>
-      </div>
-
-      <VideoComparison
-        currentTime={time}
-        duration={submission.durationSeconds}
-        playing={playing}
-        onToggle={() => setPlaying((value) => !value)}
-        onSeek={seek}
-        steps={submission.detectedSteps}
-      />
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)] xl:items-start">
-        <div className="space-y-5">
-          <SafetyPanel issues={submission.safetyIssues} onSeek={seek} />
-          <section>
-            <h3 className="text-base font-semibold text-navy">Detected steps</h3>
-            <p className="mt-1 text-sm text-ink-secondary">
-              Jump both recordings to a timestamp. Status is the AI reading — you still decide.
-            </p>
-            <div className="mt-3">
-              <StepTimeline
-                steps={submission.detectedSteps}
-                currentTime={time}
-                onSelect={seek}
-              />
-            </div>
-          </section>
-        </div>
-
-        <aside className="xl:sticky xl:top-20">
-          <div className="rounded-[12px] border border-border bg-white p-4 shadow-[var(--shadow-card)]">
-            <h3 className="text-base font-semibold text-navy">Nurse decision</h3>
-            <p className="mt-1 text-sm text-ink-secondary">
-              Only a registered nurse can approve this skill for independent work.
-            </p>
-            <div className="mt-4">
-              <ReviewActions
-                submissionId={submission.id}
-                initialNotes={submission.notes}
-                alreadyResolved={resolved}
-              />
+      <Loadable
+        data={data}
+        error={error}
+        loading={loading}
+        reload={reload}
+        skeleton={
+          <div className="space-y-5">
+            <Skeleton className="h-14 w-2/3" />
+            <Skeleton className="h-20" />
+            <div className="grid gap-4 xl:grid-cols-2">
+              <Skeleton className="aspect-video" />
+              <Skeleton className="aspect-video" />
             </div>
           </div>
-        </aside>
-      </div>
+        }
+      >
+        {(attempt) => (
+          <>
+            <ReviewHeader attempt={attempt} />
+            {attempt.review_state === "processing" ? (
+              <Card>
+                <CardBody className="pt-5">
+                  <p className="text-sm font-semibold text-ink">Still analysing this recording</p>
+                  <p className="mt-1 text-sm text-ink-secondary">
+                    The review opens here by itself once the AI has finished. There is nothing to decide yet.
+                  </p>
+                  {failed ? <ErrorNote className="mt-4" message={failed} onRetry={reload} /> : null}
+                  <JobProgress job={job ?? attempt.job} className="mt-4" />
+                </CardBody>
+              </Card>
+            ) : attempt.review_state === "error" ? (
+              <Card>
+                <CardBody className="pt-5">
+                  <div className="flex items-start gap-3">
+                    <CircleAlert className="mt-0.5 h-5 w-5 shrink-0 text-danger" aria-hidden />
+                    <div>
+                      <p className="text-sm font-semibold text-ink">Processing failed</p>
+                      <p className="mt-1 text-sm text-ink-secondary">
+                        {(attempt.job?.error ?? "The recording could not be analysed.").split("\n")[0]}
+                      </p>
+                      <p className="mt-2 text-sm text-ink-secondary">
+                        This attempt has no AI result, so there is nothing to review. It is not a result for the
+                        caregiver; they can record the skill again.
+                      </p>
+                    </div>
+                  </div>
+                  {attempt.job ? <JobProgress job={attempt.job} className="mt-4" /> : null}
+                  <div className="mt-4">
+                    <Button variant="secondary" href="/dashboard/pending">
+                      Back to pending reviews
+                    </Button>
+                  </div>
+                </CardBody>
+              </Card>
+            ) : (
+              <ReviewWorkspace key={attempt.id} attempt={attempt} />
+            )}
+          </>
+        )}
+      </Loadable>
+    </div>
+  );
+}
 
-      <section>
-        <h3 className="text-base font-semibold text-navy">Movement and balance</h3>
-        <div className="mt-3">
-          <MovementPanel
-            balance={submission.balance}
-            movement={submission.movement}
-            duration={submission.durationSeconds}
-          />
+function ReviewHeader({ attempt }: { attempt: Attempt }) {
+  const caregiver = attempt.caregiver_name || "Unnamed caregiver";
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex min-w-0 items-start gap-3">
+        <Avatar name={caregiver} size="lg" />
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold text-navy">
+            <Link href={`/dashboard/skills/${attempt.skill_id}`} className="hover:text-teal hover:underline">
+              {attempt.skill_name}
+            </Link>
+          </h2>
+          <p className="mt-1 text-sm text-ink-secondary">
+            {attempt.caregiver_id ? (
+              <Link href={`/dashboard/caregivers/${attempt.caregiver_id}`} className="font-medium text-ink hover:text-teal hover:underline">
+                {caregiver}
+              </Link>
+            ) : (
+              <span className="font-medium text-ink">{caregiver}</span>
+            )}
+            {attempt.caregiver_title ? ` · ${attempt.caregiver_title}` : ""} · Submitted {formatDateTime(attempt.created_at)}
+          </p>
         </div>
-      </section>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {attempt.score_pct !== null ? (
+          <span className="mr-1 text-sm text-ink-secondary">
+            AI score <span className="text-base font-semibold text-navy tabular-nums">{Math.round(attempt.score_pct)}</span> / 100
+          </span>
+        ) : null}
+        <StateBadge entry={attempt.ai_assessment ? aiAssessment[attempt.ai_assessment] : null} />
+        <StateBadge entry={reviewState[attempt.review_state]} />
+      </div>
     </div>
   );
 }

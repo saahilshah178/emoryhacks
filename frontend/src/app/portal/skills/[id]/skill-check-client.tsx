@@ -10,8 +10,9 @@ import { ReviewScreen } from "@/caregiver/components/recording/ReviewScreen";
 import { SkillIntro } from "@/caregiver/components/recording/SkillIntro";
 import { useCaregiver } from "@/caregiver/context/CaregiverContext";
 import { resultsHref } from "@/caregiver/skills";
+import { skillAllowance } from "@/caregiver/status";
 import { cn } from "@/lib/cn";
-import { errorMessage, uploadVideo } from "@/lib/api";
+import { ApiError, errorMessage, uploadVideo } from "@/lib/api";
 import type { Recording } from "@/lib/recorder";
 import type { Job, MySkill, Skill } from "@/lib/types";
 
@@ -50,12 +51,20 @@ function WizardProgress({ step }: { step: Step }) {
   );
 }
 
-type Upload = { progress: number; jobId: string | null; attemptId: string | null; error: string | null };
-const freshUpload: Upload = { progress: 0, jobId: null, attemptId: null, error: null };
+type Upload = {
+  progress: number;
+  jobId: string | null;
+  attemptId: string | null;
+  error: string | null;
+  /** The server refused the recording for good: 409 (no attempts left) or 403 (not their skill). */
+  refused: boolean;
+};
+const freshUpload: Upload = { progress: 0, jobId: null, attemptId: null, error: null, refused: false };
 
 /**
  * The practice flow: what the skill is, the nurse's demonstration, recording, review,
- * then sending the video and following its grading until the result page can open.
+ * then uploading the video and following its check until the result page can open. The
+ * result page is where the caregiver chooses whether to send it to their nurse.
  * The camera is only on during the record step (CameraStage owns it).
  */
 export function SkillCheckClient({ skill, standing }: { skill: Skill; standing: MySkill | undefined }) {
@@ -104,13 +113,16 @@ export function SkillCheckClient({ skill, standing }: { skill: Skill; standing: 
     promise.then(
       (result) => {
         abortUpload.current = null;
-        setUpload({ progress: 1, jobId: result.job_id, attemptId: result.attempt_id, error: null });
+        setUpload({ ...freshUpload, progress: 1, jobId: result.job_id, attemptId: result.attempt_id });
         reload();
       },
       (error: unknown) => {
         abortUpload.current = null;
-        setUpload({ ...freshUpload, error: errorMessage(error) });
+        const refused = error instanceof ApiError && (error.status === 409 || error.status === 403);
+        setUpload({ ...freshUpload, error: errorMessage(error), refused });
         setStep("review");
+        // A refusal means the portal's idea of their attempts is out of date.
+        if (refused) reload();
       },
     );
   }
@@ -119,6 +131,12 @@ export function SkillCheckClient({ skill, standing }: { skill: Skill; standing: 
     reload();
     router.replace(resultsHref(skill.id, job.attempt_id ?? upload.attemptId));
   }
+
+  // After a refusal, their results are the way on (the one ready to send, if any).
+  const resultId = standing ? (standing.ready_attempt_id ?? standing.attempt_id ?? standing.latest_attempt_id) : null;
+  const refusedWayOn = resultId
+    ? { href: resultsHref(skill.id, resultId), label: standing?.ready_attempt_id ? "Review and send your recording" : "See your results" }
+    : { href: "/portal/skills", label: "Back to my skills" };
 
   let body;
   if (step === "intro") {
@@ -132,7 +150,9 @@ export function SkillCheckClient({ skill, standing }: { skill: Skill; standing: 
       <ReviewScreen
         skill={skill}
         recording={recording}
+        allowance={standing ? skillAllowance(standing) : null}
         error={upload.error}
+        blocked={upload.refused ? refusedWayOn : null}
         onSubmit={submit}
         onRetake={recordAgain}
       />

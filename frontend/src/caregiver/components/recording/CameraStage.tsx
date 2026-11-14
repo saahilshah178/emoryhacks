@@ -16,7 +16,7 @@ const MIN_SECONDS = 2;
 
 /**
  * The camera preview and the record button. Nothing is analysed here: the video is
- * checked after it is sent. Hands the finished take (or a chosen file) to onRecorded.
+ * checked after it is uploaded. Hands the finished take (or a chosen file) to onRecorded.
  * The camera is released when this component unmounts.
  */
 export function CameraStage({
@@ -58,7 +58,7 @@ export function CameraStage({
       <PortalHeading
         eyebrow="Your turn"
         title={`Record ${skill.name.toLowerCase()}`}
-        description="Set up the camera so your whole body and the space around you are in view. Your movement is checked after you send the video."
+        description="Set up the camera so your whole body and the space around you are in view. You'll watch it back before it is checked."
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">

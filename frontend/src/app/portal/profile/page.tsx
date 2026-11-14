@@ -75,7 +75,8 @@ function Row({ icon: Icon, label, children }: { icon: typeof Building2; label: s
 export default function ProfilePage() {
   useTitle("Profile");
   const user = useUser();
-  const { counts, error, reload } = useCaregiver();
+  const { skills, counts, error, reload } = useCaregiver();
+  const ready = skills.filter((skill) => skill.ready_attempt_id).length;
   const [editing, setEditing] = useState(false);
 
   return (
@@ -129,6 +130,7 @@ export default function ProfilePage() {
                   <p className="text-sm font-medium tabular-nums text-navy">
                     {counts.verified} of {counts.total}
                     {counts.in_review > 0 ? ` · ${counts.in_review} with a nurse` : ""}
+                    {ready > 0 ? ` · ${ready} ready to send` : ""}
                   </p>
                   <ProgressBar className="mt-2" value={counts.verified} max={counts.total} label="Skills verified" />
                 </>

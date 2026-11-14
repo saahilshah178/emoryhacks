@@ -5,13 +5,14 @@ import { MySkillsLoadable } from "@/caregiver/components/MySkillsLoadable";
 import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
 import { SkillCard } from "@/caregiver/components/skills/SkillCard";
 import { useCaregiver } from "@/caregiver/context/CaregiverContext";
-import { practiceHref, recommendedSkill } from "@/caregiver/skills";
+import { nextStep, recommendedSkill } from "@/caregiver/skills";
 import { useTitle } from "@/lib/hooks";
 
 export default function SkillsPage() {
   useTitle("My skills");
   const { skills } = useCaregiver();
-  const next = recommendedSkill(skills);
+  const recommended = recommendedSkill(skills);
+  const next = recommended ? nextStep(recommended) : null;
 
   return (
     <div className="space-y-5">
@@ -21,8 +22,8 @@ export default function SkillsPage() {
         actions={
           // On a laptop the next skill sits beside the heading; on a phone it is a full-width button below.
           next ? (
-            <Button href={practiceHref(next.id)} className="hidden lg:inline-flex">
-              Continue with {next.name}
+            <Button href={next.href} className="hidden lg:inline-flex">
+              {next.label}
             </Button>
           ) : null
         }
@@ -40,8 +41,8 @@ export default function SkillsPage() {
         {(loaded) => (
           <div className="space-y-5">
             {next ? (
-              <Button href={practiceHref(next.id)} size="lg" className="w-full lg:hidden">
-                Continue with {next.name}
+              <Button href={next.href} size="lg" className="w-full lg:hidden">
+                {next.label}
               </Button>
             ) : null}
             <div className="grid gap-3 md:grid-cols-2 lg:gap-4 xl:grid-cols-3">

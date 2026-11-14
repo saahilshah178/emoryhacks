@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { ChevronRight, CircleAlert, HeartHandshake, ShieldCheck, Sparkles, TriangleAlert, Users } from "lucide-react";
+import { CircleAlert, HeartHandshake, ShieldCheck, Sparkles, TriangleAlert, Users } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
 import { Avatar, Badge, Button, Card, ErrorNote, Skeleton, StateBadge } from "@/components/ui";
 import { attemptChapters, attemptReferenceChapters, attemptStepSpan } from "@/components/media/chapters";
@@ -11,25 +10,16 @@ import { TimeChip } from "@/components/media/TimeChip";
 import { VideoFrame } from "@/components/media/VideoFrame";
 import { BackToSkills, PortalHeading } from "@/caregiver/components/layout/PortalHeading";
 import { StepResult } from "@/caregiver/components/results/StepResult";
+import { AttemptHistory, SendPanel } from "@/caregiver/components/results/SendPanel";
 import { useCaregiver } from "@/caregiver/context/CaregiverContext";
-import { practiceHref, resultsHref } from "@/caregiver/skills";
+import { practiceHref } from "@/caregiver/skills";
+import { attemptStateForCaregiver, readyToSend } from "@/caregiver/status";
 import { cn } from "@/lib/cn";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useApi, useJob, useTitle } from "@/lib/hooks";
-import { flagTitle, personRole, reviewState, skillState, stepStatusForCaregiver, toneClass, type Tone } from "@/lib/status";
+import { flagTitle, personRole, stepStatusForCaregiver, toneClass } from "@/lib/status";
 import { useVideoSegments } from "@/lib/segment";
-import type { Attempt, AttemptSummary, ReviewState, Status } from "@/lib/types";
-
-/** An attempt's state in the caregiver's words, taken from the skill states. */
-export const attemptStateForCaregiver: Record<ReviewState, { label: string; tone: Tone }> = {
-  processing: { label: "Checking", tone: reviewState.processing.tone },
-  error: reviewState.error,
-  unsubmitted: reviewState.unsubmitted,
-  pending: skillState.in_review,
-  superseded: reviewState.superseded,
-  approved: skillState.verified,
-  retraining: skillState.needs_practice,
-};
+import type { Attempt, Status } from "@/lib/types";
 
 const STATUS_ORDER: Status[] = ["passed", "unverified", "failed"];
 
@@ -62,7 +52,14 @@ function Header({
         eyebrow={
           <span className="flex flex-wrap items-center gap-2">
             {attempt.skill_name}
-            <StateBadge entry={attemptStateForCaregiver[attempt.review_state]} className="normal-case tracking-normal" />
+            <StateBadge
+              entry={
+                attempt.review_state === "unsubmitted" && attempt.submission.can_submit
+                  ? readyToSend
+                  : attemptStateForCaregiver[attempt.review_state]
+              }
+              className="normal-case tracking-normal"
+            />
           </span>
         }
         title={title}
@@ -97,43 +94,60 @@ function NurseNote({ attempt }: { attempt: Attempt }) {
   );
 }
 
-/** The same two ways on, as the smaller buttons that sit beside a heading on a laptop. */
-function HeadingActions({ skillId, practiceFirst }: { skillId: string; practiceFirst: boolean }) {
+/** How the two ways on from a result are offered: which comes first, and whether practice is one. */
+type WaysOn = { practiceFirst: boolean; canPractice: boolean };
+
+/**
+ * The same two ways on, as the smaller buttons that sit beside a heading on a laptop. quiet:
+ * the page has its own main action below (sending, or recording again), so neither stands out.
+ */
+function HeadingActions({ skillId, practiceFirst, canPractice, quiet = false }: { skillId: string; quiet?: boolean } & WaysOn) {
+  const first = practiceFirst && canPractice;
+  if (quiet) {
+    return (
+      <>
+        <Button href="/portal" variant="secondary">
+          Back to home
+        </Button>
+        {canPractice ? (
+          <Button href={practiceHref(skillId)} variant="secondary">
+            Practice again
+          </Button>
+        ) : null}
+      </>
+    );
+  }
   return (
     <>
-      <Button href="/portal" variant={practiceFirst ? "secondary" : "primary"}>
+      <Button href="/portal" variant={first ? "secondary" : "primary"}>
         Back to home
       </Button>
-      <Button href={practiceHref(skillId)} variant={practiceFirst ? "primary" : "secondary"}>
-        Practice again
-      </Button>
+      {canPractice ? (
+        <Button href={practiceHref(skillId)} variant={first ? "primary" : "secondary"}>
+          Practice again
+        </Button>
+      ) : null}
     </>
   );
 }
 
 /** The two ways on from a result, as full-width buttons at the end of the page on a phone. */
-function Actions({ skillId, practiceFirst }: { skillId: string; practiceFirst: boolean }) {
+function Actions({ skillId, practiceFirst, canPractice }: { skillId: string } & WaysOn) {
+  const first = practiceFirst && canPractice;
+  const practice = canPractice ? (
+    <Button href={practiceHref(skillId)} variant={first ? "primary" : "secondary"} size={first ? "xl" : "lg"} className="w-full">
+      Practice again
+    </Button>
+  ) : null;
+  const home = (
+    <Button href="/portal" variant={first ? "secondary" : "primary"} size={first ? "lg" : "xl"} className="w-full">
+      Back to home
+    </Button>
+  );
   return (
     <div className="flex flex-col gap-3 lg:hidden">
-      {practiceFirst ? (
-        <>
-          <Button href={practiceHref(skillId)} size="xl" className="w-full">
-            Practice again
-          </Button>
-          <Button href="/portal" variant="secondary" size="lg" className="w-full">
-            Back to home
-          </Button>
-        </>
-      ) : (
-        <>
-          <Button href="/portal" size="xl" className="w-full">
-            Back to home
-          </Button>
-          <Button href={practiceHref(skillId)} variant="secondary" size="lg" className="w-full">
-            Practice again
-          </Button>
-        </>
-      )}
+      {first ? practice : home}
+      {first ? home : practice}
     </div>
   );
 }
@@ -158,43 +172,6 @@ function StepTally({ attempt }: { attempt: Attempt }) {
         );
       })}
     </div>
-  );
-}
-
-function History({ attempt, skillId }: { attempt: Attempt; skillId: string }) {
-  // Every attempt at this skill, across its versions (the API lists only the caregiver's own).
-  const { data } = useApi<AttemptSummary[]>("/attempts");
-  const attempts = (data ?? []).filter((item) => item.skill_slug === attempt.skill_slug);
-  if (attempts.length <= 1) return null;
-  return (
-    <Section title="Your attempts at this skill">
-      <Card>
-        <ul className="divide-y divide-border">
-          {attempts.map((item) => {
-            const current = item.id === attempt.id;
-            return (
-              <li key={item.id}>
-                <Link
-                  href={resultsHref(skillId, item.id)}
-                  aria-current={current ? "page" : undefined}
-                  className={cn(
-                    "flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-secondary",
-                    current && "bg-secondary",
-                  )}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-navy">{formatDateTime(item.created_at)}</p>
-                    {current ? <p className="text-xs text-ink-secondary">You are looking at this one</p> : null}
-                  </div>
-                  <StateBadge entry={attemptStateForCaregiver[item.review_state]} />
-                  <ChevronRight className="h-4 w-4 shrink-0 text-ink-secondary" aria-hidden />
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </Card>
-    </Section>
   );
 }
 
@@ -224,11 +201,11 @@ function ProcessingFailed({ attempt, skillId, reason }: { attempt: Attempt; skil
       <Header
         attempt={attempt}
         title="We couldn't finish checking this recording"
-        actions={<HeadingActions skillId={skillId} practiceFirst />}
+        actions={<HeadingActions skillId={skillId} practiceFirst canPractice />}
       >
         <p className="text-[15px] leading-relaxed">
-          This was a problem on our side while processing the video. It is not a result for your attempt. Please
-          record the skill again.
+          This was a problem on our side while processing the video. It is not a result for your attempt, and it did
+          not use one of your attempts. Please record the skill again.
         </p>
       </Header>
       {reason ? (
@@ -237,12 +214,12 @@ function ProcessingFailed({ attempt, skillId, reason }: { attempt: Attempt; skil
           <p className="text-sm text-ink">{reason}</p>
         </Card>
       ) : null}
-      <Actions skillId={skillId} practiceFirst />
+      <Actions skillId={skillId} practiceFirst canPractice />
     </div>
   );
 }
 
-function Graded({ attempt, skillId }: { attempt: Attempt; skillId: string }) {
+function Graded({ attempt, skillId, onSent }: { attempt: Attempt; skillId: string; onSent: (attempt: Attempt) => void }) {
   const player = useVideoSegments();
   const demo = useVideoSegments();
   const playable = attempt.video.available;
@@ -262,21 +239,35 @@ function Graded({ attempt, skillId }: { attempt: Attempt; skillId: string }) {
   const reviewed = attempt.review_state === "approved" || attempt.review_state === "retraining";
   const steps = [...attempt.steps].sort((a, b) => a.ord - b.ord);
 
+  const state = attempt.review_state;
+  const canPractice = attempt.attempts.left !== 0;
+  // Practice comes first when the nurse asked for it, or when this recording can't be sent as it is.
+  const practiceFirst = state === "retraining" || (state === "unsubmitted" && !attempt.submission.can_submit);
+
   let title: string;
   let line: ReactNode;
-  if (attempt.review_state === "approved") {
+  if (state === "approved") {
     title = "A nurse verified this skill";
     line = `${attempt.reviewer_name || "A nurse"} reviewed your recording${
       attempt.reviewed_at ? ` on ${formatDate(attempt.reviewed_at)}` : ""
     } and verified it. Well done.`;
-  } else if (attempt.review_state === "retraining") {
+  } else if (state === "retraining") {
     title = "Your nurse would like you to practice this again";
     line = `That's a normal part of learning. ${
       attempt.nurse_note.trim() ? "Read their note below, then" : "Look over the steps below, then"
     } record again when you feel ready.`;
+  } else if (state === "pending") {
+    title = "Your recording is with your nurse";
+    line = "Below is what the automatic check saw. It's a suggestion, not a certification: your nurse makes the final decision.";
+  } else if (state === "superseded") {
+    title = "This recording was replaced";
+    line = "It stays here for you to look back on, with what the automatic check saw.";
+  } else if (attempt.submission.can_submit) {
+    title = "Your recording is ready to send";
+    line = "Look over what the automatic check saw, then send it to your nurse. Only your nurse can verify a skill.";
   } else {
-    title = "Your skill assessment is ready";
-    line = "It has been sent to a nurse for final review. An AI suggestion is not a certification.";
+    title = "Your result is ready";
+    line = "Look over what the automatic check saw. Your nurse only sees a recording once you send it.";
   }
 
   return (
@@ -284,10 +275,19 @@ function Graded({ attempt, skillId }: { attempt: Attempt; skillId: string }) {
       <Header
         attempt={attempt}
         title={title}
-        actions={<HeadingActions skillId={skillId} practiceFirst={attempt.review_state === "retraining"} />}
+        actions={
+          <HeadingActions
+            skillId={skillId}
+            practiceFirst={practiceFirst}
+            canPractice={canPractice}
+            quiet={state === "unsubmitted" || state === "pending" || state === "superseded"}
+          />
+        }
       >
         <p className="text-[15px] leading-relaxed">{line}</p>
       </Header>
+
+      <SendPanel attempt={attempt} skillId={skillId} onSent={onSent} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start lg:gap-5">
         {/* On a laptop this column stays in view, so pressing a time on the right plays where you can see it. */}
@@ -398,7 +398,12 @@ function Graded({ attempt, skillId }: { attempt: Attempt; skillId: string }) {
             ) : (
               <Card>
                 <p className="px-4 pt-4 text-sm text-ink-secondary">
-                  Something to keep in mind next time. Your nurse will look at {flags.length === 1 ? "this" : "these"} too.
+                  Something to keep in mind next time.{" "}
+                  {state === "unsubmitted"
+                    ? `If you send this recording, your nurse will see ${flags.length === 1 ? "this" : "these"} too.`
+                    : state === "superseded"
+                      ? ""
+                      : `Your nurse will look at ${flags.length === 1 ? "this" : "these"} too.`}
                 </p>
                 <ul className="divide-y divide-border">
                   {flags.map((flag) => (
@@ -442,9 +447,9 @@ function Graded({ attempt, skillId }: { attempt: Attempt; skillId: string }) {
             </Section>
           ) : null}
 
-          <History attempt={attempt} skillId={skillId} />
+          <AttemptHistory attempt={attempt} />
 
-          <Actions skillId={skillId} practiceFirst={attempt.review_state === "retraining"} />
+          <Actions skillId={skillId} practiceFirst={practiceFirst} canPractice={canPractice} />
         </div>
       </div>
     </div>
@@ -469,7 +474,7 @@ export function ResultsSkeleton() {
 
 /** A caregiver's result for one attempt (GET /attempts/{id}), in every state it can be in. */
 export function AssessmentResults({ attemptId, skillId }: { attemptId: string; skillId: string }) {
-  const { data: attempt, error, loading, reload } = useApi<Attempt>(`/attempts/${attemptId}`);
+  const { data: attempt, error, loading, reload, setData } = useApi<Attempt>(`/attempts/${attemptId}`);
   const { reload: reloadSkills } = useCaregiver();
   useTitle(attempt ? `${attempt.skill_name} result` : "Result");
 
@@ -505,6 +510,16 @@ export function AssessmentResults({ attemptId, skillId }: { attemptId: string; s
   if (attempt.review_state === "error") {
     return <ProcessingFailed attempt={attempt} skillId={skillId} reason={attempt.job?.error?.split("\n")[0] ?? null} />;
   }
-  return <Graded attempt={attempt} skillId={skillId} />;
+  return (
+    <Graded
+      attempt={attempt}
+      skillId={skillId}
+      onSent={(sent) => {
+        // The page changes in place to "sent"; the rest of the portal fetches its standing again.
+        setData(sent);
+        reloadSkills();
+      }}
+    />
+  );
 }
 

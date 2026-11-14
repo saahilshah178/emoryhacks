@@ -1,13 +1,70 @@
 import Link from "next/link";
-import { CheckCircle2, RotateCcw, Video } from "lucide-react";
+import { CheckCircle2, Repeat, RotateCcw, Send, Video, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui";
-import { practiceHref, resultsHref } from "@/caregiver/skills";
+import { outOfAttempts, practiceHref, resultsHref } from "@/caregiver/skills";
+import { attemptsLeftLine, skillAllowance } from "@/caregiver/status";
 import type { MySkill } from "@/lib/types";
 
-/** The next skill to record: one a nurse asked to practice again, or one not started yet. */
+type Cta = {
+  icon: LucideIcon;
+  title: string;
+  body: string;
+  primary: { href: string; label: string };
+  secondary?: { href: string; label: string };
+};
+
+function ctaFor(skill: MySkill): Cta {
+  const result = skill.attempt_id ? resultsHref(skill.id, skill.attempt_id) : null;
+  if (skill.ready_attempt_id) {
+    return {
+      icon: Send,
+      title: `Ready to send: ${skill.name}`,
+      body: "Your recording passed the automatic check. Send it to your nurse so they can make the final decision.",
+      primary: { href: resultsHref(skill.id, skill.ready_attempt_id), label: "Review and send" },
+    };
+  }
+  if (skill.state === "needs_practice") {
+    return {
+      icon: RotateCcw,
+      title: `Practice again: ${skill.name}`,
+      body: "Your nurse left you feedback. Record this skill again when you feel ready.",
+      primary: { href: practiceHref(skill.id), label: "Start a skill check" },
+      secondary: result ? { href: result, label: "Read your nurse's feedback" } : undefined,
+    };
+  }
+  if (skill.state === "practicing") {
+    if (outOfAttempts(skill)) {
+      return {
+        icon: Repeat,
+        title: `Keep going: ${skill.name}`,
+        body: "You've used all your attempts at this skill. Look over your result, and ask your nurse if you'd like more attempts.",
+        primary: { href: result ?? practiceHref(skill.id), label: "See your result" },
+      };
+    }
+    return {
+      icon: Repeat,
+      title: `Keep going: ${skill.name}`,
+      body: "Your last recording isn't ready to send yet. Look over your result, then record it again.",
+      primary: { href: practiceHref(skill.id), label: "Record again" },
+      secondary: result ? { href: result, label: "See your last result" } : undefined,
+    };
+  }
+  return {
+    icon: Video,
+    title: `Next: ${skill.name}`,
+    body: "Record yourself doing this skill. An automatic check looks it over first, then you choose whether to send it to your nurse.",
+    primary: { href: practiceHref(skill.id), label: "Start a skill check" },
+  };
+}
+
+/**
+ * The one thing to do next: send a recording that is ready, practise a skill the nurse sent
+ * back, keep going on one partway through, or start a new one.
+ */
 export function StartSkillCta({ skill }: { skill: MySkill }) {
-  const again = skill.state === "needs_practice";
-  const Icon = again ? RotateCcw : Video;
+  const cta = ctaFor(skill);
+  const Icon = cta.icon;
+  const left = skill.ready_attempt_id ? null : attemptsLeftLine(skillAllowance(skill));
   return (
     <section className="rounded-[12px] bg-navy p-5 text-white shadow-[var(--shadow-card)]">
       <div className="flex items-start gap-3">
@@ -15,26 +72,21 @@ export function StartSkillCta({ skill }: { skill: MySkill }) {
           <Icon className="h-5 w-5" aria-hidden />
         </span>
         <div className="min-w-0">
-          <h2 className="text-lg font-semibold leading-snug">
-            {again ? `Practice again: ${skill.name}` : `Next: ${skill.name}`}
-          </h2>
-          <p className="mt-1 text-sm leading-relaxed text-white/80">
-            {again
-              ? "Your nurse left you feedback. Record this skill again when you feel ready."
-              : "Record yourself doing this skill. An automatic check looks it over first, then a nurse makes the final decision."}
-          </p>
+          <h2 className="text-lg font-semibold leading-snug">{cta.title}</h2>
+          <p className="mt-1 text-sm leading-relaxed text-white/80">{cta.body}</p>
+          {left ? <p className="mt-2 text-xs font-medium text-white/70">{left}</p> : null}
         </div>
       </div>
       <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:gap-5">
-        <Button href={practiceHref(skill.id)} className="w-full xl:w-auto" size="xl">
-          Start a skill check
+        <Button href={cta.primary.href} className="w-full xl:w-auto" size="xl">
+          {cta.primary.label}
         </Button>
-        {again && skill.attempt_id ? (
+        {cta.secondary ? (
           <Link
-            href={resultsHref(skill.id, skill.attempt_id)}
+            href={cta.secondary.href}
             className="block rounded-[12px] py-2 text-center text-sm font-semibold text-white/90 underline-offset-4 hover:underline"
           >
-            Read your nurse&apos;s feedback
+            {cta.secondary.label}
           </Link>
         ) : null}
       </div>
@@ -51,7 +103,7 @@ export function CaughtUpCard({ inReview }: { inReview: number }) {
         <h2 className="text-base font-semibold text-navy">You&apos;re all caught up</h2>
         <p className="mt-1 text-sm leading-relaxed text-ink">
           {inReview > 0
-            ? "Every skill is verified or with a nurse. We'll show you their decision here as soon as it's made."
+            ? "Every skill is verified or with your nurse. We'll show you their decision here as soon as it's made."
             : "Every skill is verified. Nice work. You can still practice any skill again from My skills."}
         </p>
         <Link href="/portal/skills" className="mt-3 inline-block text-sm font-semibold text-teal">

@@ -1,4 +1,4 @@
-.PHONY: dev db migrate test seed e2e fake-demo cost
+.PHONY: dev db migrate test seed e2e repose fake-demo cost
 
 # Start the app at http://localhost:8000
 dev:
@@ -23,6 +23,10 @@ seed:
 # Narrow it with: make e2e ARGS="--skills sit_to_stand --cases self,missing"
 e2e:
 	cd backend && uv run python -m scripts.e2e $(ARGS)
+
+# Measure pose again for every skill's reference video (after changing how pose is measured)
+repose:
+	cd backend && uv run python -m scripts.repose $(ARGS)
 
 # Create one fake skill and one fake attempt without calling Gemini
 fake-demo:

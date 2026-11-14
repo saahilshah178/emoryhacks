@@ -7,14 +7,46 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/css/style.css">
+<style>
+  .hero { border-width: 2px; }
+  .hero.passed { border-color: var(--pass); }
+  .hero.failed { border-color: var(--fail); }
+  .hero.unverified { border-color: var(--unv); }
+  .hero .label { margin-top: 0; }
+  .hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .hero-title { font-size: 2.6rem; margin: 0.1rem 0 0.3rem; }
+  .hero.passed .hero-title { color: var(--pass); }
+  .hero.failed .hero-title { color: var(--fail); }
+  .hero.unverified .hero-title { color: var(--unv); }
+  .score { text-align: right; flex: none; }
+  .score span { display: block; font-family: var(--serif); font-size: 2.4rem; font-weight: 600; line-height: 1; }
+  .feedback { font-size: 1.05rem; margin-top: 0.8rem; }
+  #player { margin: 0.5rem 0 0.4rem; max-height: 60vh; }
+  .step { border-left-width: 5px; }
+  .step.passed { border-left-color: var(--pass); }
+  .step.failed { border-left-color: var(--fail); }
+  .step.unverified { border-left-color: var(--unv); }
+  .step-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
+  .step-head .grow { flex: 1; min-width: 10rem; }
+  .step-num { width: 1.9rem; height: 1.9rem; border-radius: 50%; background: #f1ebe0; display: inline-grid; place-items: center; font-weight: 600; flex: none; }
+  .seen { margin-top: 0.5rem; }
+  .order-note { color: var(--unv); }
+  ul.flags, ul.people { list-style: none; margin: 0; padding: 0; }
+  ul.flags li, ul.people li { padding: 0.55rem 0; border-bottom: 1px solid var(--line); }
+  ul.flags li:last-child, ul.people li:last-child { border-bottom: 0; }
+  ul.people .small { display: block; }
+  .actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1.5rem; }
+  @media (max-width: 640px) { .hero-title { font-size: 2rem; } .score span { font-size: 1.9rem; } }
+</style>
 </head>
 <body>
-<main class="page" id="app">
-<div class="header"><h1>Your result</h1></div><div class="notice">This screen is built on branch feat/evaluate.</div>
+<main class="page" id="result">
+<p class="muted">Loading your result…</p>
 </main>
 <script type="module">
 import { mountNav } from "/js/common.js";
 mountNav("attempts");
 </script>
+<script type="module" src="/js/result.js"></script>
 </body>
 </html>

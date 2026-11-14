@@ -9,6 +9,13 @@ reference videos, each with a known expected outcome:
   swapped  the reference with two dependent steps      -> an order violation naming the step that moved earlier
            performed in the wrong order
   wrong    a video of a different skill                -> skill_match is false and the attempt fails
+  truncated  the reference stopped before a critical   -> no step from there on is passed and the attempt
+           step in its second half                        is not passed
+
+"missing" and "swapped" are only conclusive for steps that are discrete actions. When a step
+is a state that continues into the next one (staying beside the patient, standing behind
+them), cutting or moving its footage does not remove or reorder it, and the grader is right
+to still find it. "truncated" has no such ambiguity.
 
   uv run python -m scripts.e2e --skills sit_to_stand,glove_removal --cases self,missing,swapped,wrong
 
@@ -25,7 +32,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from app import catalog, config, db, gemini, jobs, media, repo
 
-CASES = ["self", "backup", "missing", "swapped", "wrong"]
+CASES = ["self", "backup", "missing", "swapped", "wrong", "truncated"]
 # A clearly different skill to use for the "wrong" case.
 WRONG_FOR = {"glove_removal": "sit_to_stand"}
 DEFAULT_WRONG = "glove_removal"
@@ -74,6 +81,13 @@ def pick_swap(skill: dict) -> tuple[dict, dict] | None:
     return (best[1], best[2]) if best else None
 
 
+def pick_truncation(skill: dict) -> dict | None:
+    """The first critical step in the second half of the rubric: the attempt stops before it."""
+    steps = skill["steps"]
+    later = [s for s in steps if s["critical"] and s["ord"] > len(steps) / 2 and s["start_s"] >= 5]
+    return min(later, key=lambda s: s["ord"]) if later else None
+
+
 def build_case(skill: dict, case: str) -> dict | None:
     """Return {src, expect...} for a case, writing a cut video when needed. None if not applicable."""
     slug = skill["slug"]
@@ -105,6 +119,12 @@ def build_case(skill: dict, case: str) -> dict | None:
         media.cut(ref_path, tmp, [(float(a), float(b)) for a, b in parts if b - a >= 0.5])
         return {"src": str(tmp), "swapped": (s["step_id"], m["step_id"]),
                 "detail": f'"{s["title"]}" moved before "{m["title"]}"'}
+    if case == "truncated":
+        step = pick_truncation(skill)
+        if not step:
+            return None
+        media.cut(ref_path, tmp, [(0.0, float(step["start_s"]))])
+        return {"src": str(tmp), "from_order": step["ord"], "detail": f'stopped before "{step["title"]}"'}
     if case == "wrong":
         other = WRONG_FOR.get(slug, DEFAULT_WRONG)
         return {"src": str(config.REFERENCE_DIR / catalog.REFERENCE_FILES[other]["primary"]),
@@ -154,6 +174,9 @@ def run_case(skill: dict, case: str) -> dict:
         ok = any(v[0] == spec["swapped"][0] for v in violations)
     elif case == "wrong":
         ok = attempt["skill_match"] is False and attempt["status"] == "failed"
+    elif case == "truncated":
+        later = [s for s in steps if s["ord"] >= spec["from_order"]]
+        ok = all(s["status"] != "passed" for s in later) and attempt["status"] != "passed"
     row["expected_ok"] = ok
     return row
 

@@ -7,6 +7,8 @@
 With --out, each rubric is saved as JSON together with a contact sheet: one row per step
 with the frames at its start, middle and end, for checking the timestamps by eye.
 --sheet re-renders contact sheets from saved JSON files without calling Gemini.
+A step that is only sometimes needed is printed with its condition, and the "rubric sight"
+log lines show what was rewritten or removed because it could only be heard.
 """
 from __future__ import annotations
 
@@ -50,6 +52,8 @@ def print_rubric(rb: Rubric, verbose: bool) -> None:
         after = f" after {','.join(s.must_follow)}" if s.must_follow else ""
         crit = " CRITICAL" if s.critical else ""
         print(f"  {s.step_id:<4}{s.start_s:7.1f}-{s.end_s:<7.1f}{s.title}{crit}{after}")
+        if s.applies_when:
+            print(f"{'':<19}only needed when {s.applies_when}")
         if verbose:
             for name in ("pass_criteria", "fail_criteria", "unverified_when", "visual_cues"):
                 for item in getattr(s.evals, name):

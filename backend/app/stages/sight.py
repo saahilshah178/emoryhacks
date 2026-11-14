@@ -10,7 +10,8 @@ no criterion about asking, telling, explaining, counting aloud or what can be he
 
 The word list is deliberately plain. It catches a criterion like "Caregiver asks the patient
 how they feel" and leaves alone the things a caregiver does that only sound similar: "call
-bell", "call light", "directly behind", "promptly", "fall response", "a reassuring hand".
+bell", "call light", "directly behind", "promptly", "fall response", "a reassuring hand",
+"the care plan calls for a gait belt". Calling for help is speech; pressing a call bell is not.
 The rubric stage uses it to send a draft back for rewriting, and `make skills ARGS=check`
 uses it to keep the standard skills clean.
 """
@@ -30,7 +31,10 @@ _SPEECH = re.compile(
       | answer(?:s|ed|ing)? | repl(?:y|ies|ied|ying) | questions?
       | discuss(?:es|ed|ing)? | conversations?
       | stat(?:es|ed|ing) | prompt(?:s|ed|ing)? | cue(?:s|d|ing)?
-      | count(?:s|ed|ing)? | aloud | out\s+loud | call(?:s|ed|ing)?\s+out | shout(?:s|ed|ing)?
+      | count(?:s|ed|ing)? | aloud | out\s+loud | call(?:s|ed|ing)?\s+out | shout(?:s|ed|ing)? | yell(?:s|ed|ing)?
+      | call(?:s|ed|ing)?\s+for\s+(?:help|assistance|backup)
+      | communicat(?:e|es|ed|ing|ion) | consent(?:s|ed|ing)? | permission
+      | encourag(?:e|es|ed|ing|ement) | reassur(?:e|es|ed|ance)
       | hear(?:s|d|ing)? | listen(?:s|ed|ing)? | audio | (?:in)?audibl[ey] | microphone
       | voic(?:e|es|ed|ing) | words? | narrat(?:e|es|ed|ing|ion|or)
     )\b""",

@@ -14,17 +14,17 @@
 <div class="header"><h1>Attempts</h1></div><div id="list"></div>
 </main>
 <script type="module">
-import { api, mountNav, esc, fmtDate, badge, showError } from "/js/common.js";
+import { api, mountNav, esc, fmtDate, badge, showError, attemptListStatus } from "/js/common.js";
 const role = mountNav("attempts");
 try {
   const attempts = await api("/attempts");
-  document.querySelector("#list").innerHTML = attempts.length ? `<div class="card"><table>
+  document.querySelector("#list").innerHTML = attempts.length ? `<div class="card table-wrap"><table>
     <tr><th>Skill</th><th>Caregiver</th><th>AI result</th><th>Nurse</th><th>Score</th><th>Flags</th><th>When</th><th></th></tr>
     ${attempts.map((a) => `<tr>
       <td>${esc(a.skill_name)}</td><td>${esc(a.caregiver_name || "—")}</td>
-      <td>${badge(a.status || (a.job_status === "error" ? "failed" : "pending"))}</td>
+      <td>${badge(attemptListStatus({ ...a, nurse_status: null }))}</td>
       <td>${a.nurse_status ? badge(a.nurse_status) : a.needs_review ? `<span class="badge unverified">Needs review</span>` : "—"}</td>
-      <td>${a.score_pct == null ? "—" : Math.round(a.score_pct) + "%"}</td><td>${a.flag_count}</td>
+      <td>${a.score_pct == null ? "—" : `${Math.round(a.score_pct)}<span class="muted small"> /100</span>`}</td><td>${a.flag_count}</td>
       <td class="muted small">${fmtDate(a.created_at)}</td>
       <td><a href="/${role === "nurse" ? "review" : "result"}.html?id=${a.id}">Open</a></td></tr>`).join("")}
     </table></div>` : `<div class="notice">No attempts yet.</div>`;

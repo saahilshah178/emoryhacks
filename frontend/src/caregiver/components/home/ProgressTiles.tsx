@@ -5,7 +5,7 @@ import type { MySkills } from "@/lib/types";
 
 const tiles = [
   { key: "verified", label: "Skills verified", icon: BadgeCheck, tone: "bg-success-bg text-success" },
-  { key: "in_review", label: "With a nurse", hint: "Waiting for a nurse's decision", icon: Hourglass, tone: "bg-warning-bg text-warning" },
+  { key: "in_review", label: "Pending", hint: "Waiting for a nurse's decision", icon: Hourglass, tone: "bg-warning-bg text-warning" },
   { key: "needs_practice", label: "To practice again", hint: "A nurse asked for another try", icon: RotateCcw, tone: "bg-info-bg text-info" },
   { key: "not_started", label: "Not started", hint: "Skills you haven't recorded yet", icon: Video, tone: "bg-teal-soft text-teal" },
 ] as const;

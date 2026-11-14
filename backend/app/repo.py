@@ -515,8 +515,34 @@ def get_tracks(video_id) -> list[dict]:
 
 
 # --- jobs -----------------------------------------------------------------
+_boot: str | None = None
+
+
+def _boot_id() -> str:
+    """Changes every time the machine boots, so a job recorded under the same host and pid
+    before a reboot is recognised as dead even if that pid now belongs to something else."""
+    global _boot
+    if _boot is None:
+        try:
+            _boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip().replace("-", "")[:8]
+        except OSError:
+            import re
+            import subprocess
+
+            try:
+                out = subprocess.run(["sysctl", "-n", "kern.boottime"], capture_output=True, text=True,
+                                     timeout=3).stdout
+                match = re.search(r"sec = (\d+)", out)
+                _boot = match.group(1) if match else ""
+            except Exception:
+                _boot = ""
+    return _boot
+
+
 def _runner() -> str:
-    return f"{socket.gethostname()}:{os.getpid()}"
+    """Which process runs a job: "host:pid:boot" ("host:pid" when the boot id is unknown)."""
+    boot = _boot_id()
+    return f"{socket.gethostname()}:{os.getpid()}" + (f":{boot}" if boot else "")
 
 
 def create_job(kind: str, video_id, skill_id=None, attempt_id=None) -> uuid.UUID:
@@ -534,8 +560,14 @@ def update_job(job_id, **fields) -> None:
     sets, params = [], []
     for key, value in fields.items():
         sets.append(f"{key}=%s")
-        params.append(db.J(value) if key == "stages" else value)
+        params.append(db.J(value) if key in ("stages", "checkpoint") else value)
     db.execute(f"UPDATE jobs SET {', '.join(sets)}, updated_at=now() WHERE id=%s", (*params, job_id))
+
+
+def save_checkpoint(job_id, **values) -> None:
+    """Merge values (JSON-able) into the job's checkpoint, which a resumed job reads back."""
+    db.execute("UPDATE jobs SET checkpoint = checkpoint || %s, updated_at=now() WHERE id=%s",
+               (db.J(values), job_id))
 
 
 def _process_alive(pid: int) -> bool:
@@ -548,25 +580,98 @@ def _process_alive(pid: int) -> bool:
     return True
 
 
-def fail_interrupted_jobs() -> int:
-    """Mark unfinished jobs whose process is gone as interrupted. Called at server start.
+def interrupted_jobs(skip: Iterable = ()) -> tuple[list[dict], list[dict]]:
+    """Unfinished jobs whose process is gone, as (ran on this machine, ran elsewhere).
 
-    A job started by another live process on this machine (a seeding script, say) is left
-    alone. A job from another machine is only given up on after two hours without progress."""
-    host = socket.gethostname()
-    dead = []
-    for job in db.fetch_all("SELECT id, runner, updated_at FROM jobs WHERE status IN ('queued', 'running')"):
-        job_host, _, pid = (job["runner"] or "").rpartition(":")
-        if job_host == host and pid.isdigit():
-            if int(pid) == os.getpid() or not _process_alive(int(pid)):
-                dead.append(job["id"])
+    A job on this machine is dead when it was started before the last reboot, by this very
+    process (called at server start, so it cannot be running here, except for ids in skip,
+    which this process is running right now), or by a process that no longer exists. A job
+    started by another live process on this machine (a seeding script, say) is left alone. A
+    job from another machine is only counted after two hours without progress, because its
+    video file is on that machine."""
+    host, skip = socket.gethostname(), {str(s) for s in skip}
+    here, elsewhere = [], []
+    for job in db.fetch_all("SELECT * FROM jobs WHERE status IN ('queued', 'running')"):
+        if str(job["id"]) in skip:
+            continue
+        parts = (job["runner"] or "").split(":")
+        job_host, pid = parts[0], parts[1] if len(parts) > 1 else ""
+        boot = parts[2] if len(parts) > 2 else None
+        if job_host == host:
+            if (not pid.isdigit() or (boot is not None and boot != _boot_id()) or int(pid) == os.getpid()
+                    or not _process_alive(int(pid))):
+                here.append(job)
         elif dt.datetime.now(dt.timezone.utc) - job["updated_at"] > dt.timedelta(hours=2):
-            dead.append(job["id"])
+            elsewhere.append(job)
+    return here, elsewhere
+
+
+INTERRUPTED = "Interrupted by a server restart. Upload again or re-run."
+
+
+def fail_interrupted_jobs() -> int:
+    """Mark every unfinished job whose process is gone as interrupted (see interrupted_jobs)."""
+    here, elsewhere = interrupted_jobs()
+    dead = [j["id"] for j in here + elsewhere]
     if dead:
-        db.execute(
-            "UPDATE jobs SET status='error', error='Interrupted by a server restart. Upload again or re-run.', "
-            "updated_at=now() WHERE id = ANY(%s)", (dead,))
+        db.execute("UPDATE jobs SET status='error', error=%s, updated_at=now() WHERE id = ANY(%s)",
+                   (INTERRUPTED, dead))
     return len(dead)
+
+
+def claim_job(job: dict) -> bool:
+    """Take over an interrupted job for this process: it becomes queued under this runner with
+    one more resume counted. False if another process claimed it first."""
+    row = db.fetch_one(
+        """UPDATE jobs SET runner=%s, resumes=resumes + 1, status='queued', error=NULL, updated_at=now()
+           WHERE id=%s AND runner IS NOT DISTINCT FROM %s AND status IN ('queued', 'running') RETURNING id""",
+        (_runner(), job["id"], job["runner"]))
+    return row is not None
+
+
+def load_timeline(attempt_id) -> Timeline:
+    """The timeline save_timeline stored for an attempt, in rubric order."""
+    from .models import OrderViolation, TimelineStep
+
+    rows = db.fetch_all(
+        """SELECT x.step_id, x.found, x.start_s, x.end_s, x.performed_index, x.timeline_confidence, x.timeline_note
+           FROM attempt_steps x JOIN attempts a ON a.id = x.attempt_id
+           LEFT JOIN skill_steps st ON st.skill_id = a.skill_id AND st.step_id = x.step_id
+           WHERE x.attempt_id=%s ORDER BY st.ord NULLS LAST, x.step_id""", (attempt_id,))
+    steps = [TimelineStep(step_id=r["step_id"], found=bool(r["found"]), start_s=r["start_s"], end_s=r["end_s"],
+                          performed_index=r["performed_index"], confidence=r["timeline_confidence"] or 0.0,
+                          note=r["timeline_note"] or "") for r in rows]
+    violations = db.fetch_all(
+        "SELECT step_id, expected_after, message, at_s FROM order_violations WHERE attempt_id=%s "
+        "ORDER BY at_s NULLS LAST, step_id", (attempt_id,))
+    return Timeline(steps=steps, order_violations=[OrderViolation(**v) for v in violations],
+                    missing_step_ids=[s.step_id for s in steps if not s.found])
+
+
+def load_evaluation(attempt_id) -> Evaluation:
+    """The evaluation save_evaluation stored for an attempt, in rubric order."""
+    from .models import StepResult
+
+    attempt = db.fetch_one("SELECT people, overall_feedback, skill_match, skill_match_note FROM attempts WHERE id=%s",
+                           (attempt_id,))
+    rows = db.fetch_all(
+        """SELECT x.step_id, x.status, x.confidence, x.feedback, x.evidence, x.evidence_start_s, x.evidence_end_s,
+                  x.double_checked
+           FROM attempt_steps x JOIN attempts a ON a.id = x.attempt_id
+           LEFT JOIN skill_steps st ON st.skill_id = a.skill_id AND st.step_id = x.step_id
+           WHERE x.attempt_id=%s AND x.status IS NOT NULL ORDER BY st.ord NULLS LAST, x.step_id""", (attempt_id,))
+    flags = db.fetch_all("SELECT * FROM safety_flags WHERE attempt_id=%s AND source='gemini' ORDER BY start_s",
+                         (attempt_id,))
+    return Evaluation(
+        people=people_from(attempt["people"]),
+        steps=[StepResult(step_id=r["step_id"], status=r["status"], confidence=r["confidence"] or 0.0,
+                          feedback=r["feedback"], evidence=r["evidence"], evidence_start_s=r["evidence_start_s"],
+                          evidence_end_s=r["evidence_end_s"], double_checked=r["double_checked"]) for r in rows],
+        safety_flags=[SafetyFlag(**{k: f[k] for k in SafetyFlag.model_fields}) for f in flags],
+        overall_feedback=attempt["overall_feedback"],
+        skill_match=attempt["skill_match"] is not False,
+        skill_match_note=attempt["skill_match_note"],
+    )
 
 
 def ai_problem() -> str | None:

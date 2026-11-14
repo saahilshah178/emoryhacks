@@ -822,12 +822,21 @@ def load_evaluation(attempt_id) -> Evaluation:
 
 def ai_problem() -> str | None:
     """A sentence about the AI account when the most recent pipeline job failed because of it
-    (out of credit, over budget, key rejected) and nothing has succeeded since. None otherwise."""
+    (out of credit, over budget, key rejected) and nothing has succeeded since. None otherwise.
+
+    Only failures since the current API key was first used count. A job that failed before
+    that failed under the previous key, and replacing the key is how such a problem is fixed,
+    so reporting it would tell a nurse to top up an account that is no longer in use."""
+    from . import gemini
+
+    first_use = db.fetch_one("SELECT min(created_at) AS at FROM gemini_calls WHERE key_id=%s", (gemini.key_id(),))
+    if not first_use or first_use["at"] is None:
+        return None
     last = db.fetch_one(
         """SELECT j.error, j.updated_at FROM jobs j
-           WHERE j.status = 'error' AND j.updated_at > now() - interval '1 day'
+           WHERE j.status = 'error' AND j.updated_at > now() - interval '1 day' AND j.updated_at >= %s
              AND NOT EXISTS (SELECT 1 FROM jobs d WHERE d.status = 'done' AND d.updated_at > j.updated_at)
-           ORDER BY j.updated_at DESC LIMIT 1""")
+           ORDER BY j.updated_at DESC LIMIT 1""", (first_use["at"],))
     error = (last or {}).get("error") or ""
     first = error.split("\n")[0]
     if first.startswith(("The AI service", "This server has reached its AI spending limit")):

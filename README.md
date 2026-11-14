@@ -19,17 +19,33 @@ make run                  # the API and the web app; open the address it prints 
 
 ### Logins
 
-Nobody signs up. The accounts that can log in are a fixed set, listed in `backend/scripts/logins.py`. `make logins` gives each of them a new random password and writes the usernames and passwords to `LOGINS.md` in the repository root. That file is gitignored and is the only copy of the passwords: the database keeps hashes. Running `make logins` again replaces every password, and because the database is shared, it does so for everyone who uses that database.
+Nobody signs up. The accounts that can log in are a fixed set of six, listed in `backend/scripts/logins.py`, and all of them belong to the one agency (the default agency), so they share its skills and submissions:
 
-Your own agency gets a nurse (`nurse`) and two caregivers (`caregiver`, `caregiver2`). They work with each other straight away: the caregivers see the nurse's skills, and the nurse sees their submissions.
+| Username | Person | Role |
+| --- | --- | --- |
+| `nurse` | Morgan Reyes | Nurse |
+| `nurse2` | Dana Whitfield | Nurse |
+| `caregiver` | Jamie Carter | Caregiver |
+| `caregiver2` | Riley Nguyen | Caregiver |
+| `caregiver3` | Sam Okafor | Caregiver |
+| `caregiver4` | Alex Moreno | Caregiver |
+
+`make logins` writes the usernames and passwords to `LOGINS.md` in the repository root. That file is gitignored and is the only copy of the passwords: the database keeps hashes. Running it again leaves what exists alone:
+
+- A login that already has a password keeps it and stays signed in. Its line in `LOGINS.md` is carried over as long as it still matches the stored hash; otherwise the file says "unchanged (not recorded here)".
+- A login that does not exist yet gets a new random password. Adding a login means adding a line to `LOGINS` and running `make logins`; nobody else's password changes.
+- Anyone else who has a username loses it, and their sessions. Taking a line out of `LOGINS` and running `make logins` removes that login.
+- `make logins ARGS="--reset nurse,caregiver2"` gives only those logins a new password and signs only them out. `make logins ARGS="--reset-all"` does it for every login. An unknown name is an error and changes nothing.
+
+The top of `LOGINS.md` says which accounts changed in the last run. There is no password change in the app.
 
 If port 3000 is taken, the web app starts on the next free port and prints it. If `DATABASE_URL` is empty or is not a `postgres://` URL, the API falls back to a local TimescaleDB container (`make db`).
 
-### The sample agency
+### Standard skills and starting from scratch
 
-`make sample` loads a second agency, Harbor Home Care, with a full roster, nine skills, about a hundred attempts, reviews, safety flags and balance readings, so every screen has something in it. It is separate from your own agency and is reached only through its own logins: `harbor.nurse` (Patricia Chen), `harbor.nurse2`, `harbor.caregiver` (Sarah Chen), `harbor.caregiver2` and `harbor.caregiver3`. Run `make logins` after the first `make sample` to give them passwords.
+There is no sample agency and no invented data: the only data is what real people record. Every database starts with the nine standard skills (steps, criteria and step times kept in `backend/app/builtin_skills.json`, reference videos in `reference_vids/`). The API adds any that are missing when it starts; `make skills` does the same without starting it, `make skills ARGS=check` checks the file, and `make skills ARGS=export` rewrites it from this database. A standard skill is an ordinary skill once installed: a nurse can edit it, rebuild it or record a new reference for it, but cannot delete its last version.
 
-Running `make sample` again resets the sample agency and moves its dates up to now; the logins keep their passwords. Its attempts have no recordings behind them and its skills' steps are not timed; record a reference video or "Rebuild steps" on one of its skills to see the real pipeline there.
+`make reset-data` prepares a database for real use, so that caregivers start with nothing recorded. By default it only prints what it would delete. `make reset-data ARGS="--yes"` does it, in one transaction. It deletes every agency other than the default one with everything in it; every attempt in the default agency with its recording, steps, flags, jobs and pose rows; and default-agency accounts that have no username (left over from the old sign-up flow). It clears everyone's "notifications seen" time. It keeps the default agency, the logins and their passwords, every skill with its steps and reference video, the pose data of reference videos and the log of Gemini calls. Add `--files` to also delete video and thumbnail files under the data directory that no video refers to any more (it prints how many and how many megabytes). This is destructive and cannot be undone; run it without `--yes` first.
 
 ### Commands
 
@@ -39,12 +55,12 @@ Running `make sample` again resets the sample agency and moves its dates up to n
 | `make dev` | Start only the API, on port 8000. Do not use `--reload`: a restart interrupts running jobs. |
 | `make web` | Start only the web app. It expects the API from `make dev`; point it elsewhere with `API_URL`. |
 | `make test` | Run the tests (canned AI, local TimescaleDB container, no Gemini calls) |
-| `make sample` | Load or reset the sample agency |
-| `make logins` | Give every login a new password and write them to `LOGINS.md` |
+| `make logins` | Make the six logins; existing ones keep their passwords (`ARGS="--reset nurse"`, `ARGS="--reset-all"`). Writes `LOGINS.md` |
+| `make reset-data` | Show what would be deleted to start from scratch; `ARGS="--yes"` deletes it, `--files` also removes unused video files |
+| `make skills` | Add any of the nine standard skills this database lacks (no Gemini calls) |
 | `make seed` | Build rubrics from the primary videos in `reference_vids/`, falling back to a backup if a primary fails |
 | `make e2e ARGS="--skills sit_to_stand --cases self,truncated"` | Run stand-in caregiver attempts against seeded skills |
 | `make repose` | Re-measure pose for every skill's reference video |
-| `make fake-demo` | Create a sample skill and attempt with canned AI output |
 | `make cost` | Recorded Gemini spend for the current database |
 
 Gemini calls stop when the spend recorded in the database reaches `GEMINI_BUDGET_USD` (default 14). A nurse's Settings page shows how much is used.
@@ -86,7 +102,7 @@ Gemini calls stop when the spend recorded in the database reaches `GEMINI_BUDGET
 
 **What the screens call a state.** The database stores the AI's result, the nurse's decision, the flags and the job. Everything shown as a state is derived from those in one place, `backend/app/progress.py`, so the two portals cannot disagree: an attempt is processing, failed processing, awaiting a nurse, approved or sent back for retraining; a skill is not started, in review, to practise again, or verified for a caregiver.
 
-**Accounts.** The logins are a fixed set with generated passwords (`make logins`); there is no sign-up and no password change in the app. Passwords are stored as scrypt hashes. A login sets an HttpOnly session cookie; only its hash is stored. Every route checks the session, the role (nurse or caregiver) and the agency: a caregiver sees the agency's skills and only their own attempts, and one agency never sees another's data.
+**Accounts.** The logins are a fixed set of six with generated passwords (`make logins`); there is no sign-up and no password change in the app. Passwords are stored as scrypt hashes. A login sets an HttpOnly session cookie; only its hash is stored. Every route checks the session, the role (nurse or caregiver) and the agency: a caregiver sees the agency's skills and only their own attempts, and one agency never sees another's data.
 
 **Tiger Data.** `pose_frames` is a hypertable with one row per measured frame per tracked person (12 joint angles, centre of mass, base of support, balance score, sway). `pose_1s` is a continuous aggregate the dashboard reads, alongside toolkit aggregates on the raw frames. Accounts, skills, steps, criteria, attempts, flags, jobs and a log of every Gemini call are ordinary tables in the same database. Schema: `backend/app/schema.sql`.
 
@@ -130,7 +146,7 @@ All routes are under `/api`, return JSON, and need a session (cookie, or `Author
 | `backend/app/gemini.py` | Gemini wrapper: upload cache, structured output, retries, output cap, call log, spend cap |
 | `backend/app/media.py` | ffmpeg-based conversion, thumbnails and cutting (bundled binary, no system install) |
 | `backend/app/routers/` | HTTP API |
-| `backend/scripts/` | Starting both halves, seeding, the sample agency, end-to-end runs, pose re-measurement, spend report |
+| `backend/scripts/` | Starting both halves, the standard skills, logins, resetting the data, end-to-end runs, pose re-measurement, spend report |
 | `reference_vids/` | Reference videos for nine skills |
 
 ## Limits worth knowing
@@ -138,5 +154,5 @@ All routes are under `/api`, return JSON, and need a session (cookie, or `Author
 - Video files live on the machine that uploaded them; only the database is shared. A reference video missing on your machine is rebuilt from `reference_vids/` on first use. Attempts recorded on another machine cannot be played; the screens say so and still show the results.
 - Pose comes from a single camera. When two people overlap, the pose model can merge them into one skeleton, so per-person readings are unreliable for those moments and some tracks are left without a role. Pose flags are advisory unless Gemini confirms them on video.
 - The nine seeded rubrics were built from edited instructional videos. Their step times refer to those videos.
-- The logins are shared, fixed accounts. There is no sign-up, password reset or invitation flow, and adding a login means editing `backend/scripts/logins.py` and running `make logins`, which changes everyone's password.
+- The logins are shared, fixed accounts. There is no sign-up, password change or invitation flow; adding a login means editing `backend/scripts/logins.py` and running `make logins`, and a forgotten password is replaced with `make logins ARGS="--reset <name>"`.
 - Notifications appear in the app only. No emails are sent.

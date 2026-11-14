@@ -1,25 +1,31 @@
 """Make the fixed set of logins and write them to LOGINS.md.
 
-  uv run python -m scripts.logins        (make logins)
+  uv run python -m scripts.logins                       (make logins)
+  uv run python -m scripts.logins --reset nurse,caregiver2
+  uv run python -m scripts.logins --reset-all
 
 Nobody signs up or changes a password in the app: the people in LOGINS below are the only
-ones who can log in. Every run gives each of them a new random password, signs them out,
-and rewrites LOGINS.md in the repository root with the usernames and passwords.
+ones who can log in, and they all belong to the default agency, so they share its skills and
+submissions. A run changes as little as it can:
 
-LOGINS.md is gitignored. The database keeps only password hashes, so that file is the only
-copy of the passwords; running this again replaces all of them. Anyone else who had a
-username loses it, so taking a line out of LOGINS and running this removes that login.
+  - a login that already exists with a password keeps it, and stays signed in;
+  - a login that does not exist yet (or has no password) gets a new random password;
+  - --reset gives only the named logins a new password and signs only them out;
+    --reset-all does so for every login;
+  - anyone else who has a username loses it, and their sessions, so a line taken out of
+    LOGINS stops that login.
 
-The two agencies:
-  the default agency   the one the reference videos and real attempts belong to. Its three
-                       people are created here if they do not exist yet.
-  Harbor Home Care     the sample agency. Its logins go to people from scripts/sample_data.py
-                       and are skipped until that agency has been loaded (make sample).
-                       Loading it again keeps the logins made here.
+LOGINS.md in the repository root is rewritten each run. It is gitignored. The database keeps
+only hashes, so the file is the only copy of the passwords. A password made in this run is
+shown; one left alone is carried over from the old file if it still matches the stored hash,
+and otherwise the file says it is not recorded and how to reset it. The whole run is one
+transaction: either everything changes or nothing does.
 """
 from __future__ import annotations
 
+import argparse
 import datetime as dt
+import re
 import secrets
 import sys
 import uuid
@@ -27,11 +33,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app import auth, config, db
-from scripts import sample_data as S
 
 LOGINS_FILE = config.ROOT / "LOGINS.md"
 # Letters and digits that are hard to mix up when read off a screen (no i, l, o, 0, 1).
 _ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+# Fixed namespace for the ids of the people made here. Existing databases already hold people
+# with these ids, so it must never change.
+_NAMESPACE = uuid.UUID("6f1c3a52-7d4e-5b8a-9c21-4e0d8b7a1f30")
+
+
+def uid(key: str) -> uuid.UUID:
+    """The stable id derived from a key, e.g. uid("login:nurse")."""
+    return uuid.uuid5(_NAMESPACE, key)
 
 
 @dataclass(frozen=True)
@@ -39,22 +52,21 @@ class Login:
     username: str
     role: str
     name: str
-    # A person of the sample agency, by their key in sample_data. Otherwise the login
-    # belongs to the default agency and the fields below describe the person to create.
-    sample_key: str | None = None
     title: str = ""
     credentials: str = ""
 
+    @property
+    def user_id(self) -> uuid.UUID:
+        return uid(f"login:{self.username}")
+
 
 LOGINS = [
-    Login("nurse", "nurse", "Morgan Reyes", title="Clinical Supervisor", credentials="RN"),
-    Login("caregiver", "caregiver", "Jamie Carter", title="Home Health Aide"),
-    Login("caregiver2", "caregiver", "Riley Nguyen", title="Certified Nursing Assistant"),
-    Login("harbor.nurse", "nurse", "Patricia Chen", sample_key="p.chen"),
-    Login("harbor.nurse2", "nurse", "Daniel Okoye", sample_key="d.okoye"),
-    Login("harbor.caregiver", "caregiver", "Sarah Chen", sample_key="s.chen"),
-    Login("harbor.caregiver2", "caregiver", "Sarah Johnson", sample_key="cg-sarah"),
-    Login("harbor.caregiver3", "caregiver", "Michael Brown", sample_key="cg-michael"),
+    Login("nurse", "nurse", "Morgan Reyes", "Clinical Supervisor", "RN"),
+    Login("nurse2", "nurse", "Dana Whitfield", "Clinical Educator", "RN"),
+    Login("caregiver", "caregiver", "Jamie Carter", "Home Health Aide"),
+    Login("caregiver2", "caregiver", "Riley Nguyen", "Certified Nursing Assistant"),
+    Login("caregiver3", "caregiver", "Sam Okafor", "Home Health Aide"),
+    Login("caregiver4", "caregiver", "Alex Moreno", "Personal Care Aide"),
 ]
 
 
@@ -63,81 +75,125 @@ def new_password() -> str:
     return "-".join("".join(secrets.choice(_ALPHABET) for _ in range(4)) for _ in range(3))
 
 
-def _person(conn, login: Login) -> uuid.UUID | None:
-    """The id of the user this login belongs to, creating a default-agency person who is
-    missing. None for a sample person when the sample agency has not been loaded."""
-    if login.sample_key:
-        user_id = S.uid(f"user:{login.sample_key}")
-        return user_id if conn.execute("SELECT 1 FROM users WHERE id=%s", (user_id,)).fetchone() else None
-    user_id = S.uid(f"login:{login.username}")
+def _ensure_person(conn, login: Login) -> None:
     conn.execute(
         "INSERT INTO users (id, org_id, role, name, email, title, credentials, employment) "
         "VALUES (%s,%s,%s,%s,%s,%s,%s,'active') ON CONFLICT (id) DO NOTHING",
-        (user_id, auth.DEFAULT_ORG, login.role, login.name, f"{login.username}@firstshift.example",
+        (login.user_id, auth.DEFAULT_ORG, login.role, login.name, f"{login.username}@firstshift.example",
          login.title, login.credentials))
-    return user_id
 
 
-def generate(path: Path | None = LOGINS_FILE) -> list[dict]:
-    """Give every login a new password and return [{username, password, role, name, agency}].
-    Sample logins whose person does not exist are left out. Writes the file unless path is None."""
+def parse_names(text: str) -> list[str]:
+    return [n.strip() for n in text.split(",") if n.strip()]
+
+
+def generate(path: Path | None = LOGINS_FILE, reset: list[str] | tuple[str, ...] = (),
+             reset_all: bool = False) -> list[dict]:
+    """Bring the logins to the state described at the top of this file.
+
+    Returns one dict per login: username, role, name, status ("new", "reset" or "kept") and
+    password (the new one for new and reset logins; for a kept one, the recorded password if
+    it still verifies, else None). Raises ValueError, changing nothing, if reset names a
+    login that is not in LOGINS. Writes the file unless path is None.
+    """
+    known = {login.username for login in LOGINS}
+    unknown = [n for n in reset if n not in known]
+    if unknown:
+        raise ValueError(f"unknown login{'s' if len(unknown) > 1 else ''}: {', '.join(unknown)}; "
+                         f"the logins are {', '.join(login.username for login in LOGINS)}")
+    forced = known if reset_all else set(reset)
+    previous = _recorded_passwords(path)
     db.migrate()
     made: list[dict] = []
-    with db.tx() as conn:  # one transaction: either every password changes or none does
-        users = {login.username: _person(conn, login) for login in LOGINS}
-        ids = [user_id for user_id in users.values() if user_id]
-        # Only the people listed here keep a username. Clearing first also lets a username
-        # move from one person to another without tripping the unique index.
-        conn.execute("UPDATE users SET username=NULL WHERE username IS NOT NULL")
-        conn.execute("DELETE FROM sessions WHERE user_id = ANY(%s)", (ids,))
+    with db.tx() as conn:  # one transaction: either every change happens or none does
         for login in LOGINS:
-            user_id = users[login.username]
-            if not user_id:
-                continue
-            password = new_password()
-            conn.execute("UPDATE users SET username=%s, password_hash=%s WHERE id=%s",
-                         (login.username, auth.hash_password(password), user_id))
-            agency = conn.execute("SELECT o.name FROM orgs o JOIN users u ON u.org_id=o.id WHERE u.id=%s",
-                                  (user_id,)).fetchone()["name"]
-            made.append({"username": login.username, "password": password, "role": login.role,
-                         "name": login.name, "agency": agency, "sample": bool(login.sample_key)})
+            _ensure_person(conn, login)
+        # Anyone holding a username that is not theirs here, or not listed at all, loses it.
+        stale = conn.execute(
+            "SELECT id FROM users WHERE username IS NOT NULL AND NOT EXISTS ("
+            "  SELECT 1 FROM unnest(%s::text[], %s::uuid[]) AS l(name, id) "
+            "  WHERE l.name = users.username AND l.id = users.id)",
+            ([login.username for login in LOGINS], [login.user_id for login in LOGINS])).fetchall()
+        stale_ids = [row["id"] for row in stale]
+        if stale_ids:
+            conn.execute("UPDATE users SET username=NULL, password_hash=NULL WHERE id = ANY(%s)", (stale_ids,))
+            conn.execute("DELETE FROM sessions WHERE user_id = ANY(%s)", (stale_ids,))
+        for login in LOGINS:
+            row = conn.execute("SELECT username, password_hash FROM users WHERE id=%s", (login.user_id,)).fetchone()
+            keep = row["username"] == login.username and row["password_hash"] and login.username not in forced
+            entry = {"username": login.username, "role": login.role, "name": login.name,
+                     "status": "kept", "password": None}
+            if keep:
+                recorded = previous.get(login.username)
+                if recorded and auth.verify_password(recorded, row["password_hash"]):
+                    entry["password"] = recorded
+            else:
+                entry["status"] = "reset" if row["password_hash"] else "new"
+                entry["password"] = new_password()
+                conn.execute("UPDATE users SET username=%s, password_hash=%s WHERE id=%s",
+                             (login.username, auth.hash_password(entry["password"]), login.user_id))
+                conn.execute("DELETE FROM sessions WHERE user_id=%s", (login.user_id,))
+            made.append(entry)
     auth.forget_cached()
     if path is not None:
-        path.write_text(_markdown(made))
+        path.write_text(_markdown(made, len(stale_ids)))
     return made
 
 
-def _markdown(made: list[dict]) -> str:
+_ROW = re.compile(r"^\|[^|]*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|", re.M)
+
+
+def _recorded_passwords(path: Path | None) -> dict[str, str]:
+    """username -> password from an existing LOGINS.md (checked against the database by the caller)."""
+    try:
+        return dict(_ROW.findall(path.read_text())) if path else {}
+    except OSError:
+        return {}
+
+
+def _markdown(made: list[dict], removed: int) -> str:
     when = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    changed = [m for m in made if m["status"] != "kept"]
     lines = [
         "# Logins",
         "",
         f"Made by `make logins` on {when}. These are the only accounts that can sign in.",
         "",
-        "This file is not in git and must stay out of it: the repository is public. The database",
-        "keeps only hashes, so this is the only copy of the passwords. Running `make logins` again",
-        "replaces every password below, for the live site and for local runs alike (they share",
-        "one database).",
+        ("Changed in this run: " + ", ".join(f"`{m['username']}` ({m['status']})" for m in changed) + "."
+         if changed else "Changed in this run: nothing."),
     ]
-    notes = {False: "the reference videos and real grading", True: "sample data to look around in"}
-    for sample in (False, True):
-        rows = [m for m in made if m["sample"] is sample]
-        if not rows:
-            continue
-        lines += ["", f"## {rows[0]['agency']} ({notes[sample]})", "",
-                  "| Role | Username | Password | Person |", "| --- | --- | --- | --- |"]
-        lines += [f"| {m['role'].capitalize()} | `{m['username']}` | `{m['password']}` | {m['name']} |" for m in rows]
+    if removed:
+        lines.append(f"{removed} other account(s) lost their username and can no longer sign in.")
+    lines += [
+        "",
+        "This file is not in git and must stay out of it: the repository is public. The database",
+        "keeps only hashes, so this is the only copy of the passwords. A login that was left alone",
+        "keeps its password; reset one with `make logins ARGS=\"--reset <name>\"`.",
+        "",
+        "| Role | Username | Password | Person |", "| --- | --- | --- | --- |",
+    ]
+    for m in made:
+        password = (f"`{m['password']}`" if m["password"] else
+                    f"unchanged (not recorded here; reset it with `make logins ARGS=\"--reset {m['username']}\"`)")
+        lines.append(f"| {m['role'].capitalize()} | `{m['username']}` | {password} | {m['name']} |")
     return "\n".join(lines) + "\n"
 
 
-def main() -> int:
-    made = generate()
-    missing = [login.username for login in LOGINS if login.username not in {m["username"] for m in made}]
-    print(f"{len(made)} logins made. Usernames and passwords are in {LOGINS_FILE}")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="logins", description="Make the fixed set of logins and write LOGINS.md.")
+    parser.add_argument("--reset", default="", metavar="NAME[,NAME...]",
+                        help="give only these logins a new password and sign only them out")
+    parser.add_argument("--reset-all", action="store_true", help="give every login a new password")
+    args = parser.parse_args(argv)
+    try:
+        made = generate(reset=parse_names(args.reset), reset_all=args.reset_all)
+    except ValueError as error:
+        print(f"Error: {error}. Nothing was changed.", file=sys.stderr)
+        return 2
+    changed = [m for m in made if m["status"] != "kept"]
+    print(f"{len(changed)} of {len(made)} logins changed. Usernames and passwords are in {LOGINS_FILE}")
     for m in made:
-        print(f"  {m['role']:<9} {m['username']:<18} {m['name']} ({m['agency']})")
-    if missing:
-        print(f"Skipped {', '.join(missing)}: the sample agency is not loaded. Run `make sample`, then this again.")
+        print(f"  {m['role']:<9} {m['username']:<12} {m['name']:<16} {m['status']}")
     return 0
 
 

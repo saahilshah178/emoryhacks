@@ -119,6 +119,10 @@ APPLIES_WHEN
   after "Only needed when" and that can be seen in a silent recording: "the patient cannot
   get up unaided", "the wheelchair has footrests", "the patient is not wearing non-skid
   footwear". Never a condition about what anyone says, hears or feels.
+- When a step depends on how things turn out and also uses equipment, the condition is
+  how things turn out: summoning help is "only needed when the patient is hurt or cannot
+  get up unaided", not "when a call bell is in the room". A caregiver whose patient is
+  fine does not need the step, whatever the room has.
 
 PREREQUISITES
 - prerequisites lists the numbers of the earlier steps that must be completed before

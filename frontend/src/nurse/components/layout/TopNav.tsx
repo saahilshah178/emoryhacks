@@ -59,7 +59,7 @@ export function TopNav() {
   return (
     <header
       className={cn(
-        "sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 bg-white pr-4 md:pr-6",
+        "chrome-bar sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 pr-4 md:pr-6",
         SEARCH_ALIGN,
       )}
     >
@@ -69,14 +69,14 @@ export function TopNav() {
         <button
           type="button"
           onClick={toggleNotifications}
-          className="relative flex h-10 min-w-10 items-center justify-center rounded-[12px] border border-border px-2 text-ink-secondary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30"
+          className="relative flex h-10 min-w-10 items-center justify-center rounded-[12px] border border-white/20 px-2 text-white/85 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
           aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
           aria-expanded={open}
           aria-haspopup="true"
           aria-controls={notificationsMenuId}
         >
           <Bell className="h-4 w-4" />
-          {unread > 0 ? <span className="ml-1 text-xs font-semibold text-danger">{unread}</span> : null}
+          {unread > 0 ? <span className="ml-1.5 rounded-full bg-danger px-1.5 text-xs font-semibold text-white">{unread}</span> : null}
         </button>
         {open ? (
           <div

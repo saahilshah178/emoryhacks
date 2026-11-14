@@ -10,6 +10,7 @@ import { useDashboard } from "@/nurse/context/DashboardContext";
 import { Logo } from "@/shared/Logo";
 import { PageTransition } from "@/shared/PageTransition";
 import { useHomeLink } from "@/shared/RefreshBoundary";
+import { LivelyBackground } from "@/shared/LivelyBackground";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { flash, clearFlash, overview, overviewError, reloadOverview } = useDashboard();
@@ -17,14 +18,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const brand = useHomeLink("/dashboard");
 
   return (
-    <div className="flex min-h-screen bg-white">
-      <div className={cn("sticky top-0 flex h-dvh shrink-0 flex-col bg-white", RAIL_WIDTH)}>
+    <div className="chrome-bar flex min-h-screen">
+      <div className={cn("chrome-rail sticky top-0 flex h-dvh shrink-0 flex-col", RAIL_WIDTH)}>
         <div className="flex h-16 shrink-0 items-center justify-center lg:justify-start lg:px-4">
-          <Logo href="/dashboard" nameClassName="hidden lg:inline" onClick={brand.onClick} />
+          <Logo href="/dashboard" light nameClassName="hidden lg:inline" onClick={brand.onClick} />
         </div>
         <Sidebar />
       </div>
-      <div className="flex min-w-0 flex-1 flex-col bg-white">
+      <div className="chrome-bar flex min-w-0 flex-1 flex-col">
         <TopNav />
         {overviewError && !overview ? (
           <div className="border-b border-danger/20 bg-danger-bg px-4 py-2 md:px-6 lg:px-8">
@@ -53,8 +54,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         ) : null}
         <main
           id="main"
-          className={cn("min-h-0 flex-1 bg-page py-6 pr-4 md:pr-6 lg:pr-8", SCREEN_CORNER, SCREEN_INSET)}
+          className={cn("relative isolate min-h-0 flex-1 bg-page py-6 pr-4 md:pr-6 lg:pr-8", SCREEN_CORNER, SCREEN_INSET)}
         >
+          <LivelyBackground belowHeader />
+          {/* The curved corner where the sidebar meets the top bar. It stays under the bar while the page
+              scrolls, so the page always looks tucked into the frame, not only at the top. */}
+          <div aria-hidden className="pointer-events-none sticky top-16 z-20 -ml-8 -mt-6 mb-6 h-0 w-0">
+            <span
+              className="absolute left-0 top-0 h-5 w-5"
+              style={{ background: "radial-gradient(circle at 100% 100%, transparent 1.25rem, var(--rail-top) calc(1.25rem + 0.5px))" }}
+            />
+          </div>
           {/* The one column every page sits in, so each page's content starts and stops in the same place. */}
           <PageTransition className="mx-auto w-full max-w-[1400px]">{children}</PageTransition>
         </main>

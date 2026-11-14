@@ -8,6 +8,7 @@ import { useAuth } from "./AuthProvider";
 import { APP_NAME } from "./brand";
 import { Logo } from "./Logo";
 import { homeUrlFor } from "./urls";
+import { LivelyBackground } from "@/shared/LivelyBackground";
 
 /**
  * The login page. The logins are a fixed set of usernames with generated passwords
@@ -48,10 +49,11 @@ export function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-page">
-      <header className="sticky top-0 z-30 border-b border-border bg-white">
+    <div className="relative isolate flex min-h-dvh flex-col bg-page">
+      <LivelyBackground />
+      <header className="chrome-bar chrome-bar-fade sticky top-0 z-30 border-b border-border">
         <div className="flex h-16 items-center px-6">
-          <Logo />
+          <Logo light />
         </div>
       </header>
 

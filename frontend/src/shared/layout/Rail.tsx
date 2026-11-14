@@ -29,7 +29,7 @@ function isActive(pathname: string, item: RailItem) {
 function itemClass(active: boolean) {
   return cn(
     "relative flex h-11 items-center gap-3 rounded-[12px] px-3 text-sm font-medium transition-colors",
-    active ? "bg-teal-soft text-teal" : "text-navy hover:bg-secondary",
+    active ? "bg-white text-teal shadow-[0_1px_2px_rgba(0,0,0,0.12)]" : "text-white/90 hover:bg-white/10",
   );
 }
 
@@ -44,7 +44,7 @@ export function Rail({ label, items, footer }: { label: string; items: RailItem[
   const FooterIcon = footer?.icon;
 
   return (
-    <aside className="flex min-h-0 flex-1 flex-col overflow-y-auto text-navy">
+    <aside className="flex min-h-0 flex-1 flex-col overflow-y-auto text-white">
       <nav className="flex flex-1 flex-col gap-1 px-2 pt-2" aria-label={label}>
         {items.map((item) => {
           const active = isActive(pathname, item);
@@ -62,12 +62,12 @@ export function Rail({ label, items, footer }: { label: string; items: RailItem[
               <span className="relative">
                 <Icon className="h-[18px] w-[18px] shrink-0" />
                 {count > 0 ? (
-                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-teal ring-2 ring-white lg:hidden" aria-hidden />
+                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-white ring-2 ring-[#25554e] lg:hidden" aria-hidden />
                 ) : null}
               </span>
               <span className="hidden truncate lg:inline">{item.label}</span>
               {count > 0 ? (
-                <span className="ml-auto hidden min-w-5 rounded-full bg-teal px-1.5 text-center text-[11px] font-semibold text-white lg:inline">
+                <span className="ml-auto hidden min-w-5 rounded-full bg-white/90 px-1.5 text-center text-[11px] font-semibold text-teal lg:inline">
                   {count}
                 </span>
               ) : null}

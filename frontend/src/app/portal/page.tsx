@@ -51,7 +51,12 @@ export default function HomePage() {
               <div className="space-y-6 lg:space-y-5">
                 <ProgressTiles counts={counts} className="hidden lg:grid" />
                 <ProgressOverview counts={counts} ready={ready} className="lg:hidden" />
-                {next ? <StartSkillCta skill={next} /> : <CaughtUpCard inReview={counts.in_review} />}
+                {/* No "Practice again" card for a skill a nurse sent back; the "Try again" figure covers it. */}
+                {!next ? (
+                  <CaughtUpCard inReview={counts.in_review} />
+                ) : next.state === "needs_practice" && !next.checking_attempt_id && !next.ready_attempt_id ? null : (
+                  <StartSkillCta skill={next} />
+                )}
                 <RecentUpdates className="hidden lg:block" />
               </div>
               <SkillsAtAGlance skills={skills} className="hidden lg:block" />

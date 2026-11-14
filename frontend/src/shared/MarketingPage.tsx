@@ -3,6 +3,7 @@
 import { CircleCheck } from "lucide-react";
 import { APP_NAME } from "./brand";
 import { PublicHeader } from "./PublicHeader";
+import { LivelyBackground } from "@/shared/LivelyBackground";
 
 const steps = [
   {
@@ -134,7 +135,8 @@ function HowItWorks() {
 
 export function MarketingPage() {
   return (
-    <div className="min-h-dvh bg-page text-ink">
+    <div className="relative isolate min-h-dvh bg-page text-ink">
+      <LivelyBackground />
       <PublicHeader />
 
       <main id="main">

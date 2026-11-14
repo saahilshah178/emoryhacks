@@ -411,7 +411,7 @@ function RulesForm({
         {confirmed && !dirty ? (
           <p role="status" className="flex items-center gap-1.5 text-sm text-success">
             <Check className="h-4 w-4" aria-hidden />
-            Saved for every version of {skill.name}.
+            Saved
           </p>
         ) : dirty ? (
           <p className="text-sm text-ink-secondary">{invalid ? "Fix the marked field to save." : "Not saved yet."}</p>

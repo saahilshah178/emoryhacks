@@ -37,7 +37,12 @@ export function Logo({
 }) {
   return (
     <Link href={href} aria-label={APP_NAME} onClick={onClick} className="flex min-h-11 shrink-0 items-center gap-2.5">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] bg-teal text-white">
+      <span
+        className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] text-white",
+          light ? "bg-white/15 ring-1 ring-white/25" : "bg-teal",
+        )}
+      >
         <LogoMark className="h-[18px] w-[18px]" />
       </span>
       <span

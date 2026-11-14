@@ -10,19 +10,24 @@ import { useAuth, useUser } from "@/shared/AuthProvider";
 export type AccountLink = { href: string; label: string; icon: LucideIcon };
 
 /**
- * The signed-in person at the right of a top bar: name, role and avatar, opening a menu
- * with who they are, the given links and "Sign out".
+ * The signed-in person: name, role and avatar, opening a menu with who they are, the
+ * given links and "Sign out". In a top bar it sits at the right and opens downward; at
+ * the bottom of a sidebar (`inRail`) it fills the width and opens upward. Below the `lg`
+ * width the sidebar version shows the avatar only.
  */
 export function AccountMenu({
   links,
   role,
   onOpen,
+  inRail = false,
 }: {
   links: AccountLink[];
   /** Shown under the name when the account has no credentials or job title. */
   role: string;
   /** Called when the menu opens, so a neighbouring menu can close. */
   onOpen?: () => void;
+  /** At the bottom of a sidebar instead of the right of a top bar. */
+  inRail?: boolean;
 }) {
   const { signOut } = useAuth();
   const user = useUser();
@@ -54,7 +59,7 @@ export function AccountMenu({
 
   return (
     <div
-      className="relative"
+      className={cn("relative", inRail && "w-full")}
       ref={ref}
       onBlur={(event) => {
         // Tabbing out of the menu closes it.
@@ -68,17 +73,30 @@ export function AccountMenu({
         aria-haspopup="menu"
         aria-controls={open ? menuId : undefined}
         onClick={toggle}
-        className="flex shrink-0 items-center gap-2.5 rounded-[12px] py-1 pl-3 pr-1 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 md:pr-2"
+        className={cn(
+          "flex shrink-0 items-center gap-2.5 rounded-[12px] py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30",
+          inRail
+            ? "w-full justify-center px-1.5 py-1.5 hover:bg-white/10 lg:justify-start"
+            : "pl-3 pr-1 hover:bg-white/10 md:pr-2",
+        )}
       >
-        <span className="hidden max-w-[180px] text-right md:block">
-          <span className="block truncate text-sm font-medium text-ink">{user.name}</span>
-          <span className="block truncate text-xs text-ink-secondary">{user.credentials || user.title || role}</span>
+        <span
+          className={cn(
+            "max-w-[180px]",
+            inRail ? "order-2 hidden min-w-0 flex-1 text-left lg:block" : "hidden text-right md:block",
+          )}
+        >
+          <span className="block truncate text-sm font-medium text-white">{user.name}</span>
+          <span className="block truncate text-xs text-white/65">{user.credentials || user.title || role}</span>
         </span>
-        <Avatar name={user.name} />
+        <span className={cn(inRail && "order-1")}>
+          <Avatar name={user.name} />
+        </span>
         <ChevronDown
           className={cn(
-            "hidden h-4 w-4 shrink-0 text-ink-secondary transition-transform duration-150 md:block",
-            open && "rotate-180",
+            "hidden h-4 w-4 shrink-0 text-white/65 transition-transform duration-150",
+            inRail ? "order-3 rotate-180 lg:block" : "md:block",
+            open && (inRail ? "rotate-0" : "rotate-180"),
           )}
         />
       </button>
@@ -87,7 +105,10 @@ export function AccountMenu({
           id={menuId}
           role="menu"
           aria-label="Account"
-          className="absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]"
+          className={cn(
+            "absolute z-50 w-64 overflow-hidden rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]",
+            inRail ? "bottom-full left-0 mb-2" : "right-0 mt-2",
+          )}
         >
           <div className="border-b border-border px-4 py-3">
             <p className="truncate text-sm font-semibold text-ink">{user.name}</p>

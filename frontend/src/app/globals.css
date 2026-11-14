@@ -73,6 +73,173 @@
   }
 }
 
+/* The page background (shared/LivelyBackground): vines draw in once, the glows drift slowly. */
+@keyframes lively-stem {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes lively-leaf {
+  from {
+    opacity: 0;
+    transform: scale(0);
+  }
+  to {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+}
+
+@keyframes lively-glow {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(60px, -40px) scale(1.08);
+  }
+  66% {
+    transform: translate(-40px, 30px) scale(0.95);
+  }
+}
+
+.lively-stem {
+  stroke-dasharray: 1;
+  stroke-opacity: 0.55;
+  animation: lively-stem 3s ease-out both;
+}
+
+.lively-leaf {
+  opacity: 0.8;
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: lively-leaf 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+
+.lively-glow {
+  animation: lively-glow 24s ease-in-out infinite;
+}
+
+/* Swaying: each leaf flutters from its base, and each whole vine rocks slowly. */
+@keyframes lively-flutter {
+  0%,
+  100% {
+    transform: rotate(-16deg);
+  }
+  50% {
+    transform: rotate(16deg);
+  }
+}
+
+@keyframes lively-sway-side {
+  0%,
+  100% {
+    transform: rotate(-2.6deg);
+  }
+  50% {
+    transform: rotate(2.6deg);
+  }
+}
+
+@keyframes lively-sway-bottom {
+  0%,
+  100% {
+    transform: translateY(2px) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-16px) rotate(1deg);
+  }
+}
+
+/* A leaf now and then: falls for the first part of its cycle, then waits off-screen. */
+@keyframes lively-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  3% {
+    opacity: 0.85;
+  }
+  42% {
+    opacity: 0.85;
+  }
+  46% {
+    opacity: 0;
+    transform: translateY(calc(100dvh + 80px));
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(calc(100dvh + 80px));
+  }
+}
+
+@keyframes lively-drift {
+  0%,
+  100% {
+    transform: translateX(-28px) rotate(-35deg);
+  }
+  50% {
+    transform: translateX(28px) rotate(35deg);
+  }
+}
+
+.lively-fall {
+  animation: lively-fall 24s linear infinite both;
+}
+
+.lively-drift {
+  animation: lively-drift 3.8s ease-in-out infinite;
+}
+
+/* The side and top bars: "deep forest", a dark green fading to navy, with white text. It
+   frames the pale page and its green vines without competing with them. */
+:root {
+  --rail-top: #25554e;
+  --rail-bottom: #17324d;
+  --rail-line: rgba(255, 255, 255, 0.12);
+}
+
+.chrome-bar {
+  background-color: var(--rail-top);
+  border-color: var(--rail-line);
+}
+
+.chrome-rail {
+  background-image: linear-gradient(180deg, var(--rail-top) 0%, var(--rail-bottom) 100%);
+  border-color: var(--rail-line);
+}
+
+/* A top bar that stands alone (the landing and login pages): the sidebar's fade, run left to right. */
+.chrome-bar-fade {
+  background-image: linear-gradient(90deg, var(--rail-top) 0%, var(--rail-bottom) 100%);
+}
+
+.chrome-rail .border-border,
+.chrome-bar .border-t.border-border {
+  border-color: var(--rail-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lively-flutter,
+  .lively-sway-side,
+  .lively-sway-bottom,
+  .lively-stem,
+  .lively-leaf,
+  .lively-glow {
+    animation: none;
+  }
+  .lively-stem {
+    stroke-dashoffset: 0;
+  }
+  .lively-fall {
+    display: none;
+  }
+}
+
 html {
   scroll-padding-top: 5rem;
   /* Keep the scrollbar's strip of width on every page, long or short. Without it a page

@@ -119,8 +119,16 @@ export function ReviewWorkspace({ attempt }: { attempt: Attempt }) {
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink">AI recommendation — not a certification</p>
+          {/* The summary is written to the caregiver ("You..."), so say whose words these are. */}
           <p className="mt-1 text-sm text-ink-secondary">
-            {attempt.overall_feedback || "The AI did not write a summary for this attempt."}
+            {attempt.overall_feedback ? (
+              <>
+                <span className="font-medium text-ink">What the caregiver was told: </span>
+                {attempt.overall_feedback}
+              </>
+            ) : (
+              "The AI did not write a summary for this attempt."
+            )}
           </p>
           {attempt.reasons.length ? (
             <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-ink-secondary">

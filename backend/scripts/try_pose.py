@@ -29,7 +29,8 @@ COLOURS = [(0, 200, 0), (0, 0, 230), (230, 120, 0), (200, 0, 200), (0, 200, 200)
 
 
 def get_video(filename: str) -> dict:
-    row = db.fetch_one("SELECT * FROM videos WHERE original_name=%s ORDER BY recorded_at DESC LIMIT 1", (filename,))
+    row = db.fetch_one("SELECT * FROM videos WHERE original_name=%s AND kind=%s ORDER BY recorded_at DESC LIMIT 1",
+                       (filename, "reference"))
     if row and Path(row["path"]).exists():
         return row
     return jobs.ingest(str(config.REFERENCE_DIR / filename), "reference", filename)

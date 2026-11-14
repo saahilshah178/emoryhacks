@@ -146,8 +146,11 @@ def score(rubric: Rubric, timeline: Timeline, evaluation: Evaluation, flags: lis
     which = " that were checked" if heard else " that were needed" if not_needed else ""
     if failed or unverified:
         qualifier = (" that was checked" if critical_heard else " that was needed" if critical_not_needed else "")
+        # Here every counted critical step passed, so the steps not passed are all among the others.
+        others = sum(1 for i in steps if i not in left_out and not steps[i].critical)
+        n = len(failed) + len(unverified)
         summary = (f"Every critical step{qualifier} met the criteria; "
-                   f"{len(failed) + len(unverified)} of {counted} other steps need another try or a clearer view.")
+                   f"{n} of the {others} other steps {'needs' if n == 1 else 'need'} another try or a clearer view.")
     else:
         summary = f"All the steps{which} met the criteria." if left_out else "All steps met the criteria."
     needs_review = (bool(unverified) or bool(critical_not_needed) or bool(critical_heard)

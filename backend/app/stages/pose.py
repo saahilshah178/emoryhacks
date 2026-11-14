@@ -27,6 +27,8 @@ from .. import config, db, gemini, pose_math, repo
 from ..models import PersonObs, PoseSummary, SafetyFlag
 from . import _fake
 
+ROLES_TIMEOUT_S = 90   # the call that matches people in still frames to their roles
+
 MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/"
              "float16/latest/pose_landmarker_full.task")
 NUM_POSES = 2
@@ -517,8 +519,10 @@ def _ask_roles(ctx, times: list[float], people: list[PersonObs]) -> dict[int, li
         "role = caregiver (the person giving help), patient (the person being helped) or other, "
         "and label = the matching label from the list above."
     ))
+    # A few still frames: it answers in seconds, so a request that hangs is given up on early
+    # and retried rather than holding a caregiver's result for the default ten minutes.
     reply = ctx.generate_json("pose_roles", parts, RoleFrames, model="main", thinking="low", max_output_tokens=3000,
-                              expect_output_tokens=800)
+                              expect_output_tokens=800, timeout=ROLES_TIMEOUT_S)
     out: dict[int, list[RoleBox]] = {}
     for frame in reply.images:
         out.setdefault(frame.image, [p for p in frame.people if len(p.box_2d) == 4])

@@ -1,7 +1,7 @@
 // The caregiver's result screen: result.html?id=<attempt_id>.
 // Polls the attempt while its job runs, then renders the overall result, the video,
 // one card per rubric step, safety flags and the people identified.
-import { api, qs, esc, fmtTime, fmtDate, badge, videoUrl, stagesHtml, showError } from "/js/common.js";
+import { api, qs, esc, fmtTime, fmtDate, badge, videoUrl, thumbUrl, stagesHtml, showError } from "/js/common.js";
 
 const HEADLINE = {
   passed: { title: "Passed", line: "Well done. You met the criteria for this skill." },
@@ -121,7 +121,7 @@ function render(a) {
   const violations = a.order_violations || [];
   app.innerHTML = `${headerHtml(a)}
     ${summaryHtml(a)}
-    <video id="player" controls preload="metadata" playsinline src="${videoUrl(a.video_id)}"></video>
+    <video id="player" controls preload="metadata" playsinline poster="${thumbUrl(a.video_id, 1)}" src="${videoUrl(a.video_id)}"></video>
     <p class="label">Steps</p>
     ${steps.map((s) => stepHtml(s, violations)).join("") || `<div class="notice">This skill has no steps.</div>`}
     <p class="label">Patient safety</p>

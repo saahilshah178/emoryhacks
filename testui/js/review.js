@@ -1,7 +1,7 @@
 // Nurse review screen: review.html?id=<attempt_id>.
 // The nurse verifies an attempt by jumping straight to each step, flag and order
 // violation instead of watching the whole video, then records a decision.
-import { api, badge, esc, fmtDate, fmtRange, fmtTime, mountNav, qs, showError, stagesHtml, videoUrl } from "/js/common.js";
+import { api, badge, esc, fmtDate, fmtRange, fmtTime, mountNav, qs, showError, stagesHtml, thumbUrl, videoUrl } from "/js/common.js";
 
 mountNav("attempts");
 
@@ -82,6 +82,7 @@ function render() {
   const a = state.attempt;
   document.title = `Review: ${a.skill_name} · FirstShift`;
   if (!state.loadedVideo) {
+    video.poster = thumbUrl(a.video_id, 1);
     video.src = videoUrl(a.video_id);
     state.loadedVideo = true;
     if (!a.reference_video_id) {

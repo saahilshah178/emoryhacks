@@ -1,6 +1,6 @@
 // Safety dashboard: every number comes from /api/safety/*, which reads Tiger Data.
 // Charts use uPlot (loaded as a global from jsDelivr in dashboard.html).
-import { api, mountNav, esc, fmtTime, fmtDate, badge, videoUrl, qs, showError } from "/js/common.js";
+import { api, mountNav, esc, fmtTime, fmtDate, badge, videoUrl, thumbUrl, qs, showError } from "/js/common.js";
 
 mountNav("dashboard");
 
@@ -126,6 +126,7 @@ async function openVideo(videoId, scroll) {
       summary.attempt?.caregiver_name && `caregiver ${summary.attempt.caregiver_name}`, fmtTime(v.duration_s),
       `${summary.segments} camera shot${summary.segments === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
     if (player.dataset.video !== videoId) {
+      player.poster = thumbUrl(videoId, 1);
       player.src = videoUrl(videoId);
       player.dataset.video = videoId;
     }

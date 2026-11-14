@@ -51,7 +51,7 @@
 </div>
 </main>
 <script type="module">
-import { api, esc, fmtTime, mountNav, qs, showError, videoUrl } from "/js/common.js";
+import { api, esc, fmtTime, mountNav, qs, showError, thumbUrl, videoUrl } from "/js/common.js";
 import { createRecorder, uploadAndWait } from "/js/recorder.js";
 
 mountNav("attempt");
@@ -83,7 +83,7 @@ async function showSkill(id) {
       ${skill.reference_video_id ? `
         <details class="reference">
           <summary>Watch the reference video (${fmtTime(skill.video?.duration_s)})</summary>
-          <video src="${videoUrl(skill.reference_video_id)}" controls preload="metadata" playsinline></video>
+          <video src="${videoUrl(skill.reference_video_id)}" poster="${thumbUrl(skill.reference_video_id, (skill.duration_s || 2) / 2)}" controls preload="metadata" playsinline></video>
         </details>` : ""}
       <p class="small"><a href="/skill.html?id=${esc(skill.id)}">Open the full skill page</a></p>`;
   } catch (err) {

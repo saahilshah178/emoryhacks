@@ -12,7 +12,8 @@ reference videos, each with a known expected outcome:
 
   uv run python -m scripts.e2e --skills sit_to_stand,glove_removal --cases self,missing,swapped,wrong
 
-Cut videos have no audio track, so spoken steps in them may come back unverified.
+Cut attempts end where the rubric's last step ends, so a replay later in the reference
+cannot put a removed step back.
 """
 from __future__ import annotations
 
@@ -37,8 +38,15 @@ def latest_skills() -> dict[str, dict]:
     return out
 
 
-def _segments_without(step: dict, duration: float) -> list[tuple[float, float]]:
-    parts = [(0.0, float(step["start_s"])), (float(step["end_s"]), duration)]
+def _last_step_end(skill: dict) -> float:
+    """Where the rubric's last step ends. Cut attempts stop here, because instructional
+    videos often replay a step from another angle afterwards, which would put a "removed"
+    step back into the attempt."""
+    return float(max(s["end_s"] for s in skill["steps"]))
+
+
+def _segments_without(step: dict, end: float) -> list[tuple[float, float]]:
+    parts = [(0.0, float(step["start_s"])), (float(step["end_s"]), end)]
     return [(a, b) for a, b in parts if b - a >= 0.5]
 
 
@@ -85,7 +93,7 @@ def build_case(skill: dict, case: str) -> dict | None:
         step = pick_missing(skill)
         if not step:
             return None
-        media.cut(ref_path, tmp, _segments_without(step, duration))
+        media.cut(ref_path, tmp, _segments_without(step, _last_step_end(skill)))
         return {"src": str(tmp), "missing_step": step["step_id"], "detail": f'cut "{step["title"]}"'}
     if case == "swapped":
         pair = pick_swap(skill)
@@ -93,7 +101,7 @@ def build_case(skill: dict, case: str) -> dict | None:
             return None
         m, s = pair
         parts = [(0.0, m["start_s"]), (s["start_s"], s["end_s"]), (m["end_s"], s["start_s"]),
-                 (m["start_s"], m["end_s"]), (s["end_s"], duration)]
+                 (m["start_s"], m["end_s"]), (s["end_s"], _last_step_end(skill))]
         media.cut(ref_path, tmp, [(float(a), float(b)) for a, b in parts if b - a >= 0.5])
         return {"src": str(tmp), "swapped": (s["step_id"], m["step_id"]),
                 "detail": f'"{s["title"]}" moved before "{m["title"]}"'}

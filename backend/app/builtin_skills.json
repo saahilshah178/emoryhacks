@@ -2701,7 +2701,7 @@
      "critical": false,
      "order_dependent": false,
      "must_follow": [],
-     "applies_when": "the caregiver starts the recording without gloves on",
+     "applies_when": "the caregiver's hands are bare when they first come into view",
      "evals": {
       "visual_cues": [
        "The caregiver stands at a sink rubbing soapy hands under running water."
@@ -2733,7 +2733,7 @@
      "must_follow": [
       "s1"
      ],
-     "applies_when": "the caregiver starts the recording without gloves on",
+     "applies_when": "the caregiver's hands are bare when they first come into view",
      "evals": {
       "visual_cues": [
        "The caregiver pulls blue gloves onto each hand and adjusts the cuffs over the sleeves."

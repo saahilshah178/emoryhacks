@@ -51,8 +51,10 @@ _START_RULES = [
 # from that answer (assess.conditional_status), so the rules here and the code agree.
 _NOT_NEEDED_RULES = [
     "- A step with an \"Only needed when\" line depends on that situation. situation_came_up,",
-    "  answered before the status, is whether it is seen to come up in the recording: \"yes\",",
-    "  \"no\", or \"cannot_tell\" when what is shown cannot settle it; null for every other step.",
+    "  answered before the status, is whether it is seen to come up in the recording: \"yes\"",
+    "  when the recording shows it, \"no\" when nothing in the recording shows it, and",
+    "  \"cannot_tell\" only when where it would show is hidden from the camera the whole time;",
+    "  null for every other step.",
     "  If the caregiver does such a step, grade it as usual. If not, it is not_applicable when the",
     "  situation does not come up (the evidence describes what shows it did not), failed when it",
     "  does, and unverified when you cannot tell. The recording ending before such a step is not",

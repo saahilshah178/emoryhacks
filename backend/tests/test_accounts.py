@@ -58,6 +58,8 @@ def graded(migrated, sample_video):
         import time
         time.sleep(0.2)
     assert job["status"] == "done", job
+    # the caregiver sends it to the nurse (the canned score is under the bar; see test_submissions.py)
+    db.execute("UPDATE attempts SET submitted_at=now() WHERE id=%s", (body["attempt_id"],))
     return {"skill_id": str(skill_id), "attempt_id": body["attempt_id"], "video_id": body["video_id"],
             "caregiver": caregiver, "caregiver_client": caregiver_client}
 
@@ -258,7 +260,8 @@ def test_caregiver_guide_falls_back_to_the_rubric_and_can_be_overridden(graded):
 # --- derived states (app/progress.py) ---------------------------------------------------------
 def _attempt(n: int, *, status="passed", nurse=None, reviewed=False, job="done", flags=0) -> dict:
     created = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc) + dt.timedelta(days=n)
-    row = {"id": f"a{n}", "created_at": created, "status": status, "nurse_status": nurse, "job_status": job,
+    row = {"id": f"a{n}", "created_at": created, "submitted_at": created, "status": status, "nurse_status": nurse,
+           "job_status": job,
            "reviewed_at": created + dt.timedelta(hours=1) if reviewed else None, "flag_count": flags}
     return progress.describe(row)
 

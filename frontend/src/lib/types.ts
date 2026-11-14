@@ -4,9 +4,89 @@
 
 export type Role = "nurse" | "caregiver";
 export type Status = "passed" | "failed" | "unverified";
-export type ReviewState = "processing" | "error" | "pending" | "approved" | "retraining";
+/**
+ * unsubmitted: graded, the caregiver has not sent it to a nurse.
+ * pending: sent, waiting for a nurse, and the caregiver's latest submission for the skill.
+ * superseded: sent and not reviewed, but the caregiver has sent a newer one for the same skill.
+ */
+export type ReviewState =
+  | "processing"
+  | "error"
+  | "unsubmitted"
+  | "pending"
+  | "superseded"
+  | "approved"
+  | "retraining";
 export type AiAssessment = "passed" | "needs_review" | "not_passed" | "safety_concern";
-export type SkillState = "not_started" | "in_review" | "needs_practice" | "verified";
+/** practicing: recorded since the nurse's last decision (or ever), nothing of it sent yet. */
+export type SkillState = "not_started" | "practicing" | "in_review" | "needs_practice" | "verified";
+export type SubmitKind = "standard" | "forced";
+/** inherit: the skill's own limit. limited: this caregiver's max_attempts. unlimited: no limit. */
+export type LimitMode = "inherit" | "limited" | "unlimited";
+
+/** The nurse's rules for a skill (shared by every version of it). */
+export type SkillPolicy = {
+  /** Attempts each caregiver gets, 1..50. Null means unlimited (the default). */
+  max_attempts: number | null;
+  /** Score from which a caregiver can send an attempt (default 80). */
+  submit_pct: number;
+  /** Score from which they can send it anyway, with a note (default 50). force_pct <= submit_pct. */
+  force_pct: number;
+  /** True: every caregiver of the agency has the skill. False: only the caregivers picked. */
+  assign_all: boolean;
+};
+
+/** Whether the caregiver can send an attempt, and a sentence for them saying why (or why not). */
+export type Submission = {
+  can_submit: boolean;
+  /** Only "send anyway", with force: true and a note of at least 10 characters. */
+  can_force: boolean;
+  submit_pct: number;
+  force_pct: number;
+  reason: string;
+};
+
+/** Attempts used and left. allowed and left are null when unlimited (all null for a nurse's upload). */
+export type AttemptAllowance = { used: number | null; allowed: number | null; left: number | null };
+
+/** POST /attempts/{id}/submit */
+export type SubmitRequest = { force?: boolean; note?: string };
+
+/** PUT /skills/{id}/policy. Fields left out keep their value; max_attempts null means unlimited. */
+export type SkillPolicyUpdate = Partial<SkillPolicy> & {
+  /** Replaces the picked caregivers when assign_all is false. */
+  assigned_ids?: string[];
+};
+
+/** PATCH /caregivers/{id}/skills/{skill_id} */
+export type CaregiverSkillPatch = {
+  assigned?: boolean;
+  limit_mode?: LimitMode;
+  /** 1..50; sent alone it means limit_mode "limited". */
+  max_attempts?: number;
+  /** k more attempts: limited, with max_attempts = max(allowed, used) + k. Ignored when unlimited. */
+  grant?: number;
+};
+
+/** One caregiver's assignment, limit and standing on one skill. */
+export type CaregiverSkillLimits = {
+  assigned: boolean;
+  limit_mode: LimitMode;
+  /** The caregiver's own limit; set only when limit_mode is "limited". */
+  max_attempts: number | null;
+  attempts_used: number;
+  /** Null means unlimited. */
+  attempts_allowed: number | null;
+  attempts_left: number | null;
+};
+
+/** GET and PUT /skills/{id}/policy */
+export type SkillPolicyView = SkillPolicy & {
+  skill_id: string;
+  slug: string;
+  /** Every caregiver of the agency, by name. */
+  caregivers: Array<CaregiverSkillLimits & { id: string; name: string; title: string; state: SkillState }>;
+};
 
 export type Prefs = { safety: boolean; submissions: boolean; digest: boolean };
 
@@ -88,6 +168,9 @@ export type SkillSummary = {
   duration_s: number | null;
   step_count: number;
   attempt_count: number;
+  /** Attempts at this version that were sent to a nurse (or uploaded by one). */
+  submission_count: number;
+  policy: SkillPolicy & { assigned_count: number };
 };
 
 export type SkillVersion = {
@@ -98,7 +181,8 @@ export type SkillVersion = {
   attempt_count: number;
 };
 
-export type Skill = Omit<SkillSummary, "duration_s" | "step_count" | "attempt_count"> & {
+export type Skill = Omit<SkillSummary, "duration_s" | "step_count" | "attempt_count" | "submission_count" | "policy"> & {
+  policy: SkillPolicy;
   safety_criteria: string[];
   people: Person[];
   notes: string;
@@ -109,13 +193,21 @@ export type Skill = Omit<SkillSummary, "duration_s" | "step_count" | "attempt_co
   versions: SkillVersion[];
 };
 
-/** A caregiver's own view of a skill (GET /my/skills). */
-export type MySkill = SkillSummary & {
+/** A caregiver's own view of a skill they are assigned (GET /my/skills). */
+export type MySkill = Omit<SkillSummary, "policy"> & {
   state: SkillState;
   /** The attempt whose result explains the state; null when not started. */
   attempt_id: string | null;
   latest_attempt_id: string | null;
   attempts: number;
+  /** Attempts used since the nurse's last retraining decision (all, if none); failed processing never counts. */
+  attempts_used: number;
+  /** Null means unlimited. */
+  attempts_allowed: number | null;
+  attempts_left: number | null;
+  policy: Pick<SkillPolicy, "submit_pct" | "force_pct">;
+  /** Best-scoring attempt since the last decision that is not sent yet and can be sent normally. */
+  ready_attempt_id: string | null;
 };
 
 export type MySkills = {
@@ -167,7 +259,31 @@ export type AttemptSummary = {
   ai_assessment: AiAssessment | null;
   /** The nurse's decision when there is one, otherwise the AI's result. */
   final_status: Status | null;
+  /** False when the recording does not show the skill it was recorded for. */
+  skill_match: boolean | null;
+  /** When it was sent to a nurse. Null while the caregiver has not sent it. */
+  submitted_at: string | null;
+  /** "forced": sent under submit_pct because the caregiver disagreed with the automatic check. */
+  submit_kind: SubmitKind | null;
+  /** The caregiver's note when sending (always there for a forced one). */
+  submit_note: string;
+  submission: Submission;
 };
+
+/** One of the caregiver's other attempts at the same skill (any version), in Attempt.history. */
+export type AttemptHistoryItem = Pick<
+  AttemptSummary,
+  | "id"
+  | "created_at"
+  | "submitted_at"
+  | "submit_kind"
+  | "score_pct"
+  | "status"
+  | "final_status"
+  | "review_state"
+  | "skill_id"
+  | "skill_version"
+>;
 
 export type AttemptStep = Omit<SkillStep, "start_s" | "end_s"> & {
   /** Where the step is in the reference video. */
@@ -222,9 +338,12 @@ export type MovementNote = { label: string; value: number; status: Status; note:
 export type Attempt = AttemptSummary & {
   reasons: string[];
   people: Person[];
-  /** False when the recording does not show the skill it was submitted for. */
-  skill_match: boolean | null;
   skill_match_note: string;
+  policy: Pick<SkillPolicy, "max_attempts" | "submit_pct" | "force_pct">;
+  /** For this caregiver and skill. */
+  attempts: AttemptAllowance;
+  /** The same caregiver's other attempts at this skill, newest first. Empty for a nurse's upload. */
+  history: AttemptHistoryItem[];
   order_matters: boolean;
   reference_video_id: string | null;
   steps: AttemptStep[];
@@ -247,26 +366,37 @@ export type CaregiverRow = {
   /** "restricted" while an attempt with a safety concern is waiting for a nurse. */
   status: "onboarding" | "active" | "restricted";
   next_shift: string;
+  /** Skills assigned to this caregiver. */
   skills_total: number;
   skills_verified: number;
   skills_in_review: number;
+  /** Flags on their latest waiting submissions. */
   open_flags: number;
+  /** When they last sent an attempt to a nurse. */
   last_submission_at: string | null;
+  /** Their most recently sent attempt that is waiting for a nurse. */
   pending_attempt_id: string | null;
+  /** Every attempt they recorded, sent or not. */
   attempt_count: number;
 };
 
 export type CaregiverDetail = CaregiverRow & {
-  skills: Array<{
-    skill_id: string;
-    slug: string;
-    name: string;
-    category: string;
-    state: SkillState;
-    attempt_id: string | null;
-    latest_attempt_id: string | null;
-    attempts: number;
-  }>;
+  /** Assigned skills only. */
+  skills: Array<
+    CaregiverSkillLimits & {
+      skill_id: string;
+      slug: string;
+      name: string;
+      category: string;
+      state: SkillState;
+      attempt_id: string | null;
+      latest_attempt_id: string | null;
+      attempts: number;
+    }
+  >;
+  /** The agency's skills not assigned to this caregiver. */
+  unassigned_skills: Array<{ skill_id: string; slug: string; name: string; category: string }>;
+  /** Every attempt they made, newest first, including ones not sent and replaced ones. */
   attempts: AttemptSummary[];
 };
 
@@ -275,9 +405,12 @@ export type ActivityEvent = {
   type: "submission" | "safety" | "approval" | "retraining" | "first_assessment";
   message: string;
   detail: string;
+  /** When the attempt was sent (or, for approval and retraining, decided). */
   time: string;
   attempt_id: string;
   caregiver_id: string | null;
+  /** The attempt was sent anyway, under the skill's submit_pct, with a note. */
+  forced: boolean;
 };
 
 export type AppNotification = {
@@ -288,6 +421,8 @@ export type AppNotification = {
   time: string;
   unread: boolean;
   attempt_id: string | null;
+  /** A submission sent anyway, under the skill's submit_pct, with a note. */
+  forced: boolean;
 };
 
 export type Overview = {
@@ -295,10 +430,12 @@ export type Overview = {
   counts: {
     caregivers: number;
     skills: number;
+    /** Latest waiting submission per caregiver and skill. */
     pending: number;
     verified: number;
     /** Pending attempts that carry a safety flag. */
     safety_flags: number;
+    /** Attempts sent to a nurse that are still being graded (a nurse's own uploads); never caregivers' unsent practice. */
     processing: number;
   };
   /** Share of all caregiver-skill pairs a nurse has approved. Null with no caregivers or skills. */

@@ -154,6 +154,24 @@ CREATE TABLE IF NOT EXISTS gemini_calls (
   created_at      timestamptz NOT NULL DEFAULT now()
 );
 -- @@
+-- First 8 hex digits of the SHA-256 of the API key that made the call (never the key), so
+-- GEMINI_BUDGET_USD applies to the key in use. NULL: logged before this existed (an older key).
+ALTER TABLE gemini_calls ADD COLUMN IF NOT EXISTS key_id text;
+-- @@
+CREATE INDEX IF NOT EXISTS gemini_calls_key_idx ON gemini_calls (key_id);
+-- @@
+-- A job's own spend, and the replies a resumed job reuses instead of paying for them again.
+CREATE INDEX IF NOT EXISTS gemini_calls_job_idx ON gemini_calls (job_id, purpose);
+-- @@
+-- Which key uploaded the cached Gemini file: a file uploaded with another key is not visible.
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS gemini_file_key text;
+-- @@
+-- How many times a job was resumed after a server restart, and what a resumed job needs that
+-- is not stored elsewhere (the pose summary, a reference job's classification and rubric).
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS resumes integer NOT NULL DEFAULT 0;
+-- @@
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS checkpoint jsonb NOT NULL DEFAULT '{}';
+-- @@
 -- One row per tracked person per video. person_idx is unique within a video
 -- (a new track after a camera cut gets a new person_idx).
 CREATE TABLE IF NOT EXISTS pose_tracks (

@@ -6,6 +6,7 @@ import { formatDate, plural, relativeTime } from "@/lib/format";
 import { useApi, useTitle } from "@/lib/hooks";
 import { caregiverStatus } from "@/lib/status";
 import type { CaregiverRow } from "@/lib/types";
+import { PageHeading } from "@/nurse/components/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useUser } from "@/shared/AuthProvider";
 
@@ -18,10 +19,10 @@ export default function CaregiversPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
-      <p className="text-sm text-ink-secondary">
-        Competency progress across {agency}. A caregiver is restricted while a safety concern from one of their
-        submissions is waiting for review.
-      </p>
+      <PageHeading
+        title="Caregivers"
+        description={`Competency progress across ${agency}. A caregiver is restricted while a safety concern from one of their submissions is waiting for review.`}
+      />
 
       <Loadable
         data={roster.data}

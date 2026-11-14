@@ -97,11 +97,11 @@ function ReviewHeader({ attempt }: { attempt: Attempt }) {
       <div className="flex min-w-0 items-start gap-3">
         <Avatar name={caregiver} size="lg" />
         <div className="min-w-0">
-          <h2 className="text-xl font-semibold text-navy">
+          <h1 className="text-xl font-semibold text-navy">
             <Link href={`/dashboard/skills/${attempt.skill_id}`} className="hover:text-teal hover:underline">
               {attempt.skill_name}
             </Link>
-          </h2>
+          </h1>
           <p className="mt-1 text-sm text-ink-secondary">
             {attempt.caregiver_id ? (
               <Link href={`/dashboard/caregivers/${attempt.caregiver_id}`} className="font-medium text-ink hover:text-teal hover:underline">

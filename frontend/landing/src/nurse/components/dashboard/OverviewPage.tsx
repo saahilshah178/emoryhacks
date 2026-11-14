@@ -9,6 +9,7 @@ import { PendingReviewsTable } from "@/nurse/components/dashboard/PendingReviews
 import { ProcessingAttempts } from "@/nurse/components/dashboard/ProcessingAttempts";
 import { RecentActivity } from "@/nurse/components/dashboard/RecentActivity";
 import { SafetyOverview } from "@/nurse/components/dashboard/SafetyOverview";
+import { PageHeading } from "@/nurse/components/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useUser } from "@/shared/AuthProvider";
 import { APP_NAME } from "@/shared/brand";
@@ -24,26 +25,31 @@ export function OverviewPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm text-ink-secondary">
-            {overview?.agency ?? user.org.name} · {user.title || "Nurse"}
-          </p>
-          <p className="mt-1 max-w-2xl text-sm text-ink-secondary">
-            {APP_NAME} prepares caregiver demonstrations for your review. AI flags missed steps; you remain the only
-            person who can approve a skill.
-          </p>
-        </div>
-        {pendingCount === undefined ? null : pendingCount > 0 ? (
-          <p className="rounded-full bg-warning-bg px-3 py-1 text-xs font-medium text-warning">
-            {pendingCount === 1 ? "1 submission needs" : `${pendingCount} submissions need`} a nurse decision
-          </p>
-        ) : (
-          <p className="rounded-full bg-success-bg px-3 py-1 text-xs font-medium text-success">
-            No submissions waiting for a decision
-          </p>
-        )}
-      </div>
+      <PageHeading
+        title="Clinical dashboard"
+        description={
+          <>
+            <p>
+              {overview?.agency ?? user.org.name} · {user.title || "Nurse"}
+            </p>
+            <p className="mt-1">
+              {APP_NAME} prepares caregiver demonstrations for your review. AI flags missed steps; you remain the only
+              person who can approve a skill.
+            </p>
+          </>
+        }
+        actions={
+          pendingCount === undefined ? null : pendingCount > 0 ? (
+            <p className="rounded-full bg-warning-bg px-3 py-1 text-xs font-medium text-warning">
+              {pendingCount === 1 ? "1 submission needs" : `${pendingCount} submissions need`} a nurse decision
+            </p>
+          ) : (
+            <p className="rounded-full bg-success-bg px-3 py-1 text-xs font-medium text-success">
+              No submissions waiting for a decision
+            </p>
+          )
+        }
+      />
 
       <KpiCards />
 

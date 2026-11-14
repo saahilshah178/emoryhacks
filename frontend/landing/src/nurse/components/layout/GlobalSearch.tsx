@@ -252,14 +252,14 @@ export function GlobalSearch({ onOpen, className }: { onOpen?: () => void; class
         onClick={show}
         onKeyDown={onKeyDown}
         placeholder="Search caregivers, skills, or submissions"
-        className="h-10 w-full rounded-[12px] border border-border bg-secondary pl-9 pr-3 text-sm text-ink outline-none placeholder:text-ink-secondary focus:border-teal focus:bg-white focus:ring-2 focus:ring-teal/20"
+        className="h-10 w-full rounded-full border border-border bg-secondary pl-9 pr-3 text-sm text-ink outline-none placeholder:text-ink-secondary focus:border-teal focus:bg-white focus:ring-2 focus:ring-teal/20"
       />
 
       {open ? (
         <div
           // Keeps the cursor in the box while a result is clicked, so the list does not close first.
           onMouseDown={(event) => event.preventDefault()}
-          className="absolute right-0 top-full z-40 mt-2 w-[28rem] min-w-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]"
+          className="absolute left-0 top-full z-40 mt-2 w-[28rem] min-w-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]"
         >
           <div id={listId} role="listbox" aria-label="Search results" className="max-h-[min(70vh,30rem)] overflow-y-auto p-1.5">
             {groups.map((item, at) => (

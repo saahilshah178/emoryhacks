@@ -8,6 +8,7 @@ import { useApi, useTitle } from "@/lib/hooks";
 import type { AiAssessment, AttemptSummary } from "@/lib/types";
 import { PendingReviewsTable } from "@/nurse/components/dashboard/PendingReviewsTable";
 import { ProcessingAttempts } from "@/nurse/components/dashboard/ProcessingAttempts";
+import { PageHeading } from "@/nurse/components/layout/PageHeading";
 
 type Filter = "all" | AiAssessment;
 
@@ -29,9 +30,10 @@ export default function PendingPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
-      <p className="text-sm text-ink-secondary">
-        AI assessments sort the work. Certification happens only after you approve or request retraining.
-      </p>
+      <PageHeading
+        title="Pending reviews"
+        description="AI assessments sort the work. Certification happens only after you approve or request retraining."
+      />
 
       <Loadable
         data={pending.data}

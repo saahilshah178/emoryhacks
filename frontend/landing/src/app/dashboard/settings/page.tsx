@@ -17,6 +17,7 @@ import {
 import { api, errorMessage } from "@/lib/api";
 import { useApi, useTitle } from "@/lib/hooks";
 import type { Health, Prefs, User } from "@/lib/types";
+import { PageHeading } from "@/nurse/components/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useAuth, useUser } from "@/shared/AuthProvider";
 import { APP_NAME } from "@/shared/brand";
@@ -58,7 +59,7 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
-      <p className="text-sm text-ink-secondary">Your profile, your agency and how {APP_NAME} is running.</p>
+      <PageHeading title="Settings" description={`Your profile, your agency and how ${APP_NAME} is running.`} />
       <ProfileCard />
       <AgencyCard />
       <NotificationsCard />

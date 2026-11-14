@@ -15,6 +15,13 @@ function isActive(pathname: string, item: NavItem) {
   return under(pathname, item.href) || (item.also ?? []).some((href) => under(pathname, href));
 }
 
+function itemClass(active: boolean) {
+  return cn(
+    "relative flex h-11 items-center gap-3 rounded-[12px] px-3 text-sm font-medium transition-colors",
+    active ? "bg-teal-soft text-teal" : "text-navy hover:bg-secondary",
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const { overview } = useDashboard();
@@ -26,8 +33,8 @@ export function Sidebar() {
   const SettingsIcon = settingsNav.icon;
 
   return (
-    <aside className="flex h-full w-[72px] shrink-0 flex-col overflow-y-auto bg-navy text-white lg:w-[248px]">
-      <nav className="mt-3 flex flex-1 flex-col gap-1 px-2" aria-label="Clinical">
+    <aside className="flex min-h-0 flex-1 flex-col overflow-y-auto text-navy">
+      <nav className="flex flex-1 flex-col gap-1 px-2 pt-2" aria-label="Clinical">
         {primaryNav.map((item) => {
           const active = isActive(pathname, item);
           const count = item.badge ? counts[item.badge] : 0;
@@ -39,16 +46,12 @@ export function Sidebar() {
               title={item.label}
               aria-current={active ? "page" : undefined}
               aria-label={count > 0 ? `${item.label}, ${count}` : item.label}
-              className={cn(
-                "group relative flex h-11 items-center gap-3 rounded-[12px] px-3 text-sm transition-colors",
-                active ? "bg-white/10 text-white" : "text-white/70 hover:bg-white/5 hover:text-white",
-              )}
+              className={itemClass(active)}
             >
-              {active ? <span className="absolute bottom-2 left-0 top-2 w-0.5 rounded-full bg-teal" /> : null}
               <span className="relative">
-                <Icon className={cn("h-[18px] w-[18px] shrink-0", active && "text-teal")} />
+                <Icon className="h-[18px] w-[18px] shrink-0" />
                 {count > 0 ? (
-                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-teal ring-2 ring-navy lg:hidden" aria-hidden />
+                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-teal ring-2 ring-white lg:hidden" aria-hidden />
                 ) : null}
               </span>
               <span className="hidden truncate lg:inline">{item.label}</span>
@@ -62,18 +65,14 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="px-2 pb-4">
+      <div className="border-t border-border px-2 py-3">
         <Link
           href={settingsNav.href}
           title={settingsNav.label}
           aria-current={settingsActive ? "page" : undefined}
-          className={cn(
-            "relative flex h-11 items-center gap-3 rounded-[12px] px-3 text-sm transition-colors",
-            settingsActive ? "bg-white/10 text-white" : "text-white/70 hover:bg-white/5 hover:text-white",
-          )}
+          className={itemClass(settingsActive)}
         >
-          {settingsActive ? <span className="absolute bottom-2 left-0 top-2 w-0.5 rounded-full bg-teal" /> : null}
-          <SettingsIcon className={cn("h-[18px] w-[18px] shrink-0", settingsActive && "text-teal")} />
+          <SettingsIcon className="h-[18px] w-[18px] shrink-0" />
           <span className="hidden lg:inline">{settingsNav.label}</span>
         </Link>
       </div>

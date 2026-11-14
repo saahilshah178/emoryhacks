@@ -1,42 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Settings } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Avatar } from "@/components/ui";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { relativeTime } from "@/lib/format";
+import { SEARCH_ALIGN } from "@/nurse/components/layout/chrome";
 import { GlobalSearch } from "@/nurse/components/layout/GlobalSearch";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useAuth, useUser } from "@/shared/AuthProvider";
-import { Logo } from "@/shared/Logo";
-
-const titles: Record<string, string> = {
-  "/dashboard": "Clinical dashboard",
-  "/dashboard/pending": "Pending reviews",
-  "/dashboard/caregivers": "Caregivers",
-  "/dashboard/skills": "Skills",
-  "/dashboard/skills/new": "New skill",
-  "/dashboard/verified": "Verified skills",
-  "/dashboard/safety": "Safety reports",
-  "/dashboard/settings": "Settings",
-};
-
-function titleFor(pathname: string) {
-  const path = pathname.replace(/\/+$/, "") || "/dashboard";
-  if (titles[path]) return titles[path];
-  if (path.startsWith("/dashboard/reviews/")) return "Skill review";
-  if (path.startsWith("/dashboard/caregivers/")) return "Caregiver";
-  if (path.startsWith("/dashboard/safety/videos/")) return "Movement detail";
-  if (path.startsWith("/dashboard/safety/")) return "Safety reports";
-  if (path.startsWith("/dashboard/skills/")) return "Skill";
-  return "Clinical dashboard";
-}
 
 export function TopNav() {
-  const pathname = usePathname();
   const { overview, reloadOverview } = useDashboard();
   const { signOut } = useAuth();
   const user = useUser();
@@ -51,8 +27,6 @@ export function TopNav() {
 
   const notifications = overview?.notifications ?? [];
   const unread = overview?.unread ?? 0;
-  const path = pathname.replace(/\/+$/, "") || "/dashboard";
-  const title = titleFor(path);
   const roleLine = [user.credentials, user.title].filter(Boolean).join(" · ") || "Nurse";
 
   useEffect(() => {
@@ -90,14 +64,15 @@ export function TopNav() {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 border-b border-border bg-white px-4 md:px-6">
-      <Logo href="/dashboard" />
-      <span className="hidden h-6 w-px shrink-0 bg-border sm:block" aria-hidden />
-      <h1 className="min-w-0 truncate text-lg font-semibold text-navy">{title}</h1>
+    <header
+      className={cn(
+        "sticky top-0 z-30 flex h-16 shrink-0 items-center gap-4 bg-white pr-4 md:pr-6",
+        SEARCH_ALIGN,
+      )}
+    >
+      <GlobalSearch className="hidden min-w-0 max-w-2xl flex-1 sm:block" onOpen={() => setMenu(null)} />
 
-      <GlobalSearch className="ml-auto hidden w-56 sm:block lg:w-72 xl:w-96" onOpen={() => setMenu(null)} />
-
-      <div className="relative ml-auto sm:ml-0" ref={notificationsRef}>
+      <div className="relative ml-auto" ref={notificationsRef}>
         <button
           type="button"
           onClick={toggleNotifications}
@@ -161,7 +136,7 @@ export function TopNav() {
           aria-haspopup="menu"
           aria-controls={accountMenuId}
           onClick={() => setMenu((current) => (current === "account" ? null : "account"))}
-          className="flex shrink-0 items-center gap-2.5 rounded-[12px] p-1 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 md:pr-2"
+          className="flex shrink-0 items-center gap-2.5 rounded-[12px] py-1 pl-3 pr-1 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/30 md:pr-2"
         >
           <span className="hidden max-w-[180px] text-right md:block">
             <span className="block truncate text-sm font-medium text-ink">{user.name}</span>

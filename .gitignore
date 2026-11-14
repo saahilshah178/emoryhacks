@@ -1,0 +1,25 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# runtime data (uploaded/recorded videos, thumbnails, model files)
+data/
+*.task
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# node
+node_modules/
+dist/
+.vite/
+
+# worktrees and editor/OS noise
+.worktrees/
+.claude/
+.DS_Store

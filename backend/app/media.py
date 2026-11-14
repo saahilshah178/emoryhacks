@@ -64,6 +64,30 @@ def probe(path: str | Path) -> dict:
     return info
 
 
+def has_audio(path: str | Path) -> bool:
+    """True when the file has an audio stream."""
+    return bool(re.search(r"Stream #.*Audio:", _ffmpeg_header(path)))
+
+
+def strip_audio(src: str | Path, dst: str | Path) -> None:
+    """Write a copy of src at dst with no audio track. The video is copied as it is (no
+    re-encode), so this takes a moment. Raises MediaError, and leaves no file at dst, if the
+    copy cannot be made or still has sound."""
+    src, dst = Path(src), Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        proc = _run(["-i", str(src), "-map", "0:v:0", "-c", "copy", "-an", "-movflags", "+faststart",
+                     "-y", str(dst)], timeout=300)
+        ok = proc.returncode == 0 and dst.exists() and dst.stat().st_size > 0 and not has_audio(dst)
+    except (OSError, subprocess.SubprocessError) as exc:
+        dst.unlink(missing_ok=True)
+        raise MediaError("The video could not be prepared for checking. Please send it again.") from exc
+    if not ok:
+        detail = proc.stderr[-300:]
+        dst.unlink(missing_ok=True)
+        raise MediaError(f"The video could not be prepared for checking. Please send it again.\n{detail}")
+
+
 def mp4_boxes(path: str | Path) -> list[str]:
     """Names of the top-level boxes of an MP4/MOV file in file order ([] for other formats).
 

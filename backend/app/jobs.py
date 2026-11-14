@@ -97,9 +97,15 @@ class StageContext:
         """What this job has spent on Gemini so far."""
         return gemini.job_spent_usd(self.job_id)
 
+    @property
+    def hears_sound(self) -> bool:
+        """False for a caregiver's attempt: Gemini gets it without its audio track."""
+        return self.video.get("kind") != "attempt"
+
     def estimate(self, parts: list[dict], model: str = "main", output_tokens: int | None = None) -> float:
         """Rough cost of sending parts, with output_tokens of thinking and reply."""
-        return gemini.estimate_usd(parts, model, output_tokens or gemini.DEFAULT_EXPECTED_OUTPUT, self.duration)
+        return gemini.estimate_usd(parts, model, output_tokens or gemini.DEFAULT_EXPECTED_OUTPUT, self.duration,
+                                   audio=self.hears_sound)
 
     def affordable(self, estimate_usd: float) -> bool:
         """True when an optional call costing about estimate_usd fits in the job's allowance."""

@@ -31,6 +31,19 @@ If `DATABASE_URL` is empty or is not a `postgres://` URL, the app falls back to 
 
 Gemini calls stop when the spend recorded in the database reaches `GEMINI_BUDGET_USD` (default 14). The home page shows how much is used.
 
+## Web app
+
+The product UI is a Next.js app in `frontend/landing`: marketing page, login, caregiver portal and nurse dashboard on one port.
+
+```bash
+npm install --prefix frontend/landing
+npm run dev               # http://localhost:3000
+```
+
+- Landing: `/`
+- Caregiver portal: `/portal`
+- Nurse dashboard: `/dashboard`
+
 ## How it works
 
 **Reference video (nurse).** Every upload is converted to a seekable H.264 MP4, then:

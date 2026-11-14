@@ -18,9 +18,13 @@ __pycache__/
 node_modules/
 dist/
 .vite/
+.next/
+*.log
 
 # worktrees and editor/OS noise
 .worktrees/
 .claude/
 .gstack/
+.cursor/
+.impeccable
 .DS_Store

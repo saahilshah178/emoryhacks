@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --navy: #17324d;
+  --teal: #238c91;
+  --teal-soft: #e6f3f2;
+  --bg: #f7f9fb;
+  --card: #ffffff;
+  --bg-secondary: #eef3f6;
+  --border: #e1e8ed;
+  --text: #243746;
+  --text-secondary: #4a5f72;
+  --text-muted: #4a5f72;
+  --success: #21966b;
+  --success-bg: #e8f5ef;
+  --warning: #d99a32;
+  --warning-bg: #fff5e3;
+  --error: #d9534f;
+  --error-bg: #fcedec;
+  --info: #3979b9;
+  --info-bg: #eaf2fa;
+  --teal-hover: #1c7478;
+  --ink: #243746;
+  --ink-secondary: #4a5f72;
+  --ink-muted: #4a5f72;
+  --page: #f7f9fb;
+  --secondary: #eef3f6;
+  --danger: #d9534f;
+  --danger-bg: #fcedec;
+  --shadow-card: 0 1px 2px rgba(23, 50, 77, 0.05), 0 8px 24px rgba(23, 50, 77, 0.04);
+}
+
+@theme inline {
+  --color-navy: var(--navy);
+  --color-teal: var(--teal);
+  --color-teal-soft: var(--teal-soft);
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-error: var(--error);
+  --color-error-bg: var(--error-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --color-teal-hover: var(--teal-hover);
+  --color-ink: var(--ink);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+  --color-page: var(--page);
+  --color-secondary: var(--secondary);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --font-sans: var(--font-inter);
+  --shadow-card: var(--shadow-card);
+  --radius-card: 12px;
+}
+
+html,
+body {
+  background: var(--bg);
+  caret-color: var(--teal);
+  color: var(--text);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+::selection {
+  background: var(--teal-soft);
+  color: var(--navy);
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}

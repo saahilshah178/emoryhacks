@@ -92,14 +92,14 @@ A request that grades an attempt is given up on and retried after 240 seconds fo
 | --- | --- |
 | Log in, log out | `/login`, the account menu |
 | Record or upload a reference video; detect the skill; write steps and criteria | Dashboard → Skills → New skill |
-| Skill with timestamped steps, criteria, versions | Dashboard → Skills → a skill |
-| Edit a skill, its steps, criteria, prerequisites and caregiver-facing text | "Edit skill" on a skill |
+| Skill with timestamped steps, criteria, each step's "only needed when" condition, versions, the notes from building the steps, and a warning beside any criterion the check will skip because it is about something said | Dashboard → Skills → a skill |
+| Edit a skill, its steps, criteria, prerequisites, "only needed when" conditions and caregiver-facing text | "Edit skill" on a skill |
 | Rebuild steps as a new version, add a new reference, delete a version | Actions on a skill |
 | Attempts allowed, who a skill is assigned to, the scores needed to send a recording | "Attempts and sending" on a skill |
 | Record or upload an attempt; grading progress; attempts left | Portal → a skill → the practice flow |
 | A caregiver's result: score against the bar, send or send anyway, step feedback, time ranges, safety notes, earlier attempts, nurse decision | Portal → a skill → results |
 | Review queue: the latest recording each caregiver sent for each skill | Dashboard → Overview and Pending reviews |
-| Review an attempt: video, reference, step timeline, per-step override, decision, the caregiver's other recordings | Dashboard → a review |
+| Review an attempt: video, reference, step timeline, per-step override (passed, failed, needs review or not needed), decision, the caregiver's other recordings, and which version of the skill it was graded against | Dashboard → a review |
 | Roster with progress; a caregiver's skills, attempts used and allowed, and history | Dashboard → Caregivers |
 | Approved competencies | Dashboard → Verified skills |
 | Safety patterns, open safety issues | Dashboard → Overview and Safety reports |
@@ -151,12 +151,12 @@ All routes are under `/api`, return JSON, and need a session (cookie, or `Author
 | `POST /videos` | Multipart upload: `file`, `kind` (`reference`, nurses only, or `attempt`), and for an attempt `skill_id`. Returns `{video_id, job_id, attempt_id}`. A caregiver is refused when the skill is not assigned to them (403) or they have no attempts left (409). |
 | `GET /jobs/{id}` | Pipeline progress: `status` (`queued`, `running`, `done`, `error`), `stages[]`, `error`, `skill_id`, `attempt_id`. Poll until done. |
 | `GET /skills` | Newest version of each skill. `?all=1` for every version. |
-| `GET /skills/{id}` | The skill with `steps[]`, `people`, `safety_criteria`, `guide` (caregiver-facing text and recording prompts), `video`, `versions[]` and `latest_id` |
+| `GET /skills/{id}` | The skill with `steps[]` (each with `applies_when`, and `unheard`: the criteria the check will skip because they are about something said), `people`, `safety_criteria`, `notes`, `guide` (caregiver-facing text and recording prompts), `video`, `versions[]` and `latest_id` |
 | `PATCH /skills/{id}`, `PATCH /skills/{id}/steps/{step_id}` | Edit a skill or a step, including its criteria, `must_follow` and `applies_when`, the situation the step is needed in (an empty string makes it always needed) (nurse) |
 | `POST /skills/{id}/regenerate`, `DELETE /skills/{id}` | Rebuild the rubric as a new version; delete a version (nurse) |
 | `GET /skills/{id}/policy`, `PUT /skills/{id}/policy` | Attempts allowed, the two scores and the assignment for a skill, with every caregiver's standing: `{max_attempts, submit_pct, force_pct, assign_all, assigned_ids}` (nurse) |
-| `GET /my/skills` | The signed-in caregiver's assigned skills with their standing on each, attempts used, allowed and left, and a recording that is ready to send |
-| `GET /attempts?skill_id=&caregiver_id=&state=&all=`, `GET /attempts/{id}` | Attempts with `review_state`, `ai_assessment`, `final_status`, `submitted_at`, `submit_kind`, `submission`. A nurse's list holds only recordings sent to a nurse unless `all=1`. One attempt adds `steps[]`, `order_violations[]`, `safety_flags[]`, `people`, `video`, `reference_video`, `job`, `policy`, `attempts {used, allowed, left}` and `history[]` |
+| `GET /my/skills` | The signed-in caregiver's assigned skills with their standing on each, attempts used, allowed and left, a recording that is good enough to send (`ready_attempt_id`) and one that is still being checked (`checking_attempt_id`) |
+| `GET /attempts?skill_id=&caregiver_id=&state=&all=`, `GET /attempts/{id}` | Attempts with `review_state`, `ai_assessment`, `final_status`, `submitted_at`, `submit_kind`, `submission`. A nurse's list holds only recordings sent to a nurse unless `all=1`. One attempt adds `skill_latest_version`, `steps[]`, `order_violations[]`, `safety_flags[]`, `people`, `video`, `reference_video`, `job`, `policy`, `attempts {used, allowed, left}` and `history[]` |
 | `POST /attempts/{id}/submit` | The caregiver sends their recording to a nurse: `{force, note}`. Refused with a sentence saying why when the score is too low |
 | `POST /attempts/{id}/review` | Nurse decision on a recording that was sent: `{overall, note, steps: [{step_id, status, note}]}` |
 | `GET /caregivers`, `GET /caregivers/{id}`, `PATCH /caregivers/{id}` | Roster with progress; one caregiver's skills, attempts and history (nurse) |

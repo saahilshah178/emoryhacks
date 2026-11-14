@@ -569,5 +569,23 @@ def fail_interrupted_jobs() -> int:
     return len(dead)
 
 
+def ai_problem() -> str | None:
+    """A sentence about the AI account when the most recent pipeline job failed because of it
+    (out of credit, over budget, key rejected) and nothing has succeeded since. None otherwise."""
+    last = db.fetch_one(
+        """SELECT j.error, j.updated_at FROM jobs j
+           WHERE j.status = 'error' AND j.updated_at > now() - interval '1 day'
+             AND NOT EXISTS (SELECT 1 FROM jobs d WHERE d.status = 'done' AND d.updated_at > j.updated_at)
+           ORDER BY j.updated_at DESC LIMIT 1""")
+    error = (last or {}).get("error") or ""
+    first = error.split("\n")[0]
+    if first.startswith(("The AI service", "This server has reached its AI spending limit")):
+        return first
+    if "RESOURCE_EXHAUSTED" in error or "credits are depleted" in error:  # stored before errors were reworded
+        return ("The AI service account has run out of credit, so new videos cannot be checked. "
+                "Top up the Gemini account.")
+    return None
+
+
 def people_from(rows: list[dict] | None) -> list[PersonObs]:
     return [PersonObs(**r) for r in (rows or [])]

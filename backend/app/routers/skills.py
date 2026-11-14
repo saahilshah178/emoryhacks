@@ -130,7 +130,7 @@ def _regenerate(job_id, skill: dict) -> None:
         new_id = repo.create_skill(classification, rb, skill["video"]["id"], slug=skill["slug"], name=skill["name"])
         repo.update_job(job_id, skill_id=new_id, status="done", stage="done", error=None)
     except Exception as exc:
-        repo.update_job(job_id, status="error", error=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-1500:]}")
+        repo.update_job(job_id, status="error", error=jobs.failure_text(exc))
     finally:
         with _rebuilding_lock:
             _rebuilding.pop(f"{skill['org_id']}:{skill['slug']}", None)

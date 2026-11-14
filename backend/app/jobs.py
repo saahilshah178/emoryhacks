@@ -110,6 +110,29 @@ class Tracker:
             repo.update_job(self.job_id, stages=self.stages)
 
 
+# First lines of job errors that mean the AI account itself needs attention (see repo.ai_problem).
+AI_OUT_OF_CREDIT = "The AI service account has run out of credit, so the video could not be checked."
+AI_OVER_BUDGET = "This server has reached its AI spending limit, so the video could not be checked."
+AI_KEY_REJECTED = "The AI service rejected this server's API key, so the video could not be checked."
+
+
+def failure_text(exc: Exception) -> str:
+    """What to store as a failed job's error: a sentence a caregiver or nurse can read on the
+    first line, then the technical detail for whoever looks into it."""
+    raw = f"{type(exc).__name__}: {exc}"
+    if isinstance(exc, gemini.BudgetExceeded):
+        first = f"{AI_OVER_BUDGET} Raise GEMINI_BUDGET_USD to carry on."
+    elif "RESOURCE_EXHAUSTED" in raw or "credits are depleted" in raw:
+        first = f"{AI_OUT_OF_CREDIT} Top up the Gemini account, then send the video again."
+    elif "API_KEY_INVALID" in raw or "PERMISSION_DENIED" in raw or "API key not valid" in raw:
+        first = f"{AI_KEY_REJECTED} Check GEMINI_API_KEY."
+    elif isinstance(exc, media.MediaError):
+        first = str(exc)
+    else:
+        first = "Something went wrong while checking the video. Please send it again."
+    return f"{first}\n{raw}\n{traceback.format_exc()[-1500:]}"
+
+
 def _start_pose(ctx: StageContext) -> Future | None:
     if not config.POSE_ENABLED:
         return None
@@ -164,7 +187,7 @@ def run_reference(job_id, slug: str | None = None, name: str | None = None) -> N
                             sources=("pose", "pose_confirmed"))
         repo.update_job(job_id, status="done", stage="done", error=None)
     except Exception as exc:
-        repo.update_job(job_id, status="error", error=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-1500:]}")
+        repo.update_job(job_id, status="error", error=failure_text(exc))
 
 
 def run_attempt(job_id) -> None:
@@ -206,7 +229,7 @@ def run_attempt(job_id) -> None:
         repo.save_score(attempt["id"], sc)
         repo.update_job(job_id, status="done", stage="done", error=None)
     except Exception as exc:
-        repo.update_job(job_id, status="error", error=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-1500:]}")
+        repo.update_job(job_id, status="error", error=failure_text(exc))
 
 
 def submit_reference(video_id, slug: str | None = None, name: str | None = None):

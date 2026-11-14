@@ -53,7 +53,9 @@ def health():
         "database": {"source": config.DB_SOURCE, "tiger_cloud": config.DB_IS_TIGER_CLOUD, **row},
         "gemini": {"key_set": bool(config.GEMINI_API_KEY), "model_main": config.GEMINI_MODEL_MAIN,
                    "model_strong": config.GEMINI_MODEL_STRONG, "fake_ai": config.FAKE_AI,
-                   "spent_usd": round(gemini.spent_usd(), 4), "budget_usd": config.GEMINI_BUDGET_USD},
+                   "spent_usd": round(gemini.spent_usd(), 4), "budget_usd": config.GEMINI_BUDGET_USD,
+                   # set when the last video failed because of the AI account (credit, budget, key)
+                   "problem": repo.ai_problem()},
     }
 
 

@@ -60,11 +60,10 @@ export function RefreshBoundary({ children }: { children: ReactNode }) {
  *
  *   const brand = useHomeLink("/dashboard");
  *   <Logo href="/dashboard" onClick={brand.onClick} />
- *   <div className={brand.contentClassName}>{children}</div>
  */
 export function useHomeLink(home: string) {
   const pathname = usePathname();
-  const { count, refresh } = useContext(RefreshContext);
+  const { refresh } = useContext(RefreshContext);
   const atHome = (pathname.replace(/\/+$/, "") || "/") === home;
 
   function onClick(event: MouseEvent<HTMLAnchorElement>) {
@@ -75,9 +74,5 @@ export function useHomeLink(home: string) {
     refresh();
   }
 
-  return {
-    onClick,
-    /** For the page content: it fades in when it comes back after a refresh, not on first load. */
-    contentClassName: count > 0 ? "animate-refresh-in motion-reduce:animate-none" : undefined,
-  };
+  return { onClick };
 }

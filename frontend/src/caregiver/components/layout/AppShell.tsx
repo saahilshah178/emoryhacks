@@ -7,6 +7,7 @@ import { AvatarButton } from "@/caregiver/components/layout/AvatarButton";
 import { BottomNav, navItems, isActive } from "@/caregiver/components/layout/BottomNav";
 import { cn } from "@/lib/cn";
 import { Logo } from "@/shared/Logo";
+import { PageTransition } from "@/shared/PageTransition";
 import { useHomeLink } from "@/shared/RefreshBoundary";
 
 /** Practising a skill and reading a result take the whole screen, without the bottom nav. */
@@ -53,7 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           immersive ? "pb-8 pt-5 md:pb-12" : "pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-6 md:pb-12",
         )}
       >
-        <div className={brand.contentClassName}>{children}</div>
+        <PageTransition>{children}</PageTransition>
       </main>
 
       {immersive ? null : <BottomNav />}

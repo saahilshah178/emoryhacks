@@ -8,6 +8,7 @@ import { Sidebar } from "@/nurse/components/layout/Sidebar";
 import { TopNav } from "@/nurse/components/layout/TopNav";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { Logo } from "@/shared/Logo";
+import { PageTransition } from "@/shared/PageTransition";
 import { useHomeLink } from "@/shared/RefreshBoundary";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -55,7 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           className={cn("min-h-0 flex-1 bg-page py-6 pr-4 md:pr-6 lg:pr-8", SCREEN_CORNER, SCREEN_INSET)}
         >
           {/* The one column every page sits in, so each page's content starts and stops in the same place. */}
-          <div className={cn("mx-auto w-full max-w-[1400px]", brand.contentClassName)}>{children}</div>
+          <PageTransition className="mx-auto w-full max-w-[1400px]">{children}</PageTransition>
         </main>
       </div>
     </div>

@@ -61,7 +61,7 @@
   --font-sans: var(--font-inter);
   --shadow-card: var(--shadow-card);
   --radius-card: 12px;
-  /* A page's content coming back after a refresh. */
+  /* A page's content arriving: when moving to another page, and after a refresh. */
   --animate-refresh-in: refresh-in 0.45s ease-out;
 }
 

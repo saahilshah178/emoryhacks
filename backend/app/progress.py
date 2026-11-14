@@ -154,14 +154,16 @@ def pct(value: float | None) -> str:
 
 def submission(row: dict, pol: dict) -> dict:
     """Whether the caregiver may send this attempt to a nurse, and a sentence saying why.
-    row: a described attempt row with score_pct, skill_match and submitted_at."""
+    row: a described attempt row with score_pct, skill_match and submitted_at. The sentence
+    says why, not what to do next: whether they can record again depends on the attempts
+    they have left, which the screens show beside it."""
     out = {"can_submit": False, "can_force": False, "submit_pct": pol["submit_pct"], "force_pct": pol["force_pct"]}
     state = row["review_state"]
     score = float(row.get("score_pct") or 0)
     if state == "processing":
         reason = "This recording is still being checked. You can send it once the check has finished."
     elif state == "error":
-        reason = "This recording could not be checked, so it cannot be sent. Record it again."
+        reason = "This recording could not be checked, so it cannot be sent."
     elif state in ("approved", "retraining"):
         reason = "Your nurse has reviewed this recording."
     elif state == "superseded":
@@ -169,8 +171,7 @@ def submission(row: dict, pol: dict) -> dict:
     elif row.get("submitted_at"):
         reason = "This recording has been sent to your nurse."
     elif row.get("skill_match") is False:
-        reason = ("The automatic check could not find this skill in the video, so it cannot be sent. "
-                  "Record it again.")
+        reason = "The automatic check could not find this skill in the video, so it cannot be sent."
     elif score >= pol["submit_pct"]:
         out["can_submit"] = True
         reason = (f"You scored {pct(score)}, which meets the {pct(pol['submit_pct'])} your nurse asks for. "
@@ -180,8 +181,7 @@ def submission(row: dict, pol: dict) -> dict:
         reason = (f"You scored {pct(score)}. Your nurse asks for {pct(pol['submit_pct'])} before a recording is "
                   "sent. If you think the automatic check got it wrong, you can send it anyway with a note.")
     else:
-        reason = (f"You scored {pct(score)}, which is under the {pct(pol['force_pct'])} needed to send it. "
-                  "Record it again.")
+        reason = f"You scored {pct(score)}, which is under the {pct(pol['force_pct'])} needed to send it."
     out["reason"] = reason
     return out
 

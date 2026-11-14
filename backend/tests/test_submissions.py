@@ -89,12 +89,12 @@ def test_force_submit_needs_a_note_and_is_marked(agency):
 
 
 @pytest.mark.parametrize("score,kwargs,expected", [
-    (35, {}, "You scored 35%, which is under the 50% needed to send it. Record it again."),
-    (49.5, {}, "You scored 49.5%, which is under the 50% needed to send it. Record it again."),
+    (35, {}, "You scored 35%, which is under the 50% needed to send it."),
+    (49.5, {}, "You scored 49.5%, which is under the 50% needed to send it."),
     (95, {"skill_match": False}, "The automatic check could not find this skill in the video, so it cannot be "
-                                 "sent. Record it again."),
+                                 "sent."),
     (None, {"job": "running"}, "This recording is still being checked. You can send it once the check has finished."),
-    (None, {"job": "error"}, "This recording could not be checked, so it cannot be sent. Record it again."),
+    (None, {"job": "error"}, "This recording could not be checked, so it cannot be sent."),
 ])
 def test_attempts_that_cannot_be_sent(agency, score, kwargs, expected):
     skill = agency.skill()

@@ -407,6 +407,8 @@ def test_fake_ai_finds_a_conditional_step_not_needed():
     assert not tl.steps[3].found and out.steps[3].evidence_start_s is None
     assert [t.found for t in tl.steps[:3]] == [True] * 3 and tl.order_violations  # the rest as before
     plain = _fake.rubric(Ctx())
+    for step in plain.steps:  # the canned rubric's last step has a condition; without one it is graded as usual
+        step.applies_when = ""
     assert _fake.timeline(Ctx(), plain).steps == _fake.timeline(Ctx(), plain).steps
     assert [r.status for r in _fake.evaluation(Ctx(), plain, _fake.timeline(Ctx(), plain)).steps] == \
         ["passed", "failed", "unverified", "passed"]

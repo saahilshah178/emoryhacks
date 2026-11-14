@@ -222,7 +222,9 @@ def test_review_stores_step_overrides(migrated, sample_video):
     steps = {s["step_id"]: s for s in res["steps"]}
     assert (steps["s2"]["nurse_status"], steps["s2"]["nurse_note"]) == ("passed", "fine on rewatch")
     assert steps["s3"]["nurse_status"] is None and steps["s3"]["status"] == "unverified"
-    assert res["order_violations"] and all(s["found"] for s in res["steps"])
+    # every step is found except the canned rubric's conditional one, which was not needed
+    assert res["order_violations"] and all(s["found"] for s in res["steps"] if s["status"] != "not_applicable")
+    assert [s["step_id"] for s in res["steps"] if s["status"] == "not_applicable"] == ["s4"]
 
 
 def test_fake_mode_makes_no_calls():

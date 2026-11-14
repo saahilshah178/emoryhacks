@@ -227,7 +227,7 @@ def test_an_interrupted_attempt_resumes_after_its_finished_stages(migrated, samp
     assert job["status"] == "done", job["error"]
     assert job["resumes"] == 1 and job["runner"] == repo._runner()
     attempt = repo.get_attempt(attempt_id)
-    assert [s["status"] for s in attempt["steps"]] == ["passed", "failed", "unverified", "passed"]
+    assert [s["status"] for s in attempt["steps"]] == ["passed", "failed", "unverified", "not_applicable"]
     assert attempt["status"] == "failed" and len(attempt["order_violations"]) == 1
     assert {f["source"] for f in attempt["safety_flags"]} == {"gemini", "pose"}
 

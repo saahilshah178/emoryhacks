@@ -1,7 +1,7 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Badge, Button, Field, Input, Textarea } from "@/components/ui";
 import { TimeChip } from "@/components/media/TimeChip";
 import { api, errorMessage } from "@/lib/api";
@@ -9,6 +9,7 @@ import { formatClock } from "@/lib/format";
 import { appliesWhen } from "@/lib/steps";
 import type { Skill, SkillStep, StepEvals, Video } from "@/lib/types";
 import { isTimed, sameList, tenth, toLines, toList } from "./text";
+import { UnheardNote, unheardIn } from "./Unheard";
 
 type Draft = {
   title: string;
@@ -65,6 +66,23 @@ function sameDraft(a: Draft, b: Draft) {
     a.fail === b.fail &&
     a.unverified === b.unverified &&
     a.cues === b.cues
+  );
+}
+
+/**
+ * The field's hint, then a warning by each saved criterion the automatic check skips because it
+ * is about something said. Warnings show only while the box still holds what was saved.
+ */
+function criteriaHint(hint: string, step: SkillStep, field: keyof StepEvals, edited: boolean): ReactNode {
+  const items = step.evals?.[field] ?? [];
+  const unheard = edited ? [] : [...unheardIn(step, field)];
+  return (
+    <>
+      {hint}
+      {unheard.map(([index, words]) => (
+        <UnheardNote key={index} words={words} text={items[index]} />
+      ))}
+    </>
   );
 }
 
@@ -218,7 +236,7 @@ export function StepEditor({
           <Input
             value={draft.appliesWhen}
             onChange={(event) => change({ appliesWhen: event.target.value })}
-            placeholder="For example: the patient is hurt or can't get up after being lowered"
+            placeholder="For example: the wheelchair has footrests"
           />
         </Field>
 
@@ -305,20 +323,36 @@ export function StepEditor({
         <p className="text-xs text-ink-secondary md:col-span-2">
           The automatic check watches recordings without sound, so write criteria that can be seen.
         </p>
-        <Field label="Passes when" hint="One item per line.">
+        <Field label="Passes when" hint={criteriaHint("One item per line.", step, "pass_criteria", draft.pass !== original.pass)}>
           <Textarea rows={3} value={draft.pass} onChange={(event) => change({ pass: event.target.value })} />
         </Field>
-        <Field label="Fails when" hint="One item per line.">
+        <Field label="Fails when" hint={criteriaHint("One item per line.", step, "fail_criteria", draft.fail !== original.fail)}>
           <Textarea rows={3} value={draft.fail} onChange={(event) => change({ fail: event.target.value })} />
         </Field>
-        <Field label="Cannot be verified when" hint="When the camera can't show the step. One per line.">
+        <Field
+          label="Cannot be verified when"
+          hint={criteriaHint(
+            "When the camera can't show the step. One per line.",
+            step,
+            "unverified_when",
+            draft.unverified !== original.unverified,
+          )}
+        >
           <Textarea
             rows={3}
             value={draft.unverified}
             onChange={(event) => change({ unverified: event.target.value })}
           />
         </Field>
-        <Field label="What to look for" hint="What shows the step is happening. One per line.">
+        <Field
+          label="What to look for"
+          hint={criteriaHint(
+            "What shows the step is happening. One per line.",
+            step,
+            "visual_cues",
+            draft.cues !== original.cues,
+          )}
+        >
           <Textarea rows={3} value={draft.cues} onChange={(event) => change({ cues: event.target.value })} />
         </Field>
       </div>

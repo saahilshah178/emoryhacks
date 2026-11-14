@@ -152,7 +152,7 @@ function HistoryRow({ item }: { item: AttemptSummary }) {
     >
       <td className="px-3 py-3">
         <span className="block font-medium text-ink xl:min-w-28">{item.skill_name}</span>
-        {item.skill_version > 1 ? <span className="text-xs text-ink-muted">Version {item.skill_version}</span> : null}
+        <span className="text-xs text-ink-muted">Version {item.skill_version}</span>
       </td>
       <td className="px-3 py-3 text-ink-secondary" title={relativeTime(item.created_at)}>
         <span className="block xl:whitespace-nowrap">{formatDateTime(item.created_at)}</span>

@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import { onlyNeededWhen } from "@/lib/steps";
 import type { SkillStep, StepEvals, Video } from "@/lib/types";
 import { SkillThumb } from "./SkillThumb";
+import { UnheardNote, unheardCount, unheardIn } from "./Unheard";
 import { isTimed, stepFrameTime } from "./text";
 
 const criteria: Array<{ key: keyof StepEvals; label: string; tone: string }> = [
@@ -43,6 +44,7 @@ export function StepCard({
     .filter((other): other is SkillStep => Boolean(other));
   const panelId = `criteria-${step.step_id}`;
   const condition = onlyNeededWhen(step);
+  const skipped = unheardCount(step);
 
   return (
     <article
@@ -101,6 +103,12 @@ export function StepCard({
             <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} aria-hidden />
             {open ? "Hide criteria" : "Show criteria"}
           </button>
+          {skipped && !open ? (
+            <p className="mt-1 text-xs text-warning">
+              {skipped === 1 ? "1 criterion is" : `${skipped} criteria are`} about something said, which the check
+              skips.
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -108,14 +116,21 @@ export function StepCard({
         <div id={panelId} className="mt-3 grid gap-3 border-t border-border pt-3 md:grid-cols-2">
           {criteria.map(({ key, label, tone }) => {
             const items = step.evals?.[key] ?? [];
+            const unheard = unheardIn(step, key);
             return (
               <div key={key} className="rounded-[10px] bg-page p-3">
                 <h4 className={cn("text-xs font-semibold uppercase tracking-wide", tone)}>{label}</h4>
                 {items.length ? (
                   <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm text-ink">
-                    {items.map((item, index) => (
-                      <li key={index}>{item}</li>
-                    ))}
+                    {items.map((item, index) => {
+                      const words = unheard.get(index);
+                      return (
+                        <li key={index}>
+                          {item}
+                          {words ? <UnheardNote words={words} /> : null}
+                        </li>
+                      );
+                    })}
                   </ul>
                 ) : (
                   <p className="mt-1.5 text-sm text-ink-secondary">None written.</p>

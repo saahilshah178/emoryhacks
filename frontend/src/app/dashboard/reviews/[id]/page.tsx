@@ -16,7 +16,9 @@ import { ReviewWorkspace } from "@/nurse/components/review/ReviewWorkspace";
 
 export default function SkillReviewPage() {
   const { id } = useParams<{ id: string }>();
-  const { data, error, loading, reload } = useApi<Attempt>(`/attempts/${id}`);
+  // Polled, so a recording that is replaced by a newer one, or sent after being opened as a
+  // practice run, shows its new state without a manual reload.
+  const { data, error, loading, reload } = useApi<Attempt>(`/attempts/${id}`, { refreshMs: 20_000 });
   const processing = data?.review_state === "processing";
   // While the recording is processed, follow its job and reload the attempt when it is graded.
   const { job, failed } = useJob(processing && data?.job ? data.job.id : null, () => reload());

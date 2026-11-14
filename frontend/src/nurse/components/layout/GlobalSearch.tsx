@@ -263,7 +263,7 @@ export function GlobalSearch({ onOpen, className }: { onOpen?: () => void; class
         <div
           // Keeps the cursor in the box while a result is clicked, so the list does not close first.
           onMouseDown={(event) => event.preventDefault()}
-          className="absolute left-0 top-full z-40 mt-2 w-[28rem] min-w-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]"
+          className="fixed inset-x-3 top-[4.25rem] z-40 overflow-hidden sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-2 sm:w-[28rem] sm:min-w-full sm:max-w-[calc(100vw-2rem)] rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]"
         >
           <div id={listId} role="listbox" aria-label="Search results" className="max-h-[min(70vh,30rem)] overflow-y-auto p-1.5">
             {groups.map((item, at) => (

@@ -63,7 +63,7 @@ export function TopNav() {
         SEARCH_ALIGN,
       )}
     >
-      <GlobalSearch className="hidden min-w-0 max-w-2xl flex-1 sm:block" onOpen={() => setOpen(false)} />
+      <GlobalSearch className="min-w-0 max-w-2xl flex-1" onOpen={() => setOpen(false)} />
 
       <div className="relative ml-auto" ref={notificationsRef}>
         <button

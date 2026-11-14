@@ -1,5 +1,9 @@
 """Accounts and sessions.
 
+The logins are a fixed set: scripts/logins.py gives some people a username and a random
+password, and nobody signs up or changes a password in the app. A person without a
+username cannot log in.
+
 Passwords are stored as scrypt hashes. A login creates a random session token; the browser
 keeps it in an HttpOnly cookie and the database keeps only its SHA-256, so a copy of the
 sessions table cannot be replayed. Scripts and tests may send the token as a bearer token.
@@ -12,7 +16,6 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import hmac
-import re
 import secrets
 import threading
 import time
@@ -24,10 +27,8 @@ from . import db
 
 COOKIE = "sid"
 SESSION_DAYS = 7
-MIN_PASSWORD = 8
 DEFAULT_ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
 SAMPLE_ORG = uuid.UUID("00000000-0000-0000-0000-0000000000a1")
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
 
 # token hash -> (user, time read). Saves a database round trip on every request of a page
@@ -74,16 +75,6 @@ def end_session(token: str | None) -> None:
         _cache.pop(key, None)
 
 
-def end_other_sessions(user_id, keep_token: str | None) -> None:
-    """Sign the user out everywhere except the session that holds keep_token. Used after a
-    password change, so whoever else had the old password is signed out with it."""
-    keep = _token_hash(keep_token) if keep_token else ""
-    db.execute("DELETE FROM sessions WHERE user_id=%s AND token_hash <> %s", (user_id, keep))
-    with _cache_lock:
-        for key in [k for k, (u, _) in _cache.items() if u["id"] == user_id and k != keep]:
-            _cache.pop(key, None)
-
-
 def forget_cached(user_id=None) -> None:
     """Drop cached users so the next request reads them again (after a profile or org change)."""
     with _cache_lock:
@@ -94,7 +85,7 @@ def forget_cached(user_id=None) -> None:
                 _cache.pop(key, None)
 
 
-_USER_SQL = """SELECT u.id, u.org_id, u.role, u.name, u.email, u.title, u.credentials, u.location, u.hire_date,
+_USER_SQL = """SELECT u.id, u.org_id, u.role, u.name, u.username, u.email, u.title, u.credentials, u.location, u.hire_date,
                       u.next_shift, u.employment, u.prefs, u.notifications_seen_at, u.created_at,
                       o.name AS org_name, o.is_sample AS org_is_sample
                FROM users u JOIN orgs o ON o.id = u.org_id"""
@@ -153,8 +144,8 @@ def nurse(user: dict = Depends(current_user)) -> dict:
 def public(user: dict) -> dict:
     """The user as the API returns it."""
     return {
-        "id": user["id"], "role": user["role"], "name": user["name"], "email": user["email"],
-        "title": user["title"], "credentials": user["credentials"], "location": user["location"],
+        "id": user["id"], "role": user["role"], "name": user["name"], "username": user["username"],
+        "email": user["email"], "title": user["title"], "credentials": user["credentials"], "location": user["location"],
         "hire_date": user["hire_date"], "next_shift": user["next_shift"], "employment": user["employment"],
         "prefs": {"safety": True, "submissions": True, "digest": False, **(user["prefs"] or {})},
         "created_at": user["created_at"],

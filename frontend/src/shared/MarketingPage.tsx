@@ -5,7 +5,7 @@ import { CircleCheck } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import { APP_NAME, APP_TAGLINE } from "./brand";
 import { PublicHeader } from "./PublicHeader";
-import { homeUrlFor, LOGIN_PATH, SIGNUP_PATH } from "./urls";
+import { homeUrlFor, LOGIN_PATH } from "./urls";
 
 const steps = [
   {
@@ -59,9 +59,6 @@ function AccountActions({
   const primary = invert
     ? "bg-white text-navy hover:bg-teal-soft"
     : "bg-teal text-white shadow-[0_1px_2px_rgba(23,50,77,0.12)] hover:bg-teal-hover";
-  const secondary = invert
-    ? "text-white hover:bg-white/10"
-    : "text-navy hover:bg-secondary";
 
   const { user } = useAuth();
   const wide = stacked ? "w-full sm:w-auto" : "";
@@ -84,14 +81,8 @@ function AccountActions({
       className={`flex ${stacked ? "w-full flex-col sm:w-auto sm:flex-row" : "flex-wrap"} items-stretch gap-2 sm:items-center`}
     >
       <Link
-        href={SIGNUP_PATH}
-        className={`inline-flex h-12 items-center justify-center rounded-[12px] px-5 text-sm font-semibold transition-colors ${wide} ${primary}`}
-      >
-        Create account
-      </Link>
-      <Link
         href={LOGIN_PATH}
-        className={`inline-flex h-12 items-center justify-center rounded-[12px] px-4 text-sm font-semibold transition-colors ${wide} ${secondary}`}
+        className={`inline-flex h-12 items-center justify-center rounded-[12px] px-5 text-sm font-semibold transition-colors ${wide} ${primary}`}
       >
         Log in
       </Link>
@@ -233,10 +224,10 @@ export function MarketingPage() {
             </p>
           </div>
           <Link
-            href={SIGNUP_PATH}
+            href={LOGIN_PATH}
             className="inline-flex h-11 w-fit items-center text-sm font-semibold text-teal hover:text-teal-hover"
           >
-            Create account
+            Log in
           </Link>
         </div>
       </footer>

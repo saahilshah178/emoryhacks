@@ -41,8 +41,8 @@ export default function CaregiversPage() {
           if (people.length === 0) {
             return (
               <EmptyState title="No caregivers yet">
-                Caregivers appear here as soon as they create an account in the caregiver portal. Their progress on
-                each skill fills in as they submit recordings.
+                Caregivers appear here once they are added to your agency. Their progress on each skill fills in
+                as they submit recordings.
               </EmptyState>
             );
           }

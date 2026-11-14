@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Building2, CalendarClock, Mail, Pencil, ShieldCheck } from "lucide-react";
+import { AtSign, Building2, CalendarClock, Pencil, ShieldCheck } from "lucide-react";
 import { Avatar, Button, Card, ErrorNote, Field, Input, ProgressBar, Skeleton } from "@/components/ui";
 import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
 import { useCaregiver } from "@/caregiver/context/CaregiverContext";
@@ -9,7 +9,6 @@ import { api, errorMessage } from "@/lib/api";
 import { useTitle } from "@/lib/hooks";
 import type { User } from "@/lib/types";
 import { useAuth, useUser } from "@/shared/AuthProvider";
-import { ChangePasswordCard } from "@/shared/ChangePasswordCard";
 
 function NameEditor({ user, onDone }: { user: User; onDone: () => void }) {
   const { setUser } = useAuth();
@@ -109,9 +108,11 @@ export default function ProfilePage() {
             <Row icon={Building2} label="Agency">
               <p className="text-sm font-medium text-navy">{user.org.name}</p>
             </Row>
-            <Row icon={Mail} label="Email">
-              <p className="break-all text-sm font-medium text-navy">{user.email}</p>
-            </Row>
+            {user.username ? (
+              <Row icon={AtSign} label="Username">
+                <p className="break-all text-sm font-medium text-navy">{user.username}</p>
+              </Row>
+            ) : null}
             {user.next_shift ? (
               <Row icon={CalendarClock} label="Next shift">
                 <p className="text-sm font-medium text-navy">{user.next_shift}</p>
@@ -138,8 +139,6 @@ export default function ProfilePage() {
               )}
             </Row>
           </Card>
-
-          <ChangePasswordCard />
         </div>
       </div>
     </div>

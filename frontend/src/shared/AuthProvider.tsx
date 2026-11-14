@@ -2,16 +2,15 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { Role, User } from "@/lib/types";
+import type { User } from "@/lib/types";
 import { homeUrlFor, landingUrl } from "./urls";
 
 type AuthContextValue = {
   /** False until the first check of who is signed in has finished. */
   ready: boolean;
   user: User | null;
-  /** Both throw an ApiError with a sentence for the user when they fail. */
-  signIn: (email: string, password: string) => Promise<User>;
-  signUp: (details: { role: Role; name: string; email: string; password: string }) => Promise<User>;
+  /** Throws an ApiError with a sentence for the user when it fails. */
+  signIn: (username: string, password: string) => Promise<User>;
   signOut: () => Promise<void>;
   /** Replace the signed-in user after a profile or agency change. */
   setUser: (user: User) => void;
@@ -42,20 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    const me = await api<User>("/auth/login", { json: { email, password } });
+  const signIn = useCallback(async (username: string, password: string) => {
+    const me = await api<User>("/auth/login", { json: { username, password } });
     setUser(me);
     return me;
   }, []);
-
-  const signUp = useCallback(
-    async (details: { role: Role; name: string; email: string; password: string }) => {
-      const me = await api<User>("/auth/signup", { json: details });
-      setUser(me);
-      return me;
-    },
-    [],
-  );
 
   const signOut = useCallback(async () => {
     try {
@@ -67,8 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ready, user, signIn, signUp, signOut, setUser }),
-    [ready, user, signIn, signUp, signOut],
+    () => ({ ready, user, signIn, signOut, setUser }),
+    [ready, user, signIn, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

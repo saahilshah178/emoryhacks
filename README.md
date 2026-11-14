@@ -17,20 +17,19 @@ make run                  # the API and the web app; open the address it prints 
 
 `make run` starts both halves and Ctrl-C stops both. The web app is the only thing you open. The API runs behind it on whichever local port is free, so nothing depends on port 8000; the web app forwards `/api` to it.
 
-Create an account as a nurse or as a caregiver. Everyone who signs up joins the same agency, so a nurse account and a caregiver account can work with each other straight away: the caregiver sees the nurse's skills, and the nurse sees the caregiver's submissions.
+### Logins
+
+Nobody signs up. The accounts that can log in are a fixed set, listed in `backend/scripts/logins.py`. `make logins` gives each of them a new random password and writes the usernames and passwords to `LOGINS.md` in the repository root. That file is gitignored and is the only copy of the passwords: the database keeps hashes. Running `make logins` again replaces every password, and because the database is shared, it does so for everyone who uses that database.
+
+Your own agency gets a nurse (`nurse`) and two caregivers (`caregiver`, `caregiver2`). They work with each other straight away: the caregivers see the nurse's skills, and the nurse sees their submissions.
 
 If port 3000 is taken, the web app starts on the next free port and prints it. If `DATABASE_URL` is empty or is not a `postgres://` URL, the API falls back to a local TimescaleDB container (`make db`).
 
 ### The sample agency
 
-`make sample` loads a second agency, Harbor Home Care, with a full roster, nine skills, about a hundred attempts, reviews, safety flags and balance readings, so every screen has something in it. It is separate from your own agency and is reached only through its own two accounts:
+`make sample` loads a second agency, Harbor Home Care, with a full roster, nine skills, about a hundred attempts, reviews, safety flags and balance readings, so every screen has something in it. It is separate from your own agency and is reached only through its own logins: `harbor.nurse` (Patricia Chen), `harbor.nurse2`, `harbor.caregiver` (Sarah Chen), `harbor.caregiver2` and `harbor.caregiver3`. Run `make logins` after the first `make sample` to give them passwords.
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Nurse (Patricia Chen) | `p.chen@harborhomecare.example` | `harbor-sample` |
-| Caregiver (Sarah Chen) | `s.chen@harborhomecare.example` | `harbor-sample` |
-
-Set `SAMPLE_PASSWORD` before running `make sample` to use another password. Running it again resets the sample agency and moves its dates up to now. Its attempts have no recordings behind them and its skills' steps are not timed; record a reference video or "Rebuild steps" on one of its skills to see the real pipeline there.
+Running `make sample` again resets the sample agency and moves its dates up to now; the logins keep their passwords. Its attempts have no recordings behind them and its skills' steps are not timed; record a reference video or "Rebuild steps" on one of its skills to see the real pipeline there.
 
 ### Commands
 
@@ -41,6 +40,7 @@ Set `SAMPLE_PASSWORD` before running `make sample` to use another password. Runn
 | `make web` | Start only the web app. It expects the API from `make dev`; point it elsewhere with `API_URL`. |
 | `make test` | Run the tests (canned AI, local TimescaleDB container, no Gemini calls) |
 | `make sample` | Load or reset the sample agency |
+| `make logins` | Give every login a new password and write them to `LOGINS.md` |
 | `make seed` | Build rubrics from the primary videos in `reference_vids/`, falling back to a backup if a primary fails |
 | `make e2e ARGS="--skills sit_to_stand --cases self,truncated"` | Run stand-in caregiver attempts against seeded skills |
 | `make repose` | Re-measure pose for every skill's reference video |
@@ -53,8 +53,7 @@ Gemini calls stop when the spend recorded in the database reaches `GEMINI_BUDGET
 
 | Backend function | Screen |
 | --- | --- |
-| Sign up, log in, log out | `/signup`, `/login`, the account menu |
-| Change your password (the current one is required) | Portal → Profile |
+| Log in, log out | `/login`, the account menu |
 | Record or upload a reference video; detect the skill; write steps and criteria | Dashboard → Skills → New skill |
 | Skill with timestamped steps, criteria, versions | Dashboard → Skills → a skill |
 | Edit a skill, its steps, criteria, prerequisites and caregiver-facing text | "Edit skill" on a skill |
@@ -87,7 +86,7 @@ Gemini calls stop when the spend recorded in the database reaches `GEMINI_BUDGET
 
 **What the screens call a state.** The database stores the AI's result, the nurse's decision, the flags and the job. Everything shown as a state is derived from those in one place, `backend/app/progress.py`, so the two portals cannot disagree: an attempt is processing, failed processing, awaiting a nurse, approved or sent back for retraining; a skill is not started, in review, to practise again, or verified for a caregiver.
 
-**Accounts.** Passwords are stored as scrypt hashes. A login sets an HttpOnly session cookie; only its hash is stored. Every route checks the session, the role (nurse or caregiver) and the agency: a caregiver sees the agency's skills and only their own attempts, and one agency never sees another's data.
+**Accounts.** The logins are a fixed set with generated passwords (`make logins`); there is no sign-up and no password change in the app. Passwords are stored as scrypt hashes. A login sets an HttpOnly session cookie; only its hash is stored. Every route checks the session, the role (nurse or caregiver) and the agency: a caregiver sees the agency's skills and only their own attempts, and one agency never sees another's data.
 
 **Tiger Data.** `pose_frames` is a hypertable with one row per measured frame per tracked person (12 joint angles, centre of mass, base of support, balance score, sway). `pose_1s` is a continuous aggregate the dashboard reads, alongside toolkit aggregates on the raw frames. Accounts, skills, steps, criteria, attempts, flags, jobs and a log of every Gemini call are ordinary tables in the same database. Schema: `backend/app/schema.sql`.
 
@@ -95,13 +94,12 @@ Pose is measured on every frame up to 30 fps for videos of up to about 100 secon
 
 ## API
 
-All routes are under `/api`, return JSON, and need a session (cookie, or `Authorization: Bearer <token>`) except `/health`, `/auth/signup`, `/auth/login` and `/auth/session`. Times are seconds from the start of the video. Statuses are `passed`, `failed` or `unverified`.
+All routes are under `/api`, return JSON, and need a session (cookie, or `Authorization: Bearer <token>`) except `/health`, `/auth/login` and `/auth/session`. Times are seconds from the start of the video. Statuses are `passed`, `failed` or `unverified`.
 
 | Route | Purpose |
 | --- | --- |
-| `POST /auth/signup`, `/auth/login`, `/auth/logout` | Accounts. Signup takes `{role, name, email, password}`. |
+| `POST /auth/login`, `/auth/logout` | Log in with `{username, password}`; log out. There is no sign-up. |
 | `GET /auth/session`, `GET /auth/me`, `PATCH /auth/me` | Who is signed in; edit name, title, credentials, notification preferences |
-| `POST /auth/password` | Change the signed-in user's password: `{current_password, new_password}`. The current password must be right. The user's other sessions are ended. |
 | `PATCH /org` | Rename the agency (nurse) |
 | `POST /videos` | Multipart upload: `file`, `kind` (`reference`, nurses only, or `attempt`), and for an attempt `skill_id`. Returns `{video_id, job_id, attempt_id}`. |
 | `GET /jobs/{id}` | Pipeline progress: `status` (`queued`, `running`, `done`, `error`), `stages[]`, `error`, `skill_id`, `attempt_id`. Poll until done. |
@@ -140,5 +138,5 @@ All routes are under `/api`, return JSON, and need a session (cookie, or `Author
 - Video files live on the machine that uploaded them; only the database is shared. A reference video missing on your machine is rebuilt from `reference_vids/` on first use. Attempts recorded on another machine cannot be played; the screens say so and still show the results.
 - Pose comes from a single camera. When two people overlap, the pose model can merge them into one skeleton, so per-person readings are unreliable for those moments and some tracks are left without a role. Pose flags are advisory unless Gemini confirms them on video.
 - The nine seeded rubrics were built from edited instructional videos. Their step times refer to those videos.
-- Anyone can sign up as a nurse, and every account joins the one agency. There is no email verification, password reset or invitation flow.
+- The logins are shared, fixed accounts. There is no sign-up, password reset or invitation flow, and adding a login means editing `backend/scripts/logins.py` and running `make logins`, which changes everyone's password.
 - Notifications appear in the app only. No emails are sent.

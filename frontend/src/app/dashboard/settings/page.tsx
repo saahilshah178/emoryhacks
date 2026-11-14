@@ -132,8 +132,8 @@ function ProfileCard() {
               <Input value={form.title} maxLength={80} onChange={(event) => edit("title", event.target.value)} />
             </Field>
           </div>
-          <Field label="Email" hint="Your sign-in email cannot be changed here.">
-            <Input value={user.email} readOnly />
+          <Field label="Username" hint="You sign in with this. It cannot be changed here.">
+            <Input value={user.username ?? ""} readOnly />
           </Field>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" loading={saving} disabled={!changed || form.name.trim().length < 2}>

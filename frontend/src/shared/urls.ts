@@ -3,7 +3,6 @@ import type { Role } from "@/lib/types";
 export type { Role };
 
 export const LOGIN_PATH = "/login";
-export const SIGNUP_PATH = "/signup";
 export const DASHBOARD_HOME = "/dashboard";
 export const PORTAL_HOME = "/portal";
 

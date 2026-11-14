@@ -15,11 +15,13 @@ def _anonymous() -> TestClient:
     return client
 
 
-def _signup(role: str, name: str = "Pat Example") -> tuple[TestClient, dict]:
+def _account(role: str, name: str = "Pat Example") -> tuple[TestClient, dict]:
+    """A person of the default agency who has a login, signed in through /auth/login."""
+    username = f"u{uuid.uuid4().hex[:10]}"
+    auth.create_user(org_id=auth.DEFAULT_ORG, role=role, name=name, email=f"{username}@example.test",
+                     password="long-enough", username=username)
     client = _anonymous()
-    res = client.post("/api/auth/signup", json={"role": role, "name": name,
-                                                "email": f"{uuid.uuid4().hex[:10]}@example.test",
-                                                "password": "long-enough"})
+    res = client.post("/api/auth/login", json={"username": username, "password": "long-enough"})
     assert res.status_code == 200, res.text
     return client, res.json()
 
@@ -38,7 +40,7 @@ def _client_in_new_org(role: str = "nurse") -> TestClient:
 @pytest.fixture(scope="module")
 def graded(migrated, sample_video):
     """A skill of the default agency and one attempt at it by a caregiver account, graded with canned AI."""
-    caregiver_client, caregiver = _signup("caregiver", "Casey Caregiver")
+    caregiver_client, caregiver = _account("caregiver", "Casey Caregiver")
     ref = jobs.ingest(str(sample_video), "reference", sample_video.name)
     job_id = repo.create_job("reference", ref["id"])
     jobs.run_reference(job_id, slug=f"accounts_{uuid.uuid4().hex[:6]}", name="Accounts test skill")
@@ -69,33 +71,78 @@ def test_passwords_are_hashed_and_verified():
     assert not auth.verify_password("anything", "not-a-hash")
 
 
-def test_signup_login_logout(migrated):
-    client, user = _signup("nurse")
+def test_login_logout(migrated):
+    client, user = _account("nurse")
     assert user["role"] == "nurse" and user["org"]["id"] == str(auth.DEFAULT_ORG) and "password" not in str(user)
-    assert client.get("/api/auth/me").json()["email"] == user["email"]
+    assert client.get("/api/auth/me").json()["username"] == user["username"]
     assert client.get("/api/auth/session").json()["user"]["id"] == user["id"]
+    login = {"username": user["username"], "password": "long-enough"}
     # the session lives in an HttpOnly cookie
-    assert "httponly" in client.post("/api/auth/login", json={"email": user["email"],
-                                                              "password": "long-enough"}).headers["set-cookie"].lower()
+    assert "httponly" in client.post("/api/auth/login", json=login).headers["set-cookie"].lower()
     assert client.post("/api/auth/logout").json() == {"ok": True}
     assert client.get("/api/auth/me").status_code == 401
     assert client.get("/api/auth/session").json() == {"user": None}
 
     again = _anonymous()
-    assert again.post("/api/auth/login", json={"email": user["email"], "password": "nope-nope"}).status_code == 401
-    assert again.post("/api/auth/login", json={"email": "nobody@example.test", "password": "x"}).status_code == 401
-    assert again.post("/api/auth/login", json={"email": user["email"].upper(), "password": "long-enough"}).status_code == 200
+    assert again.post("/api/auth/login", json={**login, "password": "nope-nope"}).status_code == 401
+    assert again.post("/api/auth/login", json={"username": "nobody", "password": "x"}).status_code == 401
+    assert again.post("/api/auth/login", json={**login, "username": user["username"].upper()}).status_code == 200
 
 
-def test_signup_validation(migrated):
-    client, user = _signup("caregiver")
+def test_the_logins_are_a_fixed_set(migrated):
+    """There is no sign-up and no password change, and only a username logs anyone in."""
+    client, user = _account("caregiver")
     fresh = _anonymous()
-    base = {"role": "caregiver", "name": "New Person", "email": "new.person@example.test", "password": "long-enough"}
-    assert fresh.post("/api/auth/signup", json={**base, "email": user["email"]}).status_code == 409
-    assert fresh.post("/api/auth/signup", json={**base, "password": "short"}).status_code == 422
-    assert fresh.post("/api/auth/signup", json={**base, "email": "not-an-email"}).status_code == 422
-    assert fresh.post("/api/auth/signup", json={**base, "role": "admin"}).status_code == 422
-    assert fresh.post("/api/auth/signup", json={**base, "name": " "}).status_code == 422
+    signup = {"role": "caregiver", "name": "New Person", "email": "new.person@example.test", "password": "long-enough"}
+    assert fresh.post("/api/auth/signup", json=signup).status_code == 404
+    change = {"current_password": "long-enough", "new_password": "a-new-password"}
+    assert client.post("/api/auth/password", json=change).status_code == 404
+    assert fresh.post("/api/auth/login", json={"username": user["email"], "password": "long-enough"}).status_code == 401
+    # someone on the roster without a username cannot log in, whatever their password
+    auth.create_user(org_id=auth.DEFAULT_ORG, role="caregiver", name="No Login",
+                     email="no.login@example.test", password="long-enough")
+    assert fresh.post("/api/auth/login", json={"username": "no.login@example.test",
+                                               "password": "long-enough"}).status_code == 401
+    assert fresh.post("/api/auth/login", json={"email": "no.login@example.test",
+                                               "password": "long-enough"}).status_code == 422
+
+
+def test_generated_logins(migrated, tmp_path):
+    """make logins: each run gives every login a new password, in the file and nowhere else."""
+    from scripts import logins, seed_sample
+
+    def log_in(username: str, password: str):
+        client = _anonymous()
+        return client, client.post("/api/auth/login", json={"username": username, "password": password})
+
+    assert seed_sample.main() == 0
+    path = tmp_path / "LOGINS.md"
+    first = {m["username"]: m["password"] for m in logins.generate(path)}
+    assert set(first) == {login.username for login in logins.LOGINS}
+    text = path.read_text()
+    assert all(f"`{username}` | `{password}`" in text for username, password in first.items())
+
+    nurse, res = log_in("nurse", first["nurse"])
+    user = res.json()
+    assert (user["role"], user["username"], user["org"]["id"]) == ("nurse", "nurse", str(auth.DEFAULT_ORG))
+    harbor = log_in("harbor.caregiver", first["harbor.caregiver"])[1].json()
+    assert (harbor["role"], harbor["name"], harbor["org"]["id"]) == ("caregiver", "Sarah Chen", str(auth.SAMPLE_ORG))
+
+    # loading the sample agency again keeps its logins
+    assert seed_sample.main() == 0
+    assert log_in("harbor.caregiver", first["harbor.caregiver"])[1].status_code == 200
+
+    # a second run replaces every password and signs those people out
+    second = {m["username"]: m["password"] for m in logins.generate(path)}
+    assert all(second[username] != first[username] for username in first)
+    assert first["nurse"] not in path.read_text() and second["nurse"] in path.read_text()
+    assert nurse.get("/api/auth/me").status_code == 401
+    assert log_in("nurse", first["nurse"])[1].status_code == 401
+    assert log_in("nurse", second["nurse"])[1].status_code == 200
+    # only the scrypt hash is stored, and the same person keeps the login
+    rows = db.fetch_all("SELECT id, password_hash FROM users WHERE username='nurse'")
+    assert len(rows) == 1 and str(rows[0]["id"]) == user["id"]
+    assert rows[0]["password_hash"].startswith("scrypt$") and second["nurse"] not in rows[0]["password_hash"]
 
 
 def test_everything_needs_a_session(migrated):
@@ -107,7 +154,7 @@ def test_everything_needs_a_session(migrated):
 
 
 def test_profile_and_agency_edits(migrated):
-    client, user = _signup("nurse")
+    client, user = _account("nurse")
     patched = client.patch("/api/auth/me", json={"name": "Renamed Nurse", "credentials": "RN",
                                                  "prefs": {"digest": True}}).json()
     assert patched["name"] == "Renamed Nurse" and patched["credentials"] == "RN"
@@ -117,48 +164,8 @@ def test_profile_and_agency_edits(migrated):
 
     other = _client_in_new_org("nurse")
     assert other.patch("/api/org", json={"name": "Renamed agency"}).json()["org"]["name"] == "Renamed agency"
-    caregiver, _ = _signup("caregiver")
+    caregiver, _ = _account("caregiver")
     assert caregiver.patch("/api/org", json={"name": "Nope"}).status_code == 403
-
-
-def test_changing_a_password_needs_the_current_one(migrated):
-    client, user = _signup("caregiver")
-    login = {"email": user["email"], "password": "long-enough"}
-    # A second device signed in to the same account.
-    other = _anonymous()
-    assert other.post("/api/auth/login", json=login).status_code == 200
-
-    wrong = client.post("/api/auth/password", json={"current_password": "not-my-password", "new_password": "a-new-password"})
-    assert wrong.status_code == 400 and "current password" in wrong.json()["detail"]
-    short = client.post("/api/auth/password", json={"current_password": "long-enough", "new_password": "short"})
-    assert short.status_code == 422 and "at least 8" in short.json()["detail"]
-    same = client.post("/api/auth/password", json={"current_password": "long-enough", "new_password": "long-enough"})
-    assert same.status_code == 422 and "different" in same.json()["detail"]
-    # None of those changed anything.
-    assert _anonymous().post("/api/auth/login", json=login).status_code == 200
-    assert other.get("/api/auth/me").status_code == 200
-
-    done = client.post("/api/auth/password", json={"current_password": "long-enough", "new_password": "a-new-password"})
-    assert done.status_code == 200 and done.json() == {"ok": True}
-    # The old password no longer works, the new one does.
-    assert _anonymous().post("/api/auth/login", json=login).status_code == 401
-    assert _anonymous().post("/api/auth/login", json={**login, "password": "a-new-password"}).status_code == 200
-    # The session that changed it stays signed in; the other device is signed out.
-    assert client.get("/api/auth/me").json()["email"] == user["email"]
-    assert other.get("/api/auth/me").status_code == 401
-    # Only the scrypt hash is stored.
-    stored = db.fetch_one("SELECT password_hash FROM users WHERE id=%s", (user["id"],))["password_hash"]
-    assert stored.startswith("scrypt$") and "a-new-password" not in stored
-
-
-def test_changing_a_password_needs_a_session_and_touches_no_one_else(migrated):
-    assert _anonymous().post("/api/auth/password", json={"current_password": "x", "new_password": "a-new-password"}).status_code == 401
-    one, first = _signup("caregiver")
-    two, second = _signup("nurse")
-    assert one.post("/api/auth/password", json={"current_password": "long-enough", "new_password": "only-mine-changed"}).status_code == 200
-    # The other account keeps its password and its session.
-    assert _anonymous().post("/api/auth/login", json={"email": second["email"], "password": "long-enough"}).status_code == 200
-    assert two.get("/api/auth/me").json()["email"] == second["email"]
 
 
 def test_caregiver_attempt_is_filed_under_their_account(graded):
@@ -191,7 +198,7 @@ def test_roles(graded):
 
 
 def test_a_caregiver_sees_only_their_own_attempts(graded):
-    other, _ = _signup("caregiver", "Other Caregiver")
+    other, _ = _account("caregiver", "Other Caregiver")
     assert other.get(f"/api/attempts/{graded['attempt_id']}").status_code == 404
     assert other.get(f"/api/videos/{graded['video_id']}/file").status_code == 404
     assert other.get("/api/attempts").json() == []
@@ -269,7 +276,7 @@ def test_review_drives_roster_and_caregiver_progress(graded):
 
 
 def test_notifications_can_be_marked_seen(graded):
-    nurse, _ = _signup("nurse")
+    nurse, _ = _account("nurse")
     assert nurse.post("/api/notifications/seen").json() == {"ok": True}
     assert nurse.get("/api/overview").json()["unread"] == 0
 
@@ -331,16 +338,16 @@ def test_skill_state_follows_the_nurses_last_decision():
     assert progress.skill_state([approved, _attempt(5, nurse="failed", reviewed=True)])["state"] == "needs_practice"
 
 
-def test_sample_agency_seed(migrated, monkeypatch):
+def test_sample_agency_seed(migrated):
     """The sample agency loads, passes its own checks, and its nurse sees it through the API."""
-    from scripts import seed_sample
+    from scripts import logins, seed_sample
 
-    monkeypatch.setenv("SAMPLE_PASSWORD", "sample-test-pass")
     assert seed_sample.main() == 0
     assert seed_sample.main() == 0  # a re-seed replaces it cleanly
+    made = {m["username"]: m["password"] for m in logins.generate(None)}
     client = _anonymous()
-    user = client.post("/api/auth/login", json={"email": "p.chen@harborhomecare.example",
-                                                "password": "sample-test-pass"}).json()
+    user = client.post("/api/auth/login", json={"username": "harbor.nurse",
+                                                "password": made["harbor.nurse"]}).json()
     assert user["org"] == {"id": str(auth.SAMPLE_ORG), "name": "Harbor Home Care", "is_sample": True}
     overview = client.get("/api/overview").json()
     assert overview["counts"]["caregivers"] == 13 and overview["counts"]["pending"] == 8

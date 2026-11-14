@@ -323,3 +323,9 @@ CREATE INDEX IF NOT EXISTS attempts_caregiver_idx ON attempts (caregiver_id, cre
 -- @@
 -- A short heading for a flag. The pipeline leaves it NULL and the UI falls back to the kind.
 ALTER TABLE safety_flags ADD COLUMN IF NOT EXISTS title text;
+-- @@
+-- The name a person signs in with; NULL means they cannot log in. The logins are a fixed set
+-- made by scripts/logins.py: nobody signs up or changes a password in the app.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username text;
+-- @@
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users (lower(username));

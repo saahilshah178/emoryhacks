@@ -8,14 +8,14 @@ attempts and flags) and inserted again. Ids are uuid5 of a stable key, so URLs s
 re-seed; every mock time is shifted by (now - MOCK_NOW), so the data always looks current.
 Signed-in sample sessions end on a re-seed.
 
-Logins: the nurse Patricia Chen and the caregiver Sarah Chen, password $SAMPLE_PASSWORD
-(default harbor-sample). The script ends by checking what the API derives from the rows
-and exits non-zero if anything differs from the targets in sample_data.
+Nobody here can log in until scripts/logins.py (make logins) has given some of these people
+a username and a password. A re-seed keeps the logins it finds. The script ends by checking
+what the API derives from the rows and exits non-zero if anything differs from the targets
+in sample_data.
 """
 from __future__ import annotations
 
 import datetime as dt
-import os
 import sys
 
 from app import auth, config, db, media, repo
@@ -84,30 +84,27 @@ def refresh_rollup(start: dt.datetime | None, end: dt.datetime | None) -> None:
 
 
 # --- inserts ------------------------------------------------------------------------------
-def insert_user(conn, clock: Clock, key: str, role: str, name: str, email: str, password: str | None,
-                created: str, **profile) -> None:
+def insert_user(conn, clock: Clock, key: str, role: str, name: str, email: str, created: str, **profile) -> None:
     if "prefs" in profile:
         profile["prefs"] = db.J(profile["prefs"])
     columns = {"id": uid(f"user:{key}"), "org_id": ORG, "role": role, "name": name, "email": email.lower(),
-               "password_hash": auth.hash_password(password) if password else None,
                "created_at": clock.at(created), **profile}
     conn.execute(f"INSERT INTO users ({', '.join(columns)}) VALUES ({', '.join(['%s'] * len(columns))})",
                  tuple(columns.values()))
 
 
-def insert_people(conn, clock: Clock, password: str) -> None:
+def insert_people(conn, clock: Clock) -> None:
     conn.execute("INSERT INTO orgs (id, name, is_sample, created_at) VALUES (%s,%s,true,%s)",
                  (ORG, S.ORG_NAME, clock.at(S.ORG_CREATED)))
     for n in S.NURSES:
-        insert_user(conn, clock, n["key"], "nurse", n["name"], n["email"], password if n["login"] else None,
-                    n["created"], credentials=n["credentials"], title=n["title"], prefs=n["prefs"],
-                    employment="active")
+        insert_user(conn, clock, n["key"], "nurse", n["name"], n["email"], n["created"],
+                    credentials=n["credentials"], title=n["title"], prefs=n["prefs"], employment="active")
     c = S.SARAH_CHEN
-    insert_user(conn, clock, c["key"], "caregiver", c["name"], c["email"], password, c["hire_date"] + "T09:00",
+    insert_user(conn, clock, c["key"], "caregiver", c["name"], c["email"], c["hire_date"] + "T09:00",
                 title=c["title"], next_shift=c["next_shift"], employment=c["employment"],
                 hire_date=clock.date(c["hire_date"]), location=c["location"])
     for c in S.ROSTER:
-        insert_user(conn, clock, c["key"], "caregiver", c["name"], S.email_for(c["name"]), None,
+        insert_user(conn, clock, c["key"], "caregiver", c["name"], S.email_for(c["name"]),
                     c["hire_date"] + "T09:00", title=c["title"], location=c["location"],
                     hire_date=clock.date(c["hire_date"]), employment=c["employment"])
 
@@ -312,7 +309,7 @@ def interpolate(points: list[tuple], t: float) -> float:
 
 
 # --- checks -----------------------------------------------------------------------------
-def checks(clock: Clock, password: str, before: dict[str, set], after: dict[str, set]) -> list[str]:
+def checks(clock: Clock, logins: list[dict], before: dict[str, set], after: dict[str, set]) -> list[str]:
     failures: list[str] = []
 
     def check(ok: bool, label: str) -> None:
@@ -388,9 +385,10 @@ def checks(clock: Clock, password: str, before: dict[str, set], after: dict[str,
     for e in overview["activity"]:
         print(f"    {e['time']:%m-%d %H:%M}  {e['type']:<16} {e['detail']}")
 
-    for key in ("p.chen", "s.chen"):
-        stored = db.fetch_one("SELECT password_hash FROM users WHERE id=%s", (uid(f"user:{key}"),))["password_hash"]
-        check(auth.verify_password(password, stored), f"password works for {key}@{S.DOMAIN}")
+    for kept in logins:
+        now = db.fetch_one("SELECT username, password_hash FROM users WHERE id=%s", (kept["id"],))
+        check(bool(now) and (now["username"], now["password_hash"]) == (kept["username"], kept["password_hash"]),
+              f"login {kept['username']} kept its password")
 
     if before["users"]:
         same = before == after
@@ -406,7 +404,6 @@ def checks(clock: Clock, password: str, before: dict[str, set], after: dict[str,
 
 
 def main() -> int:
-    password = os.environ.get("SAMPLE_PASSWORD") or S.DEFAULT_PASSWORD
     db.migrate()
     clash = db.fetch_all("SELECT email FROM users WHERE org_id<>%s AND email = ANY(%s)",
                          (ORG, [n["email"] for n in S.NURSES] + [S.SARAH_CHEN["email"]]
@@ -420,10 +417,16 @@ def main() -> int:
     old_window = db.fetch_one(
         "SELECT min(ts) AS lo, max(ts) AS hi FROM pose_frames WHERE video_id IN (SELECT id FROM videos WHERE org_id=%s)",
         (ORG,))
+    # The logins scripts/logins.py gave to people of this agency, to put back after the reset.
+    logins = db.fetch_all("SELECT id, username, password_hash FROM users WHERE org_id=%s AND username IS NOT NULL",
+                          (ORG,))
     clock = Clock(dt.datetime.now(dt.timezone.utc))
     with db.tx() as conn:  # one transaction: a failed seed leaves the previous one in place
         delete_sample(conn)
-        insert_people(conn, clock, password)
+        insert_people(conn, clock)
+        for kept in logins:
+            conn.execute("UPDATE users SET username=%s, password_hash=%s WHERE id=%s",
+                         (kept["username"], kept["password_hash"], kept["id"]))
         insert_skills(conn, clock)
         pose = insert_attempts(conn, clock)
     frames = insert_pose(pose)
@@ -435,11 +438,12 @@ def main() -> int:
     for table in OWNED:
         print(f"  {table:<14} {len(after[table]):>5}" + (f"   (was {len(before[table])})" if before["users"] else ""))
     print(f"  {'pose_frames':<14} {frames:>5}" + (f"   (was {before_frames})" if before["users"] else ""))
-    print(f"Logins (password {'from SAMPLE_PASSWORD' if os.environ.get('SAMPLE_PASSWORD') else S.DEFAULT_PASSWORD}):")
-    print(f"  nurse      {S.NURSES[0]['email']}")
-    print(f"  caregiver  {S.SARAH_CHEN['email']}")
+    if logins:
+        print(f"Logins kept: {', '.join(sorted(kept['username'] for kept in logins))} (passwords are in LOGINS.md)")
+    else:
+        print("Nobody in this agency can log in yet. Run `make logins` to make the logins.")
     print("Checks:")
-    failures = checks(clock, password, before, after)
+    failures = checks(clock, logins, before, after)
     if failures:
         print(f"{len(failures)} check(s) failed")
         return 1

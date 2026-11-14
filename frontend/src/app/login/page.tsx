@@ -1,7 +1,7 @@
 "use client";
 
-import { AuthForm } from "@/shared/AuthForm";
+import { LoginForm } from "@/shared/LoginForm";
 
 export default function LoginPage() {
-  return <AuthForm mode="login" />;
+  return <LoginForm />;
 }

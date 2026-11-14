@@ -14,6 +14,8 @@ export type User = {
   id: string;
   role: Role;
   name: string;
+  /** What they sign in with. Null for someone on the roster who has no login. */
+  username: string | null;
   email: string;
   title: string;
   credentials: string;

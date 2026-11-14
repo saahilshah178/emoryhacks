@@ -24,7 +24,6 @@ NAMESPACE = uuid.UUID("6f1c3a52-7d4e-5b8a-9c21-4e0d8b7a1f30")
 MOCK_NOW = dt.datetime(2026, 11, 13, 14, 32)
 ORG_NAME = "Harbor Home Care"
 ORG_CREATED = "2024-06-01T09:00"
-DEFAULT_PASSWORD = "harbor-sample"
 DOMAIN = "harborhomecare.example"
 
 STATUS = {"passed": "passed", "needs_review": "unverified", "needs_improvement": "unverified",
@@ -47,9 +46,9 @@ def mock_time(text: str) -> dt.datetime:
 NURSES = [
     {"key": "p.chen", "name": "Patricia Chen", "email": f"p.chen@{DOMAIN}", "credentials": "RN, BSN",
      "title": "Clinical Supervisor", "prefs": {"safety": True, "submissions": True, "digest": True},
-     "login": True, "created": "2024-06-03T09:00"},
+     "created": "2024-06-03T09:00"},
     {"key": "d.okoye", "name": "Daniel Okoye", "email": f"d.okoye@{DOMAIN}", "credentials": "RN",
-     "title": "Registered Nurse", "prefs": {}, "login": False, "created": "2025-01-13T09:00"},
+     "title": "Registered Nurse", "prefs": {}, "created": "2025-01-13T09:00"},
 ]
 # How the mock names an approver -> nurse key.
 APPROVERS = {"Patricia Chen, RN": "p.chen", "Daniel Okoye, RN": "d.okoye"}
@@ -57,7 +56,7 @@ APPROVERS = {"Patricia Chen, RN": "p.chen", "Daniel Okoye, RN": "d.okoye"}
 # The caregiver-portal account. hire_date and location are not in the mock (see report).
 SARAH_CHEN = {"key": "s.chen", "name": "Sarah Chen", "email": f"s.chen@{DOMAIN}", "title": "Home-care caregiver",
               "next_shift": "Saturday, 8:00 AM", "employment": "onboarding", "hire_date": "2026-10-20",
-              "location": "", "login": True}
+              "location": ""}
 
 # The nurse mock's roster. employment is the mock status, except "restricted", which the
 # API derives from open safety concerns, so it is stored as "onboarding".

@@ -22,7 +22,7 @@ API_URL=http://127.0.0.1:8000 npm run dev    # http://localhost:3000, or the nex
 `API_URL` defaults to `http://127.0.0.1:8000`, where `make dev` puts the API.
 
 - `/` marketing
-- `/login` and `/signup`
+- `/login`
 - `/portal` caregiver portal
 - `/dashboard` nurse dashboard
 

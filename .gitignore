@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+LOGINS.md
 
 # runtime data (uploaded/recorded videos, thumbnails, model files)
 data/

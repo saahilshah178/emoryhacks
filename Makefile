@@ -1,4 +1,4 @@
-.PHONY: run dev web db migrate test seed sample e2e repose fake-demo cost
+.PHONY: run dev web db migrate test seed sample logins e2e repose fake-demo cost
 
 # Start everything: the API and the web app. Open the address the web app prints
 # (http://localhost:3000, or the next free port). The API takes any free local port and is
@@ -34,9 +34,14 @@ seed:
 	cd backend && uv run python -m scripts.seed_reference
 
 # Load (or reset) the sample agency, Harbor Home Care: a full roster, skills, attempts and
-# reviews to look around in. No Gemini calls. Logins are printed at the end.
+# reviews to look around in. No Gemini calls. Its people can log in once `make logins` has run.
 sample:
 	cd backend && uv run python -m scripts.seed_sample
+
+# Give every login a new random password and write the usernames and passwords to LOGINS.md
+# (gitignored). These are the only accounts that can sign in; see backend/scripts/logins.py.
+logins:
+	cd backend && uv run python -m scripts.logins
 
 # Run stand-in caregiver attempts against the seeded skills (real Gemini calls).
 # Narrow it with: make e2e ARGS="--skills sit_to_stand --cases self,missing"

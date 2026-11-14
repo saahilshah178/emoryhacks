@@ -1,20 +1,17 @@
-"""Accounts: sign up, log in, the signed-in user's profile and their agency.
+"""Accounts: log in, the signed-in user's profile and their agency.
 
-POST  /api/auth/signup   {role, name, email, password} -> user; sets the session cookie
-POST  /api/auth/login    {email, password}             -> user; sets the session cookie
+POST  /api/auth/login    {username, password}          -> user; sets the session cookie
 POST  /api/auth/logout                                 -> {ok}; clears the cookie
 GET   /api/auth/me                                     -> user, with org {id, name, is_sample}; 401 if signed out
 GET   /api/auth/session                                -> {user} or {user: null}; never 401
 PATCH /api/auth/me       {name, title, credentials, prefs}  prefs are merged
-POST  /api/auth/password {current_password, new_password} -> {ok}; signs out the user's other sessions
 PATCH /api/org           {name}                        nurses only
 
-Everyone who signs up joins the default agency, so a new nurse and a new caregiver can
-work with each other straight away.
+There is no sign-up and no way to change a password here. The logins are a fixed set made
+by scripts/logins.py (make logins), which writes the usernames and passwords to LOGINS.md.
 """
 from __future__ import annotations
 
-import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
@@ -23,15 +20,8 @@ from .. import auth, db
 router = APIRouter(tags=["accounts"])
 
 
-class Signup(BaseModel):
-    role: str
-    name: str
-    email: str
-    password: str
-
-
 class Login(BaseModel):
-    email: str
+    username: str
     password: str
 
 
@@ -40,11 +30,6 @@ class ProfilePatch(BaseModel):
     title: str | None = Field(default=None, max_length=80)
     credentials: str | None = Field(default=None, max_length=40)
     prefs: dict[str, bool] | None = None
-
-
-class PasswordChange(BaseModel):
-    current_password: str
-    new_password: str
 
 
 class OrgPatch(BaseModel):
@@ -56,31 +41,13 @@ def _signed_in(response: Response, user_id) -> dict:
     return auth.public(auth.get_user(user_id))
 
 
-@router.post("/auth/signup")
-def signup(body: Signup, response: Response):
-    name, email = body.name.strip(), body.email.strip().lower()
-    if body.role not in ("nurse", "caregiver"):
-        raise HTTPException(422, "Choose whether you are signing up as a caregiver or a nurse.")
-    if len(name) < 2:
-        raise HTTPException(422, "Please add your name.")
-    if not auth.EMAIL_RE.match(email):
-        raise HTTPException(422, "Enter a valid email address.")
-    if len(body.password) < auth.MIN_PASSWORD:
-        raise HTTPException(422, f"Choose a password of at least {auth.MIN_PASSWORD} characters.")
-    try:
-        user_id = auth.create_user(org_id=auth.DEFAULT_ORG, role=body.role, name=name[:120], email=email,
-                                   password=body.password)
-    except psycopg.errors.UniqueViolation:
-        raise HTTPException(409, "An account with that email already exists. Log in instead.") from None
-    return _signed_in(response, user_id)
-
-
 @router.post("/auth/login")
 def login(body: Login, response: Response):
-    row = db.fetch_one("SELECT id, password_hash FROM users WHERE email=%s", (body.email.strip().lower(),))
-    # Verify against something even when the email is unknown, so both failures take as long.
+    row = db.fetch_one("SELECT id, password_hash FROM users WHERE lower(username)=%s",
+                       (body.username.strip().lower(),))
+    # Verify against something even when the username is unknown, so both failures take as long.
     if not auth.verify_password(body.password, row["password_hash"] if row else auth.hash_password("-")) or not row:
-        raise HTTPException(401, "That email and password don't match an account.")
+        raise HTTPException(401, "That username and password don't match a login.")
     return _signed_in(response, row["id"])
 
 
@@ -124,23 +91,6 @@ def patch_me(body: ProfilePatch, user: dict = Depends(auth.current_user)):
         db.execute(f"UPDATE users SET {', '.join(sets)} WHERE id=%s", (*params, user["id"]))
         auth.forget_cached(user["id"])
     return auth.public(auth.get_user(user["id"]))
-
-
-@router.post("/auth/password")
-def change_password(body: PasswordChange, request: Request, user: dict = Depends(auth.current_user)):
-    """Change the signed-in user's password. The current password has to be given as well,
-    so a session left open on a shared device is not enough to take the account over.
-    Every other session of the user is ended; the one making the request stays signed in."""
-    row = db.fetch_one("SELECT password_hash FROM users WHERE id=%s", (user["id"],))
-    if not row or not auth.verify_password(body.current_password, row["password_hash"]):
-        raise HTTPException(400, "Your current password isn't right.")
-    if len(body.new_password) < auth.MIN_PASSWORD:
-        raise HTTPException(422, f"Choose a password of at least {auth.MIN_PASSWORD} characters.")
-    if body.new_password == body.current_password:
-        raise HTTPException(422, "Choose a new password that is different from your current one.")
-    db.execute("UPDATE users SET password_hash=%s WHERE id=%s", (auth.hash_password(body.new_password), user["id"]))
-    auth.end_other_sessions(user["id"], auth.token_from(request))
-    return {"ok": True}
 
 
 @router.patch("/org")

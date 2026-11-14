@@ -66,7 +66,7 @@ export function StepResult({
             {step.title}
           </h3>
           <div className="flex flex-wrap items-center gap-1.5">
-            {step.critical ? <Badge tone="danger">Critical</Badge> : null}
+            {step.critical ? <Badge tone="warning">Critical</Badge> : null}
             {entry ? <StateBadge entry={entry} /> : <Badge>Not checked</Badge>}
           </div>
         </div>

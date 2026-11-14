@@ -68,7 +68,7 @@ export function StepChecklist({
                       <span className="sr-only">Step {index + 1}: </span>
                       {step.title}
                     </p>
-                    {step.critical ? <Badge tone="danger">Critical</Badge> : null}
+                    {step.critical ? <Badge tone="warning">Critical</Badge> : null}
                   </div>
                   {!compact && step.description ? (
                     <p className="mt-0.5 text-sm leading-relaxed text-ink-secondary">{step.description}</p>

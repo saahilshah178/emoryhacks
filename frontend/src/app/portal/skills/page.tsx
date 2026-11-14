@@ -18,7 +18,6 @@ export default function SkillsPage() {
     <div className="space-y-5">
       <PortalHeading
         title="My skills"
-        description="Practice at your own pace. A nurse always makes the final decision."
         actions={
           // On a laptop the next skill sits beside the heading; on a phone it is a full-width button below.
           next ? (

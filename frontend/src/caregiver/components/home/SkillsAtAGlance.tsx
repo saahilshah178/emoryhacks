@@ -16,16 +16,14 @@ export function SkillsAtAGlance({ skills, className }: { skills: MySkill[]; clas
   return (
     <Card className={className}>
       <CardHeader>
-        <div>
-          <CardTitle>My skills</CardTitle>
-          <p className="mt-1 text-sm text-ink-secondary">The ones that need you are at the top.</p>
-        </div>
+        <CardTitle>My skills</CardTitle>
         <Link href="/portal/skills" className="shrink-0 text-sm font-medium text-teal hover:underline">
           View all
         </Link>
       </CardHeader>
       <CardBody>
-        <ul className="overflow-hidden rounded-[12px] border border-border">
+        {/* A container, so a row shows its action only where the card is wide enough to keep the skill's name whole. */}
+        <ul className="@container overflow-hidden rounded-[12px] border border-border">
           {sorted.map((skill, index) => {
             const { badge, extra, action } = skillCardState(skill);
             const left = skill.state === "verified" ? null : attemptsLeftLine(skillAllowance(skill));
@@ -41,7 +39,7 @@ export function SkillsAtAGlance({ skills, className }: { skills: MySkill[]; clas
                   </div>
                   <StateBadge entry={badge} />
                   {extra ? <StateBadge entry={extra} /> : null}
-                  <span className="hidden w-36 shrink-0 items-center justify-end gap-1.5 text-sm font-medium text-teal xl:inline-flex">
+                  <span className="hidden w-36 shrink-0 items-center justify-end gap-1.5 text-sm font-medium text-teal @min-[30rem]:inline-flex">
                     {action}
                     <ArrowRight className="h-4 w-4" aria-hidden />
                   </span>

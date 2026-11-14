@@ -41,7 +41,7 @@ export function VideoComparison({
           videoRef={videoRef}
           label={
             <span className="flex items-center justify-between gap-3">
-              <span>Submitted recording</span>
+              <span>Caregiver&apos;s recording</span>
               {video.available ? (
                 <span className="tabular-nums">
                   {formatClock(time)} / {formatClock(video.duration_s)}

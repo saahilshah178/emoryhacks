@@ -61,7 +61,7 @@ export function StepTimeline({
         const step = steps.find((s) => s.step_id === chapter.id);
         if (step) onSelect(step);
       }}
-      label="Steps in the submitted recording"
+      label="Steps in this recording"
       emptyText={
         steps.some((s) => s.found === false)
           ? "None of the steps were found in this recording."

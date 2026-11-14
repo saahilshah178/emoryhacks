@@ -10,6 +10,7 @@ code so it is deterministic and never left to the model.
 """
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel, Field
@@ -74,7 +75,8 @@ def run(ctx, rubric: Rubric, refine: bool | None = None) -> Timeline:
     if refine:
         by_id = {s.step_id: s for s in rubric.steps}
         with ThreadPoolExecutor(max_workers=config.GEMINI_CONCURRENCY) as pool:
-            steps = list(pool.map(lambda t: _refine(ctx, by_id[t.step_id], t) if t.found else t, steps))
+            refined = list(pool.map(lambda t: _refine(ctx, by_id[t.step_id], t) if t.found else t, steps))
+        steps = keep_performed_order(steps, refined)
     return build_timeline(rubric, steps)
 
 
@@ -108,7 +110,7 @@ def clean_steps(rubric: Rubric, located: list[_Located], duration: float) -> lis
             steps.append(TimelineStep(step_id=rs.step_id, found=False, note="Not reported by the model."))
             continue
         confidence = round(min(max(item.confidence, 0.0), 1.0), 2)
-        note = item.note.strip()[:300]
+        note = titles_for_ids(rubric, item.note.strip())[:300]
         if not item.performed or item.start_s is None or (duration > 0 and item.start_s > duration + 1):
             steps.append(TimelineStep(step_id=rs.step_id, found=False, confidence=confidence, note=note))
             continue
@@ -116,6 +118,34 @@ def clean_steps(rubric: Rubric, located: list[_Located], duration: float) -> lis
         steps.append(TimelineStep(step_id=rs.step_id, found=True, start_s=start, end_s=end,
                                   confidence=confidence, note=note))
     return steps
+
+
+def titles_for_ids(rubric: Rubric, text: str) -> str:
+    """Notes are shown to the nurse, who knows steps by title, not by id: replace every rubric
+    step id in text ("Performed before s2") with the step's quoted title."""
+    titles = {s.step_id: s.title for s in rubric.steps}
+    return re.sub(r"\b[sS]\d+\b", lambda m: f'"{titles[m.group(0).lower()]}"' if m.group(0).lower() in titles
+                  else m.group(0), text)
+
+
+def keep_performed_order(first: list[TimelineStep], refined: list[TimelineStep]) -> list[TimelineStep]:
+    """Refined times, except where refining would move a step past a located neighbour.
+
+    The located steps are walked in first-pass start order. A step keeps its refined times only
+    when the refined start is no earlier than the previous step's final start and no later than
+    the next step's first-pass start; otherwise it keeps its first-pass times. So the performed
+    order, and therefore the order check, is the same as the first pass found."""
+    refined_by_id = {s.step_id: s for s in refined}
+    located = sorted((s for s in first if s.found and s.start_s is not None), key=lambda s: s.start_s)
+    final: dict[str, TimelineStep] = {}
+    prev_start = float("-inf")
+    for k, step in enumerate(located):
+        candidate = refined_by_id.get(step.step_id, step)
+        next_start = located[k + 1].start_s if k + 1 < len(located) else float("inf")
+        ok = candidate.start_s is not None and prev_start <= candidate.start_s <= next_start
+        final[step.step_id] = candidate if ok else step
+        prev_start = final[step.step_id].start_s
+    return [final.get(s.step_id, s) for s in first]
 
 
 def _refine(ctx, rs: RubricStep, step: TimelineStep) -> TimelineStep:
@@ -159,7 +189,9 @@ def build_timeline(rubric: Rubric, steps: list[TimelineStep]) -> Timeline:
 
 def order_violations(rubric: Rubric, steps: list[TimelineStep]) -> list[OrderViolation]:
     """A found order-dependent step S violates order when it starts more than ORDER_TOLERANCE_S before a
-    found prerequisite M starts. A prerequisite that is missing altogether is not an order violation."""
+    found prerequisite M starts. A prerequisite that is missing altogether is not an order violation,
+    but its own prerequisites are checked in its place, so skipping the step in the middle of a
+    chain (brakes -> gait belt -> stand) does not hide that the last was done before the first."""
     if not rubric.order_matters:
         return []
     rubric_by_id = {s.step_id: s for s in rubric.steps}
@@ -169,11 +201,29 @@ def order_violations(rubric: Rubric, steps: list[TimelineStep]) -> list[OrderVio
         rs = rubric_by_id.get(step_id)
         if rs is None or not rs.order_dependent:
             continue
-        for m_id in rs.must_follow:
-            m = found.get(m_id)
-            if m is not None and s.start_s < m.start_s - ORDER_TOLERANCE_S:
+        for m_id in _found_prerequisites(rs, rubric_by_id, found):
+            m = found[m_id]
+            if s.start_s < m.start_s - ORDER_TOLERANCE_S:
                 violations.append(OrderViolation(
                     step_id=step_id, expected_after=m_id, at_s=s.start_s,
                     message=f'"{rs.title}" was performed before "{rubric_by_id[m_id].title}".',
                 ))
     return sorted(violations, key=lambda v: (v.at_s, v.step_id))
+
+
+def _found_prerequisites(step: RubricStep, rubric_by_id: dict[str, RubricStep],
+                         found: dict[str, TimelineStep]) -> list[str]:
+    """The step's prerequisites that were found, looking through any that were not found to
+    their own prerequisites."""
+    out: list[str] = []
+    pending, seen = list(step.must_follow), {step.step_id}
+    while pending:
+        m_id = pending.pop(0)
+        if m_id in seen or m_id not in rubric_by_id:
+            continue
+        seen.add(m_id)
+        if m_id in found:
+            out.append(m_id)
+        else:
+            pending.extend(rubric_by_id[m_id].must_follow)
+    return out

@@ -71,6 +71,17 @@ class Window:
     members: list[int]
 
 
+@dataclass
+class _Kept:
+    """A draft step build_rubric keeps, with its final title, dedupe key and times."""
+
+    step: DraftStep
+    title: str
+    key: str
+    start: float
+    end: float
+
+
 # --- stage entry point -------------------------------------------------------
 def run(ctx, classification: Classification) -> Rubric:
     if config.FAKE_AI:
@@ -167,39 +178,55 @@ def build_rubric(draft: DraftRubric, duration: float,
                  bounds: dict[int, tuple[float, float]] | None = None) -> Rubric:
     """Turn Gemini's draft into a valid Rubric.
 
-    Applies refined bounds (keyed by draft step number), drops empty and duplicate
-    steps, clamps times to the video, sorts by start time, assigns s1..sN, keeps only
-    prerequisites that exist and come earlier, and fills any empty eval list."""
+    The steps keep the outline's order (draft step number), because the times are the less
+    reliable part of the outline and a refined time must never reorder steps or drop a
+    prerequisite. Drops empty steps, and a repeated title only when its span overlaps the
+    earlier one (a replay of the same demonstration); a step genuinely done twice, such as
+    hand hygiene at the start and the end, is kept with " (again)" added to its title.
+    Applies a refined bound (keyed by draft number) unless it would start before the
+    previous step's start, clamps times to the video and so that starts never go backwards,
+    assigns s1..sN, keeps only prerequisites that exist and come earlier (one that names a
+    dropped replay points at the step it repeats), and fills any empty eval list."""
     bounds = bounds or {}
     draft = with_unique_numbers(draft)
-    kept: list[tuple[DraftStep, float, float]] = []
-    seen_titles: set[str] = set()
-    for step in draft.steps:
+    kept: list[_Kept] = []
+    replay_of: dict[int, int] = {}
+    for step in sorted(draft.steps, key=lambda s: s.number):
         title = _clean(step.title)
         key = re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
-        if not key or key in seen_titles:
+        if not key:
             continue
-        seen_titles.add(key)
-        start, end = bounds.get(step.number, (step.start_s, step.end_s))
-        start, end = _clamp_span(start, end, duration)
-        kept.append((step, start, end))
+        rough = _clamp_span(step.start_s, step.end_s, duration)
+        refined = _clamp_span(*bounds[step.number], duration) if step.number in bounds else None
+        start, end = refined or rough
+        replayed = next((k for k in kept if k.key == key and start < k.end and k.start < end), None)
+        if replayed is not None:
+            replay_of[step.number] = replayed.step.number
+            continue
+        if any(k.key == key for k in kept):
+            title = f"{title} (again)"
+        prev_start = kept[-1].start if kept else 0.0
+        if start < prev_start:
+            start, end = rough
+        if start < prev_start:
+            start, end = _clamp_span(prev_start, max(end, prev_start), duration)
+        kept.append(_Kept(step, title, key, start, end))
     if not kept:
         raise ValueError("Gemini returned no usable rubric steps")
 
-    kept.sort(key=lambda item: (item[1], item[0].number))
     _trim_overlaps(kept)
-    new_id = {step.number: f"s{i + 1}" for i, (step, _, _) in enumerate(kept)}
+    new_id = {k.step.number: f"s{i + 1}" for i, k in enumerate(kept)}
 
     steps = []
-    for i, (step, start, end) in enumerate(kept):
-        earlier = {new_id[s.number] for s, _, _ in kept[:i]}
+    for i, k in enumerate(kept):
+        step, title, start, end = k.step, k.title, k.start, k.end
+        earlier = {new_id[e.step.number] for e in kept[:i]}
         must_follow = []
         for n in step.prerequisites:
-            sid = new_id.get(n)
+            sid = new_id.get(replay_of.get(n, n))
             if sid in earlier and sid not in must_follow:
                 must_follow.append(sid)
         must_follow.sort(key=lambda sid: int(sid[1:]))
-        title = _clean(step.title)
         description = _clean(step.description) or title
         steps.append(RubricStep(
             step_id=f"s{i + 1}", order=i + 1, title=title, description=description,
@@ -234,14 +261,12 @@ def _clamp_span(start: float, end: float, duration: float) -> tuple[float, float
     return start, end
 
 
-def _trim_overlaps(kept: list[tuple[DraftStep, float, float]]) -> None:
+def _trim_overlaps(kept: list[_Kept]) -> None:
     """End each step where the next one starts, so a playing time maps to one step.
     A step is never shortened below MIN_STEP_S."""
-    for i in range(len(kept) - 1):
-        step, start, end = kept[i]
-        next_start = kept[i + 1][1]
-        if end > next_start and next_start - start >= MIN_STEP_S:
-            kept[i] = (step, start, next_start)
+    for this, nxt in zip(kept, kept[1:]):
+        if this.end > nxt.start and nxt.start - this.start >= MIN_STEP_S:
+            this.end = nxt.start
 
 
 def _clean(text: str) -> str:

@@ -15,6 +15,33 @@ Ground rules:
 """
 
 
+# The status rules for a step seen across the whole recording. A step never performed is
+# failed; unverified is only for a step that may have happened where it could not be seen.
+_WHOLE_VIDEO_RULES = [
+    "- passed: the pass criteria are observed and no fail criterion is.",
+    "- failed: a fail criterion is observed, or the step was not performed in this attempt: the",
+    "  caregiver moved on without doing it, or the recording ends before it.",
+    "- unverified: only when the step may have been performed but the camera or microphone could",
+    "  not show it (out of frame, blocked from view, too dark, inaudible). A step the recording",
+    "  ends before is failed, not unverified, even if an \"unverified when\" condition mentions",
+    "  the recording ending.",
+]
+
+# The status rules for a second look at part of the recording: the step may have happened
+# outside the clip, so not seeing it here proves nothing.
+_CLIP_RULES = [
+    "- passed: the pass criteria are observed and no fail criterion is.",
+    "- failed: a fail criterion is observed in this clip.",
+    "- unverified: the step does not appear in this clip at all (it may have been done elsewhere",
+    "  in the video), or it may have been performed but the camera or microphone could not show it",
+    "  (out of frame, blocked from view, too dark, inaudible).",
+]
+
+
+def _rules(lines: list[str], indent: str = "") -> str:
+    return "\n".join(indent + line for line in lines)
+
+
 def _fmt_list(items: list[str]) -> str:
     return "; ".join(items) if items else "(none given)"
 
@@ -63,14 +90,12 @@ The video is {duration:.0f} seconds long.
    If it shows something else, set skill_match false and say what it shows instead.
 
 3. Steps. Grade every step below, in the order given, exactly once, reusing its step id.
-   Write the evidence first: what you actually saw or heard, with the time span.
-   - passed: the pass criteria are observed and no fail criterion is.
-   - failed: a fail criterion is observed, or the step was clearly never performed although
-     the camera would have shown it.
-   - unverified: one of the step's "unverified when" conditions holds, or the recording
-     cannot settle it (out of frame, blocked from view, too dark, the video cuts away).
+   Write the evidence first: what you actually saw or heard. evidence_start_s and
+   evidence_end_s are the span where you saw or heard the step; use null for both when the
+   step is not seen at all.
+{_rules(_WHOLE_VIDEO_RULES, "   ")}
    Do not fail a step only because it was not located in the timeline below: look for it
-   yourself, and use unverified when the camera could not have shown it.
+   yourself first.
    confidence_pct is 0 to 100: how sure you are of the status.
    feedback speaks to the caregiver as "you", in one or two plain, encouraging sentences:
    for a pass, what you did well; for a failure, what went wrong and what to do instead;
@@ -93,31 +118,43 @@ Order problems found by that pass:
    - environment_hazard: hazards such as clutter, an unlocked wheelchair, a wet floor
    Severity: high = imminent risk of injury, medium = a concerning posture or instability,
    low = a minor point. Return an empty list when nothing is wrong.
+   Judge against what this skill expects. When the skill is a response to the patient's
+   instability (in a fall-response drill the patient losing balance and being lowered to the
+   floor is the scenario), do not flag that instability itself; flag only what the caregiver's
+   handling adds to it, such as the patient dropping hard, twisting or hitting their head.
    Skill-specific points to watch:
 {safety}
 
 5. overall_feedback: two or three encouraging, plain sentences to the caregiver: what went
-   well and the one or two most important things to work on.
+   well and the one or two most important things to work on. If a step was done out of
+   order or you raised a medium or high safety flag, mention the most important of these.
 """
 
 
-def double_check_prompt(skill: dict, step: RubricStep, start_s: float, end_s: float, duration: float) -> str:
-    """Instructions for a second, closer look at one step on its own clip."""
+def double_check_prompt(skill: dict, step: RubricStep, start_s: float, end_s: float, duration: float,
+                        whole_video: bool = False) -> str:
+    """Instructions for a second, closer look at one step, on its own clip or on the whole video.
+    Only a look at the whole video may fail a step for not being performed."""
+    if whole_video:
+        shown = (f"You are shown the whole {duration:.0f}-second video at a low frame rate, because an earlier "
+                 "pass could not tell where this step happens. Times you give are seconds from the start.")
+        rules = _rules(_WHOLE_VIDEO_RULES)
+    else:
+        shown = (f"You are shown only the part of the video from {start_s:.0f}s to {end_s:.0f}s, at a higher "
+                 f"frame rate. Times you give are seconds from the start of the whole {duration:.0f}-second "
+                 f"video, so they fall between {start_s:.0f} and {end_s:.0f}.")
+        rules = _rules(_CLIP_RULES)
     return f"""\
 You are a clinical skills assessor taking a careful second look at one step of a caregiver's
-practice recording of "{skill.get('name', 'unknown')}". You are shown only the part of the
-video from {start_s:.0f}s to {end_s:.0f}s, at a higher frame rate. Times you give are seconds
-from the start of the whole {duration:.0f}-second video, so they fall between {start_s:.0f} and {end_s:.0f}.
+practice recording of "{skill.get('name', 'unknown')}". {shown}
 
 {_GROUND_RULES.format(duration=duration)}
 Grade only this step:
 {_step_block(step)}
 
-Watch frame by frame. Write the evidence first: what you actually saw or heard, with the time span.
-- passed: the pass criteria are observed and no fail criterion is.
-- failed: a fail criterion is observed, or the step was clearly never performed in this part
-  although the camera would have shown it.
-- unverified: an "unverified when" condition holds, or this clip cannot settle it.
+Watch closely. Write the evidence first: what you actually saw or heard. evidence_start_s and
+evidence_end_s are the span where you saw or heard the step; use null for both when it is not seen.
+{rules}
 confidence_pct is 0 to 100. feedback speaks to the caregiver as "you", in one or two plain,
 encouraging sentences: for a pass, what you did well; for a failure, what went wrong and what
 to do instead; for unverified, what could not be seen and how to record it so it can be.
@@ -142,7 +179,9 @@ off-centre, sliding, unsteady or in distress in this clip? Points to watch for t
 {watch}
 
 Set observed true only if you clearly see or hear it; normal, controlled movement such as
-leaning forward to stand up on cue is not a problem. If observed, give the kind, a severity
+leaning forward to stand up on cue is not a problem, and neither is the loss of balance a drill
+is about (in a fall-response drill the patient is meant to start falling) unless the caregiver's
+handling makes it worse. If observed, give the kind, a severity
 (high = imminent risk of injury, medium = a concerning posture or instability, low = a minor
 point), the time span, and one sentence describing what you saw.
 """

@@ -81,6 +81,8 @@ EVALS for each step, each item one short concrete sentence:
 - unverified_when: 1 to 3 situations in which a webcam recording cannot show whether
   the step was done (the relevant hands, feet, equipment or face are out of frame or
   blocked; for a spoken step, the recording has no audio or the speech is inaudible).
+  Never list the recording ending or stopping: a step the recording does not reach was
+  not performed, and is failed.
 - visual_cues: 1 to 3 things that show where in a recording this step happens.
 
 CRITICAL

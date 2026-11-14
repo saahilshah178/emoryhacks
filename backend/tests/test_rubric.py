@@ -26,11 +26,11 @@ def draft(*steps, safety=("Patient stays steady.",), order_matters=True):
     return DraftRubric(steps=list(steps), safety_criteria=list(safety), order_matters=order_matters, notes=" left out intro ")
 
 
-def test_build_rubric_sorts_and_renumbers_and_remaps_prerequisites():
+def test_build_rubric_keeps_outline_order_and_renumbers_and_remaps_prerequisites():
     rb = build_rubric(draft(
-        draft_step(1, 30, 40, "Stand up", prerequisites=[3, 2], critical=True),
-        draft_step(2, 10, 20, "Lock brakes", critical=True),
-        draft_step(3, 20, 30, "Explain", prerequisites=[1, 9, 3]),  # 1 is later, 9 unknown, 3 is itself
+        draft_step(3, 30, 40, "Stand up", prerequisites=[2, 1], critical=True),
+        draft_step(1, 10, 20, "Lock brakes", critical=True),
+        draft_step(2, 20, 30, "Explain", prerequisites=[3, 9, 2]),  # 3 is later, 9 unknown, 2 is itself
     ), duration=60)
     assert [s.title for s in rb.steps] == ["Lock brakes", "Explain", "Stand up"]
     assert [s.step_id for s in rb.steps] == ["s1", "s2", "s3"]
@@ -42,13 +42,48 @@ def test_build_rubric_sorts_and_renumbers_and_remaps_prerequisites():
     assert rb.notes == "left out intro"
 
 
+def test_refined_bounds_never_swap_steps_or_drop_a_prerequisite():
+    """A refined start that lands before the previous step's start is not used: the step keeps
+    its outline time, so brakes still come before standing and standing still requires them."""
+    rb = build_rubric(draft(
+        draft_step(1, 0, 8, "Position the wheelchair"),
+        draft_step(2, 10, 14, "Lock wheelchair brakes", critical=True),
+        draft_step(3, 14, 18, "Stand the patient", prerequisites=[2], critical=True),
+        draft_step(4, 18, 24, "Pivot to the chair", prerequisites=[3]),
+    ), duration=30, bounds={2: (14.0, 18.0), 3: (12.0, 16.0)})
+    assert [s.title for s in rb.steps] == ["Position the wheelchair", "Lock wheelchair brakes",
+                                           "Stand the patient", "Pivot to the chair"]
+    stand = rb.steps[2]
+    assert stand.must_follow == ["s2"] and stand.order_dependent
+    assert (rb.steps[1].start_s, stand.start_s) == (14.0, 14.0)  # refined brakes kept; stand clamped, not moved before
+    assert rb.steps[3].must_follow == ["s3"]
+
+
+def test_outline_times_out_of_order_are_clamped_so_starts_never_go_backwards():
+    rb = build_rubric(draft(draft_step(1, 10, 16, "A"), draft_step(2, 8, 12, "B", prerequisites=[1])), duration=30)
+    assert [(s.title, s.start_s, s.must_follow) for s in rb.steps] == [("A", 10.0, []), ("B", 10.0, ["s1"])]
+
+
+def test_a_step_genuinely_repeated_is_kept_and_a_replay_is_dropped():
+    rb = build_rubric(draft(
+        draft_step(1, 0, 5, "Perform hand hygiene"),
+        draft_step(2, 5, 12, "Remove first glove"),
+        draft_step(3, 6, 11, "Remove first glove"),                   # replay of 2: overlapping span
+        draft_step(4, 12, 20, "Remove second glove", prerequisites=[3]),  # names the replay
+        draft_step(5, 25, 35, "Perform hand hygiene", prerequisites=[4]),
+    ), duration=40)
+    assert [s.title for s in rb.steps] == ["Perform hand hygiene", "Remove first glove", "Remove second glove",
+                                           "Perform hand hygiene (again)"]
+    assert rb.steps[2].must_follow == ["s2"] and rb.steps[3].must_follow == ["s3"]
+
+
 def test_build_rubric_clamps_times_and_drops_empty_and_duplicate_steps():
     rb = build_rubric(draft(
         draft_step(1, -5, 3),
         draft_step(2, 50, 45),              # end before start
         draft_step(3, 58, 90),              # runs past the end of the video
         draft_step(4, 10, 12, title="  "),  # empty title
-        draft_step(5, 20, 22, title="step 1!"),  # duplicate of "Step 1" after normalising
+        draft_step(5, 1, 2, title="step 1!"),  # a replay of "Step 1" (same title after normalising, overlapping)
         draft_step(6, 70, 80),              # starts after the end of the video
     ), duration=60)
     times = [(s.title, s.start_s, s.end_s) for s in rb.steps]

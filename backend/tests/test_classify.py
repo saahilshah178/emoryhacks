@@ -46,6 +46,9 @@ def test_aliases_map_near_misses_onto_catalog_slugs():
     assert classify.canonical_slug("glove_removal") == "glove_removal"
     assert classify.canonical_slug("Hoyer Lift Transfer") == "hoyer_lift_transfer"
     assert all(target in classify.catalog.BY_SLUG for target in classify.ALIASES.values())
+    # Broader or different procedures keep their own slug instead of becoming a narrower skill.
+    assert classify.canonical_slug("ppe_doffing") == "ppe_doffing"
+    assert classify.canonical_slug("fall_prevention") == "fall_prevention"
 
 
 def test_alias_takes_catalog_name_and_category():

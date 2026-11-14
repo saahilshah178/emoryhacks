@@ -16,7 +16,9 @@ from .classify_prompts import CLASSIFY_PROMPT
 
 CATEGORIES = {"transfer", "mobility", "positioning", "hygiene", "infection_control", "emergency", "other"}
 
-# Near-miss slugs the model may invent, mapped onto the catalog slug they mean.
+# Near-miss slugs the model may invent, mapped onto the catalog slug they mean. Only names
+# for the same skill belong here: a broader or different procedure (full PPE doffing, fall
+# prevention) keeps its own slug, so it is not filed as a version of a narrower skill.
 ALIASES: dict[str, str] = {
     # wheelchair_transfer
     "bed_to_wheelchair_transfer": "wheelchair_transfer",
@@ -57,7 +59,6 @@ ALIASES: dict[str, str] = {
     # fall_response
     "controlled_fall": "fall_response",
     "fall_recovery": "fall_response",
-    "fall_prevention": "fall_response",
     "assisting_a_falling_patient": "fall_response",
     "lowering_to_floor": "fall_response",
     # shower_assistance
@@ -69,7 +70,6 @@ ALIASES: dict[str, str] = {
     "doffing_gloves": "glove_removal",
     "glove_doffing": "glove_removal",
     "removing_gloves": "glove_removal",
-    "ppe_doffing": "glove_removal",
     # hand_hygiene
     "hand_washing": "hand_hygiene",
     "handwashing": "hand_hygiene",

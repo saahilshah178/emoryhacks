@@ -66,6 +66,34 @@ def test_no_violation_for_missing_prerequisite_or_when_order_does_not_matter():
     assert timeline.build_timeline(_rubric([], ["s1"], ["s2"], dependent=False), early).order_violations == []
 
 
+def test_order_is_checked_across_a_skipped_step():
+    """brakes -> gait belt -> stand: the belt is skipped and the patient stands before the brakes."""
+    rb = _rubric([], ["s1"], ["s2"], ["s3"])
+    tl = timeline.build_timeline(rb, [_found("s1", 20.0), _missing("s2"), _found("s3", 5.0), _found("s4", 25.0)])
+    assert [(v.step_id, v.expected_after) for v in tl.order_violations] == [("s3", "s1")]
+    assert tl.order_violations[0].message == '"Step 3" was performed before "Step 1".'
+
+
+def test_notes_name_steps_by_title_not_id():
+    rb = _rubric([], [], [])
+    located = [_Located(step_id="s3", performed=True, start_s=1, end_s=2, confidence=0.9,
+                        note="Performed before s2; repeated after S1. Not s9.")]
+    [_, _, s3] = timeline.clean_steps(rb, located, duration=40.0)
+    assert s3.note == 'Performed before "Step 2"; repeated after "Step 1". Not s9.'
+    assert "never by their id" in timeline.timeline_prompts.locate(rb, 40.0)
+
+
+def test_refined_times_never_move_a_step_past_a_located_neighbour():
+    first = [_found("s1", 100.0, 102.0), _found("s2", 102.0, 105.0), _missing("s3"), _found("s4", 110.0, 115.0)]
+    refined = [_found("s1", 99.0, 101.5), _found("s2", 98.5, 104.0), _missing("s3"), _found("s4", 109.0, 114.0)]
+    kept = timeline.keep_performed_order(first, refined)
+    assert [(s.start_s, s.end_s) for s in kept if s.found] == [(99.0, 101.5), (102.0, 105.0), (109.0, 114.0)]
+    assert not kept[2].found
+    # A step refined later than its next neighbour's start also keeps its first-pass times.
+    late = [_found("s1", 104.0, 106.0), *refined[1:]]
+    assert timeline.keep_performed_order(first, late)[0].start_s == 100.0
+
+
 def test_every_unmet_prerequisite_is_reported_in_time_order():
     rb = _rubric([], [], ["s1", "s2"])
     tl = timeline.build_timeline(rb, [_found("s1", 10.0), _found("s2", 20.0), _found("s3", 0.0)])

@@ -25,7 +25,8 @@ def test_defaults_are_unlimited_and_assigned_to_everyone(agency):
         "slug": skill["slug"], "max_attempts": None, "submit_pct": 80, "force_pct": 50, "assign_all": True}
     assert _row(policy, cg) == {"id": str(cg), "name": "Casey Caregiver", "title": "caregiver title", "assigned": True,
                                 "limit_mode": "inherit", "max_attempts": None, "attempts_used": 0,
-                                "attempts_allowed": None, "attempts_left": None, "state": "not_started"}
+                                "attempts_allowed": None, "attempts_left": None, "state": "not_started",
+                                "skill_attempt_limit": None}
     listed = next(s for s in agency.nurse.get("/api/skills").json() if s["id"] == str(skill["id"]))
     assert listed["policy"] == {"max_attempts": None, "submit_pct": 80, "force_pct": 50, "assign_all": True,
                                 "assigned_count": 1}
@@ -158,6 +159,37 @@ def test_per_caregiver_limits_and_grants(agency):
     assert standing(agency.nurse.patch(url, json={"grant": 1}).json()) == (True, "inherit", None, 2, None, None)
 
 
+def test_a_caregiver_limit_applies_to_every_skill_until_one_skill_sets_its_own(agency):
+    first = agency.skill("First")
+    second = agency.skill("Second")
+    cg, client = agency.caregiver()
+    agency.nurse.put(f"/api/skills/{first['id']}/policy", json={"max_attempts": 5})
+    detail = agency.nurse.patch(f"/api/caregivers/{cg}", json={"skill_attempt_limit": 3}).json()
+    assert detail["skill_attempt_limit"] == 3
+
+    def allowed(body: dict, skill_id) -> int | None:
+        return next(s for s in body["skills"] if s["skill_id"] == str(skill_id))["attempts_allowed"]
+
+    assert allowed(detail, first["id"]) == 3 and allowed(detail, second["id"]) == 3
+    # the skill's own number still shows for someone without a caregiver limit
+    other = agency.caregiver("Other")[0]
+    other_detail = agency.nurse.get(f"/api/caregivers/{other}").json()
+    assert other_detail["skill_attempt_limit"] is None
+    assert allowed(other_detail, first["id"]) == 5 and allowed(other_detail, second["id"]) is None
+    # one skill can still have its own number, or unlimited
+    detail = agency.nurse.patch(f"/api/caregivers/{cg}/skills/{second['id']}", json={"max_attempts": 1}).json()
+    assert allowed(detail, second["id"]) == 1 and allowed(detail, first["id"]) == 3
+    for _ in range(3):
+        agency.attempt(cg, first, 40)
+    assert upload(client, first["id"]).status_code == 409
+    # clearing the caregiver limit returns the first skill to its own number
+    detail = agency.nurse.patch(f"/api/caregivers/{cg}", json={"skill_attempt_limit": None}).json()
+    assert detail["skill_attempt_limit"] is None
+    assert allowed(detail, first["id"]) == 5 and allowed(detail, second["id"]) == 1
+    assert agency.nurse.patch(f"/api/caregivers/{cg}", json={"skill_attempt_limit": 0}).status_code == 422
+    assert agency.nurse.patch(f"/api/caregivers/{cg}", json={"skill_attempt_limit": 51}).status_code == 422
+
+
 def test_caregiver_skill_patch_validation(agency):
     skill = agency.skill()
     cg, client = agency.caregiver()
@@ -233,6 +265,11 @@ def test_unit_allowance_rules():
     assert progress.attempts_allowed(pol, None) == 4
     assert progress.attempts_allowed(pol, {"limit_mode": "limited", "max_attempts": 7}) == 7
     assert progress.attempts_allowed(pol, {"limit_mode": "unlimited", "max_attempts": 7}) is None
+    # a caregiver's own number applies to every skill until one skill sets its own
+    assert progress.attempts_allowed(pol, None, 3) == 3
+    assert progress.attempts_allowed(pol, {"limit_mode": "inherit"}, 3) == 3
+    assert progress.attempts_allowed(pol, {"limit_mode": "limited", "max_attempts": 7}, 3) == 7
+    assert progress.attempts_allowed(pol, {"limit_mode": "unlimited"}, 3) is None
     assert not progress.is_assigned(pol, None) and progress.is_assigned(pol, {"assigned": True})
     assert progress.is_assigned(progress.policy(None), {"assigned": False})  # assign_all wins
 

@@ -433,3 +433,8 @@ CREATE TABLE IF NOT EXISTS builtin_installs (
   installed_at  timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (org_id, slug, revision)
 );
+-- @@
+-- How many attempts this caregiver gets on each skill, unless a nurse set a different number
+-- on one skill (skill_assignments.limit_mode). NULL means each skill's own limit.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS skill_attempt_limit integer
+  CHECK (skill_attempt_limit IS NULL OR skill_attempt_limit BETWEEN 1 AND 50);

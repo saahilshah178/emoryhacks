@@ -92,7 +92,16 @@ export type SkillPolicyView = SkillPolicy & {
   skill_id: string;
   slug: string;
   /** Every caregiver of the agency, by name. */
-  caregivers: Array<CaregiverSkillLimits & { id: string; name: string; title: string; state: SkillState }>;
+  caregivers: Array<
+    CaregiverSkillLimits & {
+      id: string;
+      name: string;
+      title: string;
+      state: SkillState;
+      /** Their attempts on each skill, unless one skill sets its own. Null uses the skill's number. */
+      skill_attempt_limit: number | null;
+    }
+  >;
 };
 
 export type Prefs = { safety: boolean; submissions: boolean; digest: boolean };
@@ -391,6 +400,8 @@ export type CaregiverRow = {
   location: string;
   hire_date: string | null;
   employment: "onboarding" | "active";
+  /** Attempts this caregiver gets on each skill, unless one skill sets its own. Null uses the skill's number. */
+  skill_attempt_limit: number | null;
   /** "restricted" while an attempt with a safety concern is waiting for a nurse. */
   status: "onboarding" | "active" | "restricted";
   next_shift: string;

@@ -162,6 +162,7 @@ function SkillRow({
         slug={skill.slug}
         limits={skill}
         skillMax={skillMax}
+        caregiverLimit={person.skill_attempt_limit}
         onSaved={onSaved}
       />
 

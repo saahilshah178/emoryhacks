@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useState } from "react";
-import { Card, CardBody, ErrorNote, Loadable, ProgressBar, Skeleton, StateBadge } from "@/components/ui";
+import { Button, Card, CardBody, ErrorNote, Loadable, ProgressBar, Skeleton, StateBadge } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatDate, formatDateTime, plural } from "@/lib/format";
@@ -11,6 +11,8 @@ import { caregiverStatus } from "@/lib/status";
 import type { CaregiverDetail } from "@/lib/types";
 import { BackLink } from "@/shared/layout/BackLink";
 import { PageHeading } from "@/shared/layout/PageHeading";
+import { NumberStepper } from "@/nurse/components/attempts/NumberStepper";
+import { MAX_ATTEMPTS, MIN_ATTEMPTS, parseCount } from "@/nurse/components/attempts/words";
 import { CaregiverHistory, scrollToHistory, useHistorySlug } from "@/nurse/components/caregivers/CaregiverHistory";
 import { CaregiverSkills } from "@/nurse/components/caregivers/CaregiverSkills";
 import { useDashboard } from "@/nurse/context/DashboardContext";
@@ -141,7 +143,7 @@ function Profile({ person, onSaved }: { person: CaregiverDetail; onSaved: (next:
             Employment
           </p>
           <div className="mt-3 grid grid-cols-2 gap-1 rounded-[12px] border border-border bg-white p-1" role="group" aria-labelledby="employment-label">
-            {(["active", "onboarding"] as const).map((value) => {
+            {(["onboarding", "active"] as const).map((value) => {
               const selected = person.employment === value;
               return (
                 <button
@@ -171,8 +173,117 @@ function Profile({ person, onSaved }: { person: CaregiverDetail; onSaved: (next:
             </p>
           ) : null}
           {error ? <ErrorNote className="mt-3" message={error} /> : null}
+          <AttemptLimit key={person.id} person={person} onSaved={onSaved} />
         </div>
       </CardBody>
     </Card>
+  );
+}
+
+/** One number for every skill this caregiver has, unless a skill sets its own. */
+function AttemptLimit({ person, onSaved }: { person: CaregiverDetail; onSaved: (next: CaregiverDetail) => void }) {
+  const { reloadOverview } = useDashboard();
+  // An API from before this field existed leaves it out; that reads as no number of their own.
+  const saved = person.skill_attempt_limit ?? null;
+  // Drafts: null shows what is saved, so a reload from elsewhere is never hidden behind them.
+  const [ownDraft, setOwnDraft] = useState<boolean | null>(null);
+  const [countDraft, setCountDraft] = useState<string | null>(null);
+  const own = ownDraft ?? saved !== null;
+  const count = countDraft ?? String(saved ?? 3);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const number = parseCount(count);
+  const dirty = own ? saved !== number : saved !== null;
+
+  async function save(limit: number | null) {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await api<CaregiverDetail>(`/caregivers/${person.id}`, {
+        method: "PATCH",
+        json: { skill_attempt_limit: limit },
+      });
+      onSaved(next);
+      reloadOverview();
+      setOwnDraft(null);
+      setCountDraft(null);
+    } catch (e) {
+      setError(errorMessage(e));
+      // Clearing failed, so their number still applies: show it again.
+      if (limit === null) setOwnDraft(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-5 border-t border-border pt-4">
+      <p className="text-sm font-semibold text-ink" id="attempt-limit-label">
+        Attempts per skill
+      </p>
+      <p className="mt-1 text-xs text-ink-secondary">
+        How many times they can record each skill. A different number on one skill still wins.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-2 gap-1 rounded-[12px] border border-border bg-white p-1" role="group" aria-labelledby="attempt-limit-label">
+          <button
+            type="button"
+            aria-pressed={!own}
+            disabled={busy}
+            onClick={() => {
+              setOwnDraft(false);
+              setError(null);
+              if (saved !== null) void save(null);
+            }}
+            className={cn(
+              "h-8 rounded-[10px] px-2.5 text-xs font-medium transition-colors disabled:cursor-wait",
+              !own ? "bg-teal text-white" : "text-ink-secondary hover:bg-secondary hover:text-ink",
+            )}
+          >
+            Each skill&apos;s number
+          </button>
+          <button
+            type="button"
+            aria-pressed={own}
+            disabled={busy}
+            onClick={() => {
+              setOwnDraft(true);
+              setError(null);
+            }}
+            className={cn(
+              "h-8 rounded-[10px] px-2.5 text-xs font-medium transition-colors disabled:cursor-wait",
+              own ? "bg-teal text-white" : "text-ink-secondary hover:bg-secondary hover:text-ink",
+            )}
+          >
+            Their own number
+          </button>
+        </div>
+        {own ? (
+          <>
+            <NumberStepper
+              size="sm"
+              value={count}
+              onChange={setCountDraft}
+              min={MIN_ATTEMPTS}
+              max={MAX_ATTEMPTS}
+              label={`Attempts per skill for ${person.name}`}
+              invalid={number === null}
+              disabled={busy}
+            />
+            {dirty ? (
+              <Button size="sm" loading={busy} disabled={number === null} onClick={() => number !== null && void save(number)}>
+                Set
+              </Button>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+      {own && number === null ? (
+        <p className="mt-2 text-xs text-danger">
+          Choose a number from {MIN_ATTEMPTS} to {MAX_ATTEMPTS}.
+        </p>
+      ) : null}
+      {error ? <ErrorNote className="mt-3" message={error} /> : null}
+    </div>
   );
 }

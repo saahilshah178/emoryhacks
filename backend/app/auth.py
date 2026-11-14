@@ -98,7 +98,7 @@ def forget_cached(user_id=None) -> None:
 
 
 _USER_SQL = """SELECT u.id, u.org_id, u.role, u.name, u.username, u.email, u.title, u.credentials, u.location, u.hire_date,
-                      u.next_shift, u.employment, u.prefs, u.notifications_seen_at, u.created_at,
+                      u.next_shift, u.employment, u.skill_attempt_limit, u.prefs, u.notifications_seen_at, u.created_at,
                       o.name AS org_name, o.is_sample AS org_is_sample
                FROM users u JOIN orgs o ON o.id = u.org_id"""
 

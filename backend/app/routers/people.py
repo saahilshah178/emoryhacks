@@ -4,7 +4,7 @@ GET   /api/caregivers                       roster with progress, open flags and
 GET   /api/caregivers/{id}                  one caregiver: standing, limits and attempts used on each
                                             assigned skill, the skills not assigned to them, and every
                                             attempt they made (nurses)
-PATCH /api/caregivers/{id}                  {employment, title, location} (nurses)
+PATCH /api/caregivers/{id}                  {employment, title, location, skill_attempt_limit} (nurses)
 PATCH /api/caregivers/{id}/skills/{skill_id}
                                             {assigned?, limit_mode?, max_attempts?, grant?}: assign or
                                             unassign the skill, set this caregiver's own attempt limit,
@@ -28,10 +28,15 @@ Skills count toward a caregiver (skills_total, verification rate) only while ass
 PATCH .../skills/{skill_id} rules:
   assigned     true or false. Unassigning one caregiver from a skill assigned to everyone
                switches the skill to picked caregivers, with everyone else still assigned.
-  limit_mode   'inherit' (the skill's limit), 'limited' (max_attempts, 1..50) or 'unlimited'.
+  limit_mode   'inherit' (the caregiver's own attempts-per-skill, or the skill's limit when
+               they have none), 'limited' (max_attempts, 1..50) or 'unlimited'.
                Sending max_attempts alone means 'limited'.
   grant        k (1..50) more attempts: 'limited' with max_attempts = max(allowed, used) + k.
                Does nothing for a caregiver whose attempts are unlimited.
+
+PATCH /api/caregivers/{id} skill_attempt_limit is how many attempts that caregiver gets on
+every skill, unless a skill sets its own number for them. Null clears it, so each skill's
+limit applies again. Caregivers are created onboarding; a nurse marks them active.
 """
 from __future__ import annotations
 
@@ -55,6 +60,8 @@ class CaregiverPatch(BaseModel):
     employment: str | None = None
     title: str | None = Field(default=None, max_length=80)
     location: str | None = Field(default=None, max_length=80)
+    # Null clears it. Omitted leaves it as it is.
+    skill_attempt_limit: int | None = None
 
 
 class CaregiverSkillPatch(BaseModel):
@@ -132,7 +139,7 @@ def get_caregiver(caregiver_id: str, user: dict = Depends(auth.nurse)):
     for slug, s in sorted(skills.items(), key=lambda kv: kv[1]["name"]):
         base = {"skill_id": s["id"], "slug": slug, "name": s["name"], "category": s["category"]}
         standing = progress.caregiver_skill(s["policy"], assignments.get((slug, person_id)),
-                                            groups.get((person_id, slug), []))
+                                            groups.get((person_id, slug), []), person["skill_attempt_limit"])
         if standing["assigned"]:
             rows.append({**base, **standing})
         else:
@@ -146,12 +153,23 @@ def get_caregiver(caregiver_id: str, user: dict = Depends(auth.nurse)):
 @router.patch("/caregivers/{caregiver_id}")
 def patch_caregiver(caregiver_id: str, body: CaregiverPatch, user: dict = Depends(auth.nurse)):
     person_id = _caregiver_id_or_404(caregiver_id, user)
-    if body.employment is not None and body.employment not in ("onboarding", "active"):
+    given = body.model_fields_set
+    if "employment" in given and body.employment not in ("onboarding", "active"):
         raise HTTPException(422, "employment must be 'onboarding' or 'active'")
-    fields = body.model_dump(exclude_none=True)
+    if "skill_attempt_limit" in given and body.skill_attempt_limit is not None \
+            and not 1 <= body.skill_attempt_limit <= progress.MAX_ATTEMPTS:
+        raise HTTPException(422, f"Attempts per skill must be a whole number from 1 to {progress.MAX_ATTEMPTS}, "
+                                  "or left unset so each skill's own limit applies.")
+    fields = {}
+    for key in ("employment", "title", "location"):
+        if key in given and getattr(body, key) is not None:
+            value = getattr(body, key)
+            fields[key] = value.strip() if isinstance(value, str) else value
+    if "skill_attempt_limit" in given:
+        fields["skill_attempt_limit"] = body.skill_attempt_limit
     if fields:
         db.execute(f"UPDATE users SET {', '.join(f'{k}=%s' for k in fields)} WHERE id=%s",
-                   (*[v.strip() if isinstance(v, str) else v for v in fields.values()], person_id))
+                   (*fields.values(), person_id))
         auth.forget_cached(person_id)
     return get_caregiver(caregiver_id, user)
 
@@ -389,7 +407,8 @@ def my_skills(user: dict = Depends(auth.current_user)):
     assignments = repo.get_assignments(org, caregiver_id=me)
     for s in skills:
         rows = groups.get((me, s["slug"]), [])
-        allow = progress.allowance(s["policy"], assignments.get((s["slug"], me)), rows)
+        allow = progress.allowance(s["policy"], assignments.get((s["slug"], me)), rows,
+                                   user.get("skill_attempt_limit"))
         s.update(progress.skill_state(rows))
         s.update({"attempts_used": allow["used"], "attempts_allowed": allow["allowed"],
                   "attempts_left": allow["left"], "ready_attempt_id": progress.ready_attempt_id(rows),

@@ -1,0 +1,11 @@
+# Only what the API image needs (see Dockerfile). Everything else stays out, above all
+# .env (secrets), data/ (this machine's videos) and the web app.
+*
+!pyproject.toml
+!uv.lock
+!.python-version
+!backend/
+!reference_vids/
+backend/tests/
+**/__pycache__/
+**/*.pyc

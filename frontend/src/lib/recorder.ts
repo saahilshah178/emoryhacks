@@ -62,6 +62,25 @@ function extensionFor(mime: string) {
 }
 
 /**
+ * For a <video> playing back a fresh recording: pass it from onLoadedMetadata.
+ *
+ * Chrome reports a just-recorded WebM's length as Infinity until it has seen the end, so the
+ * seek bar shows no length and can't be dragged. Jumping far ahead makes it work the length
+ * out; the player then goes back to the start.
+ */
+export function settleRecordingDuration(video: HTMLVideoElement) {
+  if (video.duration !== Infinity) return;
+  video.addEventListener(
+    "durationchange",
+    () => {
+      video.currentTime = 0;
+    },
+    { once: true },
+  );
+  video.currentTime = 1e9;
+}
+
+/**
  * Camera preview and recording.
  *
  *   const r = useRecorder({ facingMode: "user" });

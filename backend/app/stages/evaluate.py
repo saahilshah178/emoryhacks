@@ -145,7 +145,7 @@ def missing_result(step: RubricStep) -> StepResult:
     return StepResult(
         step_id=step.step_id, status="unverified", confidence=0.0,
         feedback=f'We could not assess "{step.title}" from this recording. '
-                 "Record it again with your hands and the patient fully in view.",
+                 "Record it again with the whole movement in view of the camera.",
         evidence="The assessment did not return a result for this step.",
     )
 

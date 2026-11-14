@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, StateBadge } from "@/components/ui";
 import { skillHref, skillPriority } from "@/caregiver/skills";
-import { attemptsLeftLine, readyToSend, skillAllowance, skillStateForCaregiver } from "@/caregiver/status";
+import { attemptsLeftLine, skillAllowance, skillCardState } from "@/caregiver/status";
 import { cn } from "@/lib/cn";
 import { plural } from "@/lib/format";
 import { categoryLabel } from "@/lib/status";
@@ -27,8 +27,7 @@ export function SkillsAtAGlance({ skills, className }: { skills: MySkill[]; clas
       <CardBody>
         <ul className="overflow-hidden rounded-[12px] border border-border">
           {sorted.map((skill, index) => {
-            const state = skillStateForCaregiver[skill.state];
-            const ready = Boolean(skill.ready_attempt_id);
+            const { badge, extra, action } = skillCardState(skill);
             const left = skill.state === "verified" ? null : attemptsLeftLine(skillAllowance(skill));
             return (
               <li key={skill.id} className={cn(index > 0 && "border-t border-border")}>
@@ -40,9 +39,10 @@ export function SkillsAtAGlance({ skills, className }: { skills: MySkill[]; clas
                       {left ? <span className={cn(skill.attempts_left === 0 && skill.state !== "in_review" && "text-danger")}> · {left}</span> : null}
                     </p>
                   </div>
-                  <StateBadge entry={ready && skill.state === "practicing" ? readyToSend : state} />
+                  <StateBadge entry={badge} />
+                  {extra ? <StateBadge entry={extra} /> : null}
                   <span className="hidden w-36 shrink-0 items-center justify-end gap-1.5 text-sm font-medium text-teal xl:inline-flex">
-                    {ready ? readyToSend.action : state.action}
+                    {action}
                     <ArrowRight className="h-4 w-4" aria-hidden />
                   </span>
                 </Link>

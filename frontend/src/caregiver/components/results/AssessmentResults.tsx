@@ -19,7 +19,7 @@ import { formatDate, formatDateTime, plural } from "@/lib/format";
 import { useApi, useJob, useTitle } from "@/lib/hooks";
 import { flagTitle, personRole, stepStatusForCaregiver, toneClass } from "@/lib/status";
 import { useVideoSegments } from "@/lib/segment";
-import { savedStatus, tallySteps } from "@/lib/steps";
+import { isNotNeeded, savedStatus, tallySteps } from "@/lib/steps";
 import type { Attempt, Status } from "@/lib/types";
 
 const STATUS_ORDER: Status[] = ["passed", "unverified", "failed"];
@@ -261,6 +261,11 @@ function Graded({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
   const flags = attempt.safety_flags.filter((flag) => flag.counts_toward_score);
   const reviewed = attempt.review_state === "approved" || attempt.review_state === "retraining";
   const steps = [...attempt.steps].sort((a, b) => a.ord - b.ord);
+  // Order is about the steps that were needed: a note involving a step that was not is left out.
+  const notNeeded = new Set(steps.filter((step) => isNotNeeded(savedStatus(step))).map((step) => step.step_id));
+  const orderNotes = attempt.order_violations.filter(
+    (v) => !notNeeded.has(v.step_id) && !notNeeded.has(v.expected_after),
+  );
 
   const state = attempt.review_state;
   const canPractice = attempt.attempts.left !== 0;
@@ -407,7 +412,7 @@ function Graded({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
                       key={step.step_id}
                       step={step}
                       number={index + 1}
-                      violations={attempt.order_violations}
+                      violations={orderNotes}
                       onPlay={onPlay}
                       onPlayDemo={reference ? playDemo : undefined}
                       active={step.step_id === current.id}
@@ -421,8 +426,16 @@ function Graded({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
           <Section title="Safety notes">
             {flags.length === 0 ? (
               <Card className="flex gap-3 p-4">
-                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden />
-                <p className="text-sm leading-relaxed text-ink">No safety concerns were noted. Nice work keeping your client safe.</p>
+                {/* No praise when the recording did not show the skill: there was little to judge. */}
+                <ShieldCheck
+                  className={cn("mt-0.5 h-5 w-5 shrink-0", attempt.skill_match === false ? "text-ink-secondary" : "text-success")}
+                  aria-hidden
+                />
+                <p className="text-sm leading-relaxed text-ink">
+                  {attempt.skill_match === false
+                    ? "No safety concerns were noted in this recording."
+                    : "No safety concerns were noted. Nice work keeping your patient safe."}
+                </p>
               </Card>
             ) : (
               <Card>

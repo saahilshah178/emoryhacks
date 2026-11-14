@@ -154,6 +154,12 @@ export type SkillStep = {
    */
   applies_when?: string;
   evals: StepEvals;
+  /**
+   * Criteria the automatic check leaves out because they depend on speech (it grades without
+   * sound): which list, the item's place in it, and the words. Only on GET /skills/{id}; absent
+   * from an older API.
+   */
+  unheard?: Array<{ field: keyof StepEvals; index: number; words: string[] }>;
 };
 
 export type SkillGuide = {
@@ -220,6 +226,8 @@ export type MySkill = Omit<SkillSummary, "policy"> & {
   policy: Pick<SkillPolicy, "submit_pct" | "force_pct">;
   /** Best-scoring attempt since the last decision that is not sent yet and can be sent normally. */
   ready_attempt_id: string | null;
+  /** The newest attempt while it is still being checked; null otherwise. Absent from an older API. */
+  checking_attempt_id?: string | null;
 };
 
 export type MySkills = {
@@ -297,7 +305,7 @@ export type AttemptHistoryItem = Pick<
   | "skill_version"
 >;
 
-export type AttemptStep = Omit<SkillStep, "start_s" | "end_s"> & {
+export type AttemptStep = Omit<SkillStep, "start_s" | "end_s" | "unheard"> & {
   /** Where the step is in the reference video. */
   ref_start_s: number;
   ref_end_s: number;
@@ -364,6 +372,8 @@ export type Attempt = AttemptSummary & {
   history: AttemptHistoryItem[];
   order_matters: boolean;
   reference_video_id: string | null;
+  /** The newest version of the skill; compare with skill_version. Absent from an older API. */
+  skill_latest_version?: number;
   steps: AttemptStep[];
   order_violations: OrderViolation[];
   safety_flags: SafetyFlag[];

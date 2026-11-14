@@ -28,6 +28,25 @@ export const skillStateForCaregiver: Record<SkillState, Entry & { action: string
 /** A recording that scored high enough to send and has not been sent. It is only sent if the caregiver sends it. */
 export const readyToSend: Entry & { action: string } = { label: "Good enough to send", tone: "success", action: "See your result" };
 
+/** The newest recording of a skill is still being checked. */
+export const beingChecked: Entry & { action: string } = {
+  label: "Being checked",
+  tone: reviewState.processing.tone,
+  action: "See its progress",
+};
+
+/**
+ * How a skill's card or row reads: its main badge, an extra badge when there is other news, and
+ * what pressing it does. A recording being checked is the news first, then one good enough to send.
+ */
+export function skillCardState(skill: MySkill): { badge: Entry; extra: Entry | null; action: string } {
+  const state = skillStateForCaregiver[skill.state];
+  const practicing = skill.state === "practicing";
+  const news = skill.checking_attempt_id ? beingChecked : skill.ready_attempt_id ? readyToSend : null;
+  if (!news) return { badge: state, extra: null, action: state.action };
+  return { badge: practicing ? news : state, extra: practicing ? null : news, action: news.action };
+}
+
 /** 64 -> "64%", 79.6 -> "79.6%", like the API's sentences: never rounded across a mark. */
 export function formatScore(value: number | null | undefined) {
   const score = Number(value ?? 0);

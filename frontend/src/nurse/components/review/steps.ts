@@ -1,5 +1,6 @@
 // How the review screen reads an attempt's steps.
 import { attemptStepSpan, type AttemptSpan } from "@/components/media/chapters";
+import { isNotNeeded } from "@/lib/steps";
 import type { Attempt, AttemptStep, OrderViolation, StepReview, StepStatus } from "@/lib/types";
 
 export type Span = AttemptSpan;
@@ -32,6 +33,26 @@ export function locatedSteps(steps: AttemptStep[], overrides: Overrides = {}) {
 export function effectiveStatus(step: AttemptStep, override?: Override | null): StepStatus | null {
   if (override) return override.status ?? step.status;
   return step.nurse_status ?? step.status;
+}
+
+/**
+ * Where each step was done among the steps that were needed and done, and where it belongs
+ * among them, by step_id; only steps out of their place are listed. A step that was not needed
+ * (counting the nurse's unsaved choice) or was not done takes no place, so leaving one out
+ * does not move the others: with steps 1 and 2 not needed, step 3 done first is in its place.
+ */
+export function orderPlaces(steps: AttemptStep[], overrides: Overrides = {}): Record<string, { done: number; expected: number }> {
+  const done = steps.filter(
+    (s) => s.performed_index !== null && !isNotNeeded(effectiveStatus(s, overrides[s.step_id])),
+  );
+  const byOrd = [...done].sort((a, b) => a.ord - b.ord);
+  const byDone = [...done].sort((a, b) => (a.performed_index ?? 0) - (b.performed_index ?? 0) || a.ord - b.ord);
+  const out: Record<string, { done: number; expected: number }> = {};
+  byDone.forEach((step, index) => {
+    const expected = byOrd.indexOf(step) + 1;
+    if (expected !== index + 1) out[step.step_id] = { done: index + 1, expected };
+  });
+  return out;
 }
 
 export function violationsFor(attempt: Pick<Attempt, "order_violations">, stepId: string): OrderViolation[] {

@@ -216,6 +216,14 @@ def get_skill(skill_id) -> dict | None:
     if not skill:
         return None
     skill["steps"] = db.fetch_all("SELECT * FROM skill_steps WHERE skill_id=%s ORDER BY ord", (skill_id,))
+    # The criteria the automatic check leaves out because they depend on speech (it grades
+    # without sound, evaluate_prompts.sight_only), so the nurse's screens can say so by each one.
+    from .stages import sight
+    for st in skill["steps"]:
+        st["unheard"] = [
+            {"field": where.split("[")[0], "index": int(where.split("[")[1].rstrip("]")), "words": words}
+            for where, text in sight.step_texts(st) if "[" in where and (words := sight.spoken_words(text))
+        ]
     skill["video"] = _with_availability(get_video(skill["reference_video_id"])) if skill["reference_video_id"] else None
     newest = db.fetch_one("SELECT id FROM skills WHERE slug=%s AND org_id=%s ORDER BY version DESC LIMIT 1",
                           (skill["slug"], skill["org_id"]))
@@ -470,6 +478,10 @@ def get_attempt(attempt_id) -> dict | None:
     if not attempt:
         return None
     attempt["caregiver_name"] = attempt.pop("caregiver_account_name") or attempt["caregiver_name"]
+    # The skill's newest version, so a screen can say when this was graded against an older one.
+    attempt["skill_latest_version"] = db.fetch_one(
+        "SELECT max(version) AS v FROM skills WHERE slug=%s AND org_id=%s",
+        (attempt["skill_slug"], attempt["org_id"]))["v"]
     attempt["steps"] = db.fetch_all(
         """SELECT st.step_id, st.ord, st.title, st.description, st.critical, st.order_dependent, st.must_follow,
                   st.applies_when, st.evals, st.start_s AS ref_start_s, st.end_s AS ref_end_s,

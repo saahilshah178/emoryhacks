@@ -122,6 +122,12 @@ class _Detector:
         return [people[i] for i in keep]
 
 
+def sample_rate(duration: float, video_fps: float) -> float:
+    """Frames per second to sample: POSE_FPS, fewer for long videos so at most about
+    POSE_MAX_FRAMES are measured, and never more than the video has."""
+    return min(config.POSE_FPS, config.POSE_MAX_FRAMES / max(duration, 1e-6), video_fps or config.POSE_FPS)
+
+
 def extract(ctx) -> PoseSummary:
     """Sample the video, measure every tracked person, and store the rows in Tiger Data."""
     if config.FAKE_AI:
@@ -132,7 +138,7 @@ def extract(ctx) -> PoseSummary:
         raise RuntimeError(f"OpenCV could not open {ctx.path}")
     video_fps = cap.get(cv2.CAP_PROP_FPS) or float(ctx.video.get("fps") or 30)
     duration = ctx.duration or (cap.get(cv2.CAP_PROP_FRAME_COUNT) / video_fps)
-    rate = min(config.POSE_FPS, config.POSE_MAX_FRAMES / max(duration, 1e-6), video_fps)
+    rate = sample_rate(duration, video_fps)
 
     detector = _Detector()
     tracker = pose_math.BoxTracker()

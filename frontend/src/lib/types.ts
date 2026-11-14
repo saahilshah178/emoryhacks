@@ -322,6 +322,12 @@ export type AttemptStep = Omit<SkillStep, "start_s" | "end_s"> & {
   nurse_note: string;
 };
 
+/** The nurse's reading of one step, sent with a decision. status null: back to the AI's. */
+export type StepReview = { step_id: string; status: StepStatus | null; note: string };
+
+/** POST /attempts/{id}/review. steps: only the steps whose reading or note the nurse changed. */
+export type ReviewRequest = { overall: Status; note: string; steps: StepReview[] };
+
 export type OrderViolation = { step_id: string; expected_after: string; message: string; at_s: number | null };
 
 export type SafetyFlag = {

@@ -6,7 +6,7 @@ import { Button, ErrorNote, StateBadge, Textarea } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
 import { firstName, formatDateTime, plural } from "@/lib/format";
 import { reviewState, stepStatus } from "@/lib/status";
-import type { Attempt, Status } from "@/lib/types";
+import type { Attempt, ReviewRequest, StepReview } from "@/lib/types";
 import { freshSet } from "@/nurse/components/attempts/words";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 
@@ -34,7 +34,7 @@ export function ReviewActions({
   editing: boolean;
   onEdit: () => void;
   onCancel: () => void;
-  changedSteps: Array<{ step_id: string; status: Status | null; note: string }>;
+  changedSteps: StepReview[];
 }) {
   const reviewed = attempt.review_state === "approved" || attempt.review_state === "retraining";
 
@@ -65,7 +65,7 @@ export function ReviewActions({
             <ul className="mt-1 space-y-1">
               {overridden.map((s) => (
                 <li key={s.step_id} className="text-ink">
-                  {s.ord}. {s.title}: {stepStatus[s.nurse_status as Status].label}
+                  {s.ord}. {s.title}: {s.nurse_status ? stepStatus[s.nurse_status].label : null}
                   {s.nurse_note ? <span className="text-ink-secondary"> — {s.nurse_note}</span> : null}
                 </li>
               ))}
@@ -91,7 +91,7 @@ function DecisionForm({
   attempt: Attempt;
   reviewed: boolean;
   onCancel: () => void;
-  changedSteps: Array<{ step_id: string; status: Status | null; note: string }>;
+  changedSteps: StepReview[];
 }) {
   const router = useRouter();
   const { showFlash, reloadOverview } = useDashboard();
@@ -112,9 +112,12 @@ function DecisionForm({
     setSaving(true);
     setApiError(null);
     try {
-      await api<Attempt>(`/attempts/${attempt.id}/review`, {
-        json: { overall: decision === "approved" ? "passed" : "failed", note: notes.trim(), steps: changedSteps },
-      });
+      const body: ReviewRequest = {
+        overall: decision === "approved" ? "passed" : "failed",
+        note: notes.trim(),
+        steps: changedSteps,
+      };
+      await api<Attempt>(`/attempts/${attempt.id}/review`, { json: body });
       showFlash(
         decision === "approved"
           ? { tone: "success", message: "Skill approved. The caregiver can perform this task independently once scheduled." }

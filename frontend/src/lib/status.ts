@@ -1,6 +1,6 @@
 // The words and colours for every state the product shows. Both the nurse dashboard and the
 // caregiver portal read from here, so one state never has two names.
-import type { AiAssessment, ReviewState, SafetyFlag, SkillState, Status, TrackRole } from "./types";
+import type { AiAssessment, ReviewState, SafetyFlag, SkillState, StepStatus, TrackRole } from "./types";
 
 export type Tone = "success" | "warning" | "danger" | "info" | "neutral" | "teal";
 
@@ -25,18 +25,23 @@ export const toneSolid: Record<Tone, string> = {
 
 type Entry = { label: string; tone: Tone };
 
-/** How the AI read one step, in the nurse's words. */
-export const stepStatus: Record<Status, Entry> = {
+/**
+ * How the AI (or the nurse) read one step, in the nurse's words. not_applicable: the step is
+ * only needed in a situation that did not come up, so it is neither a pass nor a problem.
+ */
+export const stepStatus: Record<StepStatus, Entry> = {
   passed: { label: "Passed", tone: "success" },
   unverified: { label: "Needs review", tone: "warning" },
   failed: { label: "Failed", tone: "danger" },
+  not_applicable: { label: "Not needed", tone: "neutral" },
 };
 
-/** The same three results in the caregiver's words: encouraging, never a verdict. */
-export const stepStatusForCaregiver: Record<Status, Entry> = {
+/** The same results in the caregiver's words: encouraging, never a verdict. */
+export const stepStatusForCaregiver: Record<StepStatus, Entry> = {
   passed: { label: "Looking strong", tone: "success" },
   unverified: { label: "Couldn't see clearly", tone: "warning" },
   failed: { label: "Needs improvement", tone: "danger" },
+  not_applicable: { label: "Not needed this time", tone: "neutral" },
 };
 
 export const aiAssessment: Record<AiAssessment, Entry> = {

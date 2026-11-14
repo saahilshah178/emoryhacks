@@ -21,6 +21,8 @@ export type Chapter = {
   faded?: boolean;
   /** Added to the segment's spoken label and tooltip, e.g. "Passed". */
   hint?: string;
+  /** The step was not needed in this video: never placed, and not listed as missing. */
+  notNeeded?: boolean;
 };
 
 /** A point above the bar, e.g. a safety flag. */
@@ -108,7 +110,8 @@ function useWidth<T extends HTMLElement>(): [RefObject<T | null>, number] {
  * A video's steps as chapters: one segment per timed step, placed and sized by its stretch
  * within the video, the segment under the playhead highlighted, a line naming the current
  * step, and Previous / Next step buttons. Pressing a segment plays that step and stops at
- * its end. Steps without a time are left off the bar and listed under it (missingText);
+ * its end. Steps without a time are left off the bar and listed under it (missingText), and
+ * steps that were not needed are listed on a line of their own (notNeededText);
  * when no step has a time, one sentence (emptyText) stands in for the bar.
  *
  *   const player = useVideoSegments();
@@ -129,6 +132,7 @@ export function StepChapters({
   label = "Steps in this video",
   emptyText = "The steps in this video have no times yet.",
   missingText,
+  notNeededText,
   markers,
   footer,
   className,
@@ -151,6 +155,8 @@ export function StepChapters({
   emptyText?: string;
   /** Introduces the steps without a time, e.g. "Not seen in your recording". Omit to leave them unlisted. */
   missingText?: string;
+  /** Introduces the steps that were not needed, e.g. "Not needed this time". Omit to leave them unlisted. */
+  notNeededText?: string;
   markers?: ChapterMarker[];
   /** Extra lines under the bar, e.g. a legend. */
   footer?: ReactNode;
@@ -159,7 +165,8 @@ export function StepChapters({
   const [picked, setPicked] = useState<string | null>(null);
   const [barRef, barWidth] = useWidth<HTMLDivElement>();
   const placed = placedChapters(chapters);
-  const missing = chapters.filter((c) => !hasSpan(c.start, c.end));
+  const missing = chapters.filter((c) => !c.notNeeded && !hasSpan(c.start, c.end));
+  const notNeeded = chapters.filter((c) => c.notNeeded);
   const interactive = Boolean(onPlay || onSelect);
 
   const choose = useCallback(
@@ -347,6 +354,12 @@ export function StepChapters({
         <p className="mt-2 text-xs text-ink-secondary">
           <span className="font-medium text-ink">{missingText}:</span>{" "}
           {missing.map((c) => `${c.number}. ${c.title}`).join(", ")}
+        </p>
+      ) : null}
+      {notNeededText && notNeeded.length ? (
+        <p className="mt-2 text-xs text-ink-secondary">
+          <span className="font-medium text-ink">{notNeededText}:</span>{" "}
+          {notNeeded.map((c) => `${c.number}. ${c.title}`).join(", ")}
         </p>
       ) : null}
       {footer}

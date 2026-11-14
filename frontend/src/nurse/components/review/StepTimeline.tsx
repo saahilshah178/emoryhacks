@@ -5,8 +5,12 @@ import { StepChapters, type ChapterMarker } from "@/components/media/StepChapter
 import { cn } from "@/lib/cn";
 import { formatClock, formatRange } from "@/lib/format";
 import { flagSeverity, flagTitle, stepStatus, toneSolid } from "@/lib/status";
-import type { AttemptStep, SafetyFlag } from "@/lib/types";
+import { isNotNeeded } from "@/lib/steps";
+import type { AttemptStep, SafetyFlag, Status } from "@/lib/types";
 import { effectiveStatus, type Overrides } from "./steps";
+
+/** The results drawn on the bar. A step that was not needed has no time, so it is listed instead. */
+const LEGEND: Status[] = ["passed", "unverified", "failed"];
 
 /**
  * The attempt's steps as chapters of the submitted recording: a segment per located step
@@ -37,7 +41,7 @@ export function StepTimeline({
   const chapters = attemptChapters(steps, (step) => {
     const status = effectiveStatus(step, overrides[step.step_id]);
     const entry = status ? stepStatus[status] : null;
-    return { tone: entry?.tone ?? "neutral", hint: entry?.label ?? "not graded" };
+    return { tone: entry?.tone ?? "neutral", hint: entry?.label ?? "not graded", status };
   });
   const markers: ChapterMarker[] = flags.map((flag) => {
     const entry = flagSeverity[flag.severity];
@@ -63,15 +67,16 @@ export function StepTimeline({
       }}
       label="Steps in this recording"
       emptyText={
-        steps.some((s) => s.found === false)
+        steps.some((s) => s.found === false && !isNotNeeded(effectiveStatus(s, overrides[s.step_id])))
           ? "None of the steps were found in this recording."
           : "No steps have been located in this recording yet."
       }
       missingText="Not found in the recording"
+      notNeededText={stepStatus.not_applicable.label}
       markers={markers}
       footer={
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-secondary">
-          {(["passed", "unverified", "failed"] as const).map((status) => (
+          {LEGEND.map((status) => (
             <span key={status} className="inline-flex items-center gap-1.5">
               <span className={cn("h-2.5 w-2.5 rounded-sm", toneSolid[stepStatus[status].tone])} aria-hidden />
               {stepStatus[status].label}

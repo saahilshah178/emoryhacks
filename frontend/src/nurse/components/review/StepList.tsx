@@ -6,10 +6,23 @@ import { Badge, Input, StateBadge } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatRange, hasSpan, percent } from "@/lib/format";
 import { stepStatus } from "@/lib/status";
-import type { Attempt, AttemptStep, Status } from "@/lib/types";
-import { nameStepIds, ordinal, stepSpan, violationsFor, type Override, type Overrides } from "./steps";
+import { isNotNeeded, onlyNeededWhen } from "@/lib/steps";
+import type { Attempt, AttemptStep, StepStatus } from "@/lib/types";
+import { effectiveStatus, nameStepIds, ordinal, stepSpan, violationsFor, type Override, type Overrides } from "./steps";
 
-const CHOICES: Status[] = ["passed", "failed", "unverified"];
+/**
+ * The readings a nurse can give a step. "Not needed" is offered on every step, not only on
+ * one with a condition: a skill written before conditions existed has none on any step.
+ */
+const CHOICES: StepStatus[] = ["passed", "failed", "unverified", "not_applicable"];
+
+/** How a pressed choice looks, in the colour of its result. */
+const PRESSED: Record<StepStatus, string> = {
+  passed: "border-success bg-success-bg text-success",
+  failed: "border-danger bg-danger-bg text-danger",
+  unverified: "border-warning bg-warning-bg text-warning",
+  not_applicable: "border-ink-secondary bg-secondary text-ink",
+};
 
 /** Every step in rubric order with the AI's reading, where it happened, and the nurse's override. */
 export function StepList({
@@ -86,7 +99,10 @@ function StepCard({
   onCompare: () => void;
   onPlay?: (start: number, end?: number | null) => void;
 }) {
-  const span = stepSpan(step);
+  const draft = editing ? (override ?? null) : null;
+  const span = stepSpan(step, draft);
+  const notNeeded = isNotNeeded(effectiveStatus(step, draft));
+  const condition = onlyNeededWhen(step);
   const violations = violationsFor(attempt, step.step_id);
   const nurseStatus = editing ? (override?.status ?? null) : step.nurse_status;
   const ai = step.status ? stepStatus[step.status] : null;
@@ -151,7 +167,7 @@ function StepCard({
             {span.byGrader ? <span>Not placed by the timeline; seen by the grader at</span> : null}
             <TimeChip start={span.start} end={span.end} onPlay={videoAvailable ? () => onJump() : undefined} />
           </>
-        ) : (
+        ) : notNeeded ? null : (
           <span className="font-medium text-ink">Not found in the recording</span>
         )}
         {step.performed_index && step.performed_index !== step.ord ? (
@@ -180,6 +196,7 @@ function StepCard({
       </div>
 
       <div className="mt-3 space-y-2 pl-10 text-sm">
+        {condition ? <p className="text-xs text-ink-secondary">{condition}</p> : null}
         {violations.map((v, i) => (
           <p key={i} className="rounded-[10px] bg-warning-bg px-3 py-2 text-warning">
             Out of order: {nameStepIds(v.message, attempt.steps)}
@@ -203,7 +220,7 @@ function StepCard({
             ) : null}
           </p>
         ) : null}
-        {!span && step.timeline_note ? (
+        {!span && !notNeeded && step.timeline_note ? (
           <p className="text-xs text-ink-secondary">Timeline: {nameStepIds(step.timeline_note, attempt.steps)}</p>
         ) : null}
         {!editing && step.nurse_note ? (
@@ -228,10 +245,9 @@ function StepCard({
           <fieldset className="mt-1 flex flex-wrap items-center gap-2 rounded-[10px] border border-dashed border-border px-3 py-2">
             <legend className="sr-only">Your reading of step {step.ord}</legend>
             <span className="text-xs font-medium text-ink-secondary">Your reading</span>
-            <div className="flex gap-1" role="group" aria-label={`Your reading of step ${step.ord}`}>
+            <div className="flex flex-wrap gap-1" role="group" aria-label={`Your reading of step ${step.ord}`}>
               {CHOICES.map((choice) => {
                 const on = override?.status === choice;
-                const tone = stepStatus[choice].tone;
                 return (
                   <button
                     key={choice}
@@ -240,13 +256,7 @@ function StepCard({
                     onClick={() => onOverride({ status: on ? null : choice, note: override?.note ?? "" })}
                     className={cn(
                       "h-7 rounded-full border px-2.5 text-xs font-medium transition-colors",
-                      on
-                        ? tone === "success"
-                          ? "border-success bg-success-bg text-success"
-                          : tone === "danger"
-                            ? "border-danger bg-danger-bg text-danger"
-                            : "border-warning bg-warning-bg text-warning"
-                        : "border-border bg-white text-ink-secondary hover:bg-secondary",
+                      on ? PRESSED[choice] : "border-border bg-white text-ink-secondary hover:bg-secondary",
                     )}
                   >
                     {stepStatus[choice].label}

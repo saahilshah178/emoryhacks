@@ -59,7 +59,7 @@ export function CameraStage({
       <PortalHeading
         eyebrow="Your turn"
         title={`Record ${skill.name.toLowerCase()}`}
-        description="Set up the camera so your whole body and the space around you are in view. You'll watch it back before it is checked."
+        description="Set up the camera so your whole body and the space around you are in view. The check watches without sound, so show each step rather than saying it. You'll watch it back before it is checked."
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">

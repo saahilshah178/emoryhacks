@@ -5,6 +5,7 @@ import { TimeChip } from "@/components/media/TimeChip";
 import { cn } from "@/lib/cn";
 import { hasSpan } from "@/lib/format";
 import { stepStatusForCaregiver, toneClass } from "@/lib/status";
+import { isNotNeeded, onlyNeededWhen, savedStatus } from "@/lib/steps";
 import type { AttemptStep, OrderViolation } from "@/lib/types";
 
 /**
@@ -12,7 +13,8 @@ import type { AttemptStep, OrderViolation } from "@/lib/types";
  * result, the nurse's result and note come first and the automatic check's reading
  * follows, marked as replaced. Under it: where the step is in the caregiver's recording
  * (or that it was not seen) and, when the reference can be played, the same step in the
- * nurse's demonstration, so the two can be compared.
+ * nurse's demonstration, so the two can be compared. A step that is only needed sometimes
+ * says when; one that was not needed this time says why, and has no place in the recording.
  */
 export function StepResult({
   step,
@@ -32,7 +34,9 @@ export function StepResult({
   /** The caregiver's recording is showing this step. */
   active?: boolean;
 }) {
-  const effective = step.nurse_status ?? step.status;
+  const effective = savedStatus(step);
+  const notNeeded = isNotNeeded(effective);
+  const condition = onlyNeededWhen(step);
   const entry = effective ? stepStatusForCaregiver[effective] : null;
   const changed = step.nurse_status !== null && step.status !== null && step.nurse_status !== step.status;
   const aiEntry = step.status ? stepStatusForCaregiver[step.status] : null;
@@ -67,6 +71,8 @@ export function StepResult({
           </div>
         </div>
 
+        {condition ? <p className="text-xs leading-relaxed text-ink-secondary">{condition}</p> : null}
+
         {step.nurse_status ? (
           <div className="flex gap-2 rounded-[12px] bg-teal-soft px-3 py-2.5">
             <Stethoscope className="mt-0.5 h-4 w-4 shrink-0 text-teal" aria-hidden />
@@ -99,37 +105,39 @@ export function StepResult({
           </p>
         ))}
 
-        <div className="flex flex-wrap items-center gap-2">
-          {span ? (
-            <TimeChip
-              start={span.start}
-              end={span.end}
-              onPlay={onPlay}
-              prefix="Your recording"
-              title={
-                onPlay
-                  ? undefined
-                  : span.byGrader
-                    ? "Where the check looked in your recording"
-                    : "Where this step is in your recording"
-              }
-            />
-          ) : (
-            <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-secondary px-2.5 text-xs font-medium text-ink-secondary">
-              <EyeOff className="h-3.5 w-3.5" aria-hidden />
-              Not seen in your recording
-            </span>
-          )}
-          {demo ? (
-            <TimeChip
-              start={step.ref_start_s}
-              end={step.ref_end_s}
-              onPlay={onPlayDemo}
-              prefix="Demonstration"
-              className="bg-info-bg text-info hover:bg-info hover:text-white"
-            />
-          ) : null}
-        </div>
+        {span || !notNeeded || demo ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {span ? (
+              <TimeChip
+                start={span.start}
+                end={span.end}
+                onPlay={onPlay}
+                prefix="Your recording"
+                title={
+                  onPlay
+                    ? undefined
+                    : span.byGrader
+                      ? "Where the check looked in your recording"
+                      : "Where this step is in your recording"
+                }
+              />
+            ) : notNeeded ? null : (
+              <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-secondary px-2.5 text-xs font-medium text-ink-secondary">
+                <EyeOff className="h-3.5 w-3.5" aria-hidden />
+                Not seen in your recording
+              </span>
+            )}
+            {demo ? (
+              <TimeChip
+                start={step.ref_start_s}
+                end={step.ref_end_s}
+                onPlay={onPlayDemo}
+                prefix="Demonstration"
+                className="bg-info-bg text-info hover:bg-info hover:text-white"
+              />
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </li>
   );

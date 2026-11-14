@@ -36,7 +36,9 @@ export function ReviewWorkspace({ attempt }: { attempt: Attempt }) {
   const replaced = attempt.review_state === "superseded";
   const editing = attempt.review_state === "pending" || reopened || (replaced && decideReplaced);
   const newest = replaced ? newestSubmission(attempt) : null;
-  const located = locatedSteps(attempt.steps);
+  // A step the nurse marks "Not needed" loses its place in the video straight away.
+  const drafts = editing ? overrides : {};
+  const located = locatedSteps(attempt.steps, drafts);
   const referenceChapters = useMemo(() => attemptReferenceChapters(attempt.steps), [attempt.steps]);
   const duration =
     attempt.video.duration_s || attempt.duration_s || Math.max(1, ...located.map(({ span }) => span.end));
@@ -46,15 +48,15 @@ export function ReviewWorkspace({ attempt }: { attempt: Attempt }) {
   const selectedStep = selected ? (attempt.steps.find((s) => s.step_id === selected) ?? null) : null;
   let activeId: string | null = selected;
   if (available) {
-    const span = selectedStep ? stepSpan(selectedStep) : null;
+    const span = selectedStep ? stepSpan(selectedStep, drafts[selectedStep.step_id]) : null;
     const t = player.time;
     const inSelected = selectedStep && (!span || (t >= span.start - 0.5 && t < span.end + 0.3));
-    activeId = inSelected ? selected : (stepAt(attempt.steps, t)?.step_id ?? null);
+    activeId = inSelected ? selected : (stepAt(attempt.steps, t, drafts)?.step_id ?? null);
   }
 
   function jump(step: AttemptStep) {
     setSelected(step.step_id);
-    const span = stepSpan(step);
+    const span = stepSpan(step, drafts[step.step_id]);
     if (available && span) {
       player.play(span.start, span.end);
     } else {
@@ -65,7 +67,7 @@ export function ReviewWorkspace({ attempt }: { attempt: Attempt }) {
   function compare(step: AttemptStep) {
     if (!hasSpan(step.ref_start_s, step.ref_end_s)) return;
     setSelected(step.step_id);
-    const span = stepSpan(step);
+    const span = stepSpan(step, drafts[step.step_id]);
     if (available && span) player.play(span.start, span.end);
     reference.play(step.ref_start_s, step.ref_end_s);
     setComparing(`Step ${step.ord}, ${formatRange(step.ref_start_s, step.ref_end_s)}`);
@@ -181,7 +183,7 @@ export function ReviewWorkspace({ attempt }: { attempt: Attempt }) {
           <>
             <StepTimeline
               steps={attempt.steps}
-              overrides={editing ? overrides : {}}
+              overrides={drafts}
               flags={attempt.safety_flags}
               duration={duration}
               activeId={activeId}

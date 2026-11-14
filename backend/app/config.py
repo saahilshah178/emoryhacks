@@ -7,7 +7,8 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[2]
-FRONTEND_DIR = ROOT / "frontend"
+# The built-in test UI: static pages served at /. The Next.js apps live under frontend/.
+FRONTEND_DIR = ROOT / "testui"
 FIXTURES_DIR = ROOT / "fixtures"
 REFERENCE_DIR = ROOT / "reference_vids"
 
@@ -57,6 +58,8 @@ GEMINI_MODEL_FALLBACK = _get("GEMINI_MODEL_FALLBACK", "gemini-3.8-flash")
 # Hard stop for this database's recorded Gemini spend, in US dollars.
 GEMINI_BUDGET_USD = float(_get("GEMINI_BUDGET_USD", "8"))
 GEMINI_CONCURRENCY = int(_get("GEMINI_CONCURRENCY", "3"))
+# Per-call ceiling on thinking plus reply tokens. The largest legitimate call seen is about 6,000.
+GEMINI_MAX_OUTPUT_TOKENS = int(_get("GEMINI_MAX_OUTPUT_TOKENS", "12000"))
 # US dollars per million tokens: (input, output). Thinking tokens bill as output.
 GEMINI_PRICES: dict[str, tuple[float, float]] = {
     "gemini-4-hydrogen": (1.5, 7.5),

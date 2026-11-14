@@ -173,6 +173,7 @@ class StepPatch(BaseModel):
     description: str | None = None
     critical: bool | None = None
     order_dependent: bool | None = None
+    must_follow: list[str] | None = None
     start_s: float | None = None
     end_s: float | None = None
     evals: StepEval | None = None

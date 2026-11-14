@@ -22,4 +22,5 @@ dist/
 # worktrees and editor/OS noise
 .worktrees/
 .claude/
+.gstack/
 .DS_Store

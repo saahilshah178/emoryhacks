@@ -19,6 +19,7 @@ class StubCtx:
         self.answer = answer
         self.duration = duration
         self.skill = skill
+        self.video = {"height": 360}
         self.calls = []
         self.logs = []
         self._lock = threading.Lock()
@@ -30,6 +31,11 @@ class StubCtx:
         with self._lock:
             self.calls.append({"purpose": purpose, "video": parts[0], "schema": schema, **kwargs})
         return self.answer(purpose, parts, schema)
+
+    def generate_text(self, purpose, parts, **kwargs):
+        with self._lock:
+            self.calls.append({"purpose": purpose, "video": None, "schema": None, **kwargs})
+        return "Rewritten summary."
 
     def log(self, message):
         self.logs.append(message)
@@ -116,7 +122,8 @@ def test_double_check_picks_unclear_steps_and_replaces_them(real_ai):
     assert sorted(c["purpose"].split(":")[1] for c in checks) == ["s1", "s2", "s4"]
     for c in checks:
         assert c["model"] == "strong" and c["schema"] is StepJudgement
-        assert c["video"]["resolution"] == "high" and c["video"]["fps"] > 1
+        assert c["video"]["resolution"] == "medium" and c["video"]["fps"] > 1  # the stub video is 360p
+    assert ev.overall_feedback == "Rewritten summary."  # a status changed, so the summary was rewritten
     s1_clip = next(c["video"] for c in checks if c["purpose"].endswith("s1"))
     assert (s1_clip["start_s"], s1_clip["end_s"]) == (26.0, 39.0)  # timeline 29-36 padded by 3 s
     by_id = {r.step_id: r for r in ev.steps}
@@ -253,3 +260,13 @@ def test_fake_evaluation_scores_as_before():
 def test_timeline_step_none_times_do_not_break_window():
     timeline = Timeline(steps=[TimelineStep(step_id=s.step_id, found=False) for s in GLOVE_REMOVAL.steps])
     assert evaluate.step_window("s3", GLOVE_REMOVAL, timeline, None, 70.0) == (0.0, 70.0)
+
+
+def test_double_check_uses_high_resolution_for_webcam_sized_video(real_ai):
+    reply = grade_reply(steps=[judgement(f"s{i}", "passed", 95) for i in range(1, 7)][:5] + [judgement("s6", "passed", 40)])
+    ctx = StubCtx(answer_with(reply), duration=70.0)
+    ctx.video = {"height": 720}
+    evaluate.run(ctx, GLOVE_REMOVAL, GLOVE_TIMELINE)
+    checks = [c for c in ctx.calls if c["purpose"].startswith("evaluate_double_check")]
+    assert checks and all(c["video"]["resolution"] == "high" for c in checks)
+    assert all(c["max_output_tokens"] == evaluate.DOUBLE_CHECK_MAX_TOKENS for c in checks)

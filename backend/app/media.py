@@ -206,15 +206,22 @@ def frame_jpeg(path: str | Path, t: float, width: int = 960) -> bytes:
 def cut(src: str | Path, dst: str | Path, segments: list[tuple[float, float]]) -> dict:
     """Write dst as the given (start_s, end_s) segments of src joined in the given order.
 
-    Used to synthesise test attempts with a step removed or two steps swapped."""
+    Used to synthesise test attempts with a step removed or two steps swapped. The audio
+    track is cut the same way when the source has one, because the grader listens to speech."""
     src, dst = Path(src), Path(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
+    has_audio = bool(re.search(r"Stream #.*Audio:", _ffmpeg_header(src)))
     filters, labels = [], []
     for i, (a, b) in enumerate(segments):
         filters.append(f"[0:v]trim=start={a:.2f}:end={b:.2f},setpts=PTS-STARTPTS[v{i}]")
         labels.append(f"[v{i}]")
-    filters.append(f"{''.join(labels)}concat=n={len(segments)}:v=1:a=0[out]")
-    proc = _run(["-i", str(src), "-filter_complex", ";".join(filters), "-map", "[out]", "-c:v", "libx264",
+        if has_audio:
+            filters.append(f"[0:a]atrim=start={a:.2f}:end={b:.2f},asetpts=PTS-STARTPTS[a{i}]")
+            labels.append(f"[a{i}]")
+    outputs = "[out][aout]" if has_audio else "[out]"
+    filters.append(f"{''.join(labels)}concat=n={len(segments)}:v=1:a={1 if has_audio else 0}{outputs}")
+    maps = ["-map", "[out]"] + (["-map", "[aout]", "-c:a", "aac"] if has_audio else [])
+    proc = _run(["-i", str(src), "-filter_complex", ";".join(filters), *maps, "-c:v", "libx264",
                  "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", str(dst)])
     if proc.returncode != 0:
         raise MediaError(f"Could not cut {src.name}: {proc.stderr[-400:]}")

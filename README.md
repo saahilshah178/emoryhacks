@@ -29,5 +29,5 @@ Other commands: `make test`, `make seed` (build rubrics from `reference_vids/`),
 | `backend/app/stages/` | AI stages: `classify`, `rubric`, `timeline`, `evaluate`, `scoring`, `pose` |
 | `backend/app/gemini.py` | Gemini wrapper: upload cache, structured output, retries, call log, spend cap |
 | `backend/app/routers/` | HTTP API under `/api` |
-| `frontend/` | Static pages, one per screen, no build step |
+| `testui/` | Built-in test UI: static pages served at `/`, one per screen, no build step |
 | `reference_vids/` | Reference videos for nine skills |

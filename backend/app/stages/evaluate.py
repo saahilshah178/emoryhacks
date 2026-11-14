@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel, Field
 
-from .. import config
+from .. import config, gemini
 from ..models import (
     Evaluation, FlagKind, PersonObs, Rubric, RubricStep, SafetyFlag, Severity, Status, StepResult, Timeline,
 )
@@ -29,6 +29,8 @@ MAX_DOUBLE_CHECKS = 6         # per attempt, to bound cost and latency
 MAX_FLAG_CHECKS = 3           # pose candidates confirmed per attempt
 CLIP_PAD_S = 3.0              # seconds added either side of a step's time range
 FLAG_PAD_S = 2.0              # seconds added either side of a pose flag
+HIGH_RES_MIN_HEIGHT = 600     # video at least this tall is double-checked at high resolution
+DOUBLE_CHECK_MAX_TOKENS = 6000  # thinking plus reply for one second look on the strong model
 SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
 
 
@@ -89,8 +91,9 @@ def run(ctx, rubric: Rubric, timeline: Timeline) -> Evaluation:
         GradeReply, model="main", thinking="medium",
     )
     evaluation = build_evaluation(reply, rubric, ctx.duration)
-    if evaluation.skill_match:  # steps of a different skill are not worth a closer look
-        _double_check(ctx, rubric, timeline, evaluation)
+    # Steps of a different skill are not worth a closer look.
+    if evaluation.skill_match and _double_check(ctx, rubric, timeline, evaluation):
+        evaluation.overall_feedback = _rewrite_feedback(ctx, rubric, evaluation)
     return evaluation
 
 
@@ -244,21 +247,28 @@ def clip_sampling(length_s: float) -> float:
 def _double_check_one(ctx, step: RubricStep, start: float, end: float) -> StepResult:
     j = ctx.generate_json(
         f"evaluate_double_check:{step.step_id}",
-        [ctx.video_part(resolution="high", start_s=start, end_s=end, fps=clip_sampling(end - start)),
+        [ctx.video_part(resolution=_clip_resolution(ctx), start_s=start, end_s=end, fps=clip_sampling(end - start)),
          {"type": "text", "text": prompts.double_check_prompt(ctx.skill or {}, step, start, end, ctx.duration)}],
         # thinking "medium" on an ambiguous clip has used 20k thought tokens (about $0.40 a step)
-        StepJudgement, model="strong", thinking="low",
+        StepJudgement, model="strong", thinking="low", max_output_tokens=DOUBLE_CHECK_MAX_TOKENS,
     )
     j.step_id = step.step_id
     return to_step_result(j, ctx.duration, double_checked=True)
 
 
-def _double_check(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evaluation) -> None:
+def _clip_resolution(ctx) -> str:
+    """High resolution costs about four times as much and only helps when the source has the
+    pixels: use it for webcam-sized video, not for small reference clips."""
+    return "high" if int(ctx.video.get("height") or 0) >= HIGH_RES_MIN_HEIGHT else "medium"
+
+
+def _double_check(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evaluation) -> bool:
     """Re-grade the picked steps concurrently and replace their results in place.
-    A step whose second look fails keeps its first result."""
+    A step whose second look fails keeps its first result. Returns True if any status changed."""
     picked = pick_double_checks(rubric, evaluation)
     if not picked:
-        return
+        return False
+    changed = False
     steps = {s.step_id: s for s in rubric.steps}
     index = {r.step_id: i for i, r in enumerate(evaluation.steps)}
     with ThreadPoolExecutor(max_workers=len(picked), thread_name_prefix="double_check") as pool:
@@ -274,7 +284,30 @@ def _double_check(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evaluatio
             ctx.log(f"double-check of {step_id} failed, keeping first result: {type(exc).__name__}: {exc}")
             continue
         evaluation.steps[index[step_id]] = after
+        changed = changed or after.status != before.status
         ctx.log(f"double-check {step_id}: {before.status} ({before.confidence}) -> {after.status} ({after.confidence})")
+    return changed
+
+
+def _rewrite_feedback(ctx, rubric: Rubric, evaluation: Evaluation) -> str:
+    """The first-pass summary can describe a step whose result the second look changed, so
+    write it again from the final step results. Text only: no video is sent."""
+    titles = {s.step_id: s.title for s in rubric.steps}
+    lines = "\n".join(f"- {titles.get(r.step_id, r.step_id)}: {r.status}. {r.feedback}" for r in evaluation.steps)
+    prompt = (
+        f"A caregiver trainee attempted the skill \"{(ctx.skill or {}).get('name', 'this skill')}\". "
+        f"Final result for each step:\n{lines}\n\n"
+        "Write two or three plain, encouraging sentences addressed to the caregiver as \"you\": what went well, "
+        "then the one or two most important things to fix or to record again so they can be seen. "
+        "Use only the results above. Do not mention scores, step numbers or AI. Reply with the sentences only."
+    )
+    try:
+        text = ctx.generate_text("evaluate_summary", [{"type": "text", "text": prompt}], thinking="low",
+                                 max_output_tokens=1500)
+    except gemini.GeminiError as exc:
+        ctx.log(f"could not rewrite the overall feedback: {exc}")
+        return evaluation.overall_feedback
+    return text.strip() or evaluation.overall_feedback
 
 
 # --- pose flag confirmation ----------------------------------------------------

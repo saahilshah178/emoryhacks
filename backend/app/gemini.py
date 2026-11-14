@@ -168,12 +168,13 @@ def _log(purpose, model, request, response_text, usage, latency_ms, error, job_i
 
 
 def _call(purpose: str, parts: list[dict], *, model: str, thinking: str, schema: type[BaseModel] | None,
-          job_id, video_id, timeout: float, max_attempts: int) -> str:
+          job_id, video_id, timeout: float, max_attempts: int, max_output_tokens: int | None = None) -> str:
     if spent_usd() >= config.GEMINI_BUDGET_USD:
         raise BudgetExceeded(
             f"Recorded Gemini spend has reached the ${config.GEMINI_BUDGET_USD:.2f} budget "
             "(GEMINI_BUDGET_USD). Raise it in .env to continue."
         )
+    cap = max_output_tokens or config.GEMINI_MAX_OUTPUT_TOKENS
     chain = [MODEL_ALIASES[model]() if model in MODEL_ALIASES else model]
     for alias in ("main", "fallback"):
         candidate = MODEL_ALIASES[alias]()
@@ -182,32 +183,27 @@ def _call(purpose: str, parts: list[dict], *, model: str, thinking: str, schema:
 
     last_error: Exception | None = None
     for model_id in chain:
-        body: dict[str, Any] = {
-            "model": model_id,
-            "input": parts,
-            "generation_config": {"thinking_level": thinking},
-        }
-        if schema is not None:
-            body["response_format"] = {
-                "type": "text",
-                "mime_type": "application/json",
-                "schema": schema.model_json_schema(),
-            }
-        request_log = {"input": _loggable(parts), "thinking": thinking, "schema": schema.__name__ if schema else None}
+        level = thinking
+        cut_offs = 0
+        request_log = {"input": _loggable(parts), "thinking": thinking, "max_output_tokens": cap,
+                       "schema": schema.__name__ if schema else None}
         for attempt in range(max_attempts):
+            # The cap covers thinking and the reply together, so a runaway reply cannot run up the bill.
+            body: dict[str, Any] = {
+                "model": model_id,
+                "input": parts,
+                "generation_config": {"thinking_level": level, "max_output_tokens": cap},
+            }
+            if schema is not None:
+                body["response_format"] = {
+                    "type": "text",
+                    "mime_type": "application/json",
+                    "schema": schema.model_json_schema(),
+                }
             started = time.time()
             try:
                 with _sem:
                     result = client().interactions.create(timeout=timeout, **body)
-                text = getattr(result, "output_text", None) or ""
-                _log(purpose, model_id, request_log, text, getattr(result, "usage", None),
-                     int((time.time() - started) * 1000), None, job_id, video_id)
-                if not text.strip():
-                    raise GeminiError(f"Gemini returned an empty response for {purpose}")
-                return text
-            except GeminiError as exc:
-                last_error = exc
-                time.sleep(2 + attempt * 3)
             except Exception as exc:  # network and API errors
                 last_error = exc
                 code = _status_code(exc)
@@ -219,6 +215,24 @@ def _call(purpose: str, parts: list[dict], *, model: str, thinking: str, schema:
                 if code in (403, 404):
                     break  # this model is not available to the key: try the next one
                 raise GeminiError(f"Gemini request for {purpose} failed ({code}): {str(exc)[:500]}") from exc
+
+            text = getattr(result, "output_text", None) or ""
+            cut_off = getattr(result, "status", None) == "incomplete"
+            _log(purpose, model_id, request_log, text, getattr(result, "usage", None),
+                 int((time.time() - started) * 1000), "cut off at the output cap" if cut_off else None,
+                 job_id, video_id)
+            if cut_off:
+                last_error = GeminiError(f"Gemini reply for {purpose} was cut off at the {cap}-token output cap")
+                cut_offs += 1
+                if cut_offs >= 2:
+                    raise last_error
+                level = "low"  # leave more of the cap for the reply itself
+                continue
+            if not text.strip():
+                last_error = GeminiError(f"Gemini returned an empty response for {purpose}")
+                time.sleep(2 + attempt * 3)
+                continue
+            return text
     raise GeminiError(f"Gemini request for {purpose} failed after retries: {last_error}")
 
 
@@ -233,22 +247,26 @@ def generate_json(
     video_id: Any = None,
     timeout: float = 600,
     max_attempts: int = 4,
+    max_output_tokens: int | None = None,
 ) -> T:
     """Send parts to Gemini and return the reply parsed into schema.
 
     model is "main", "strong" or an explicit model id. thinking is "low", "medium" or "high".
+    max_output_tokens caps thinking plus reply (default config.GEMINI_MAX_OUTPUT_TOKENS).
     Put the video part first and the instructions after it."""
-    text = _call(purpose, parts, model=model, thinking=thinking, schema=schema,
-                 job_id=job_id, video_id=video_id, timeout=timeout, max_attempts=max_attempts)
+    text = _call(purpose, parts, model=model, thinking=thinking, schema=schema, job_id=job_id, video_id=video_id,
+                 timeout=timeout, max_attempts=max_attempts, max_output_tokens=max_output_tokens)
     try:
         return schema.model_validate_json(text)
     except ValidationError as first:
         retry_parts = parts + [text_part(
             "Your previous reply did not match the required JSON schema. "
-            f"Validation errors: {str(first)[:800]}\nReply again with JSON that matches the schema exactly."
+            f"Validation errors: {str(first)[:800]}\n"
+            "Answer the whole task again from the start and reply with the complete JSON object, "
+            "with every field and every list item, matching the schema exactly."
         )]
-        text = _call(purpose + ":repair", retry_parts, model=model, thinking=thinking, schema=schema,
-                     job_id=job_id, video_id=video_id, timeout=timeout, max_attempts=2)
+        text = _call(purpose + ":repair", retry_parts, model=model, thinking=thinking, schema=schema, job_id=job_id,
+                     video_id=video_id, timeout=timeout, max_attempts=2, max_output_tokens=max_output_tokens)
         try:
             return schema.model_validate_json(text)
         except ValidationError as second:
@@ -264,6 +282,7 @@ def generate_text(
     job_id: Any = None,
     video_id: Any = None,
     timeout: float = 600,
+    max_output_tokens: int | None = None,
 ) -> str:
-    return _call(purpose, parts, model=model, thinking=thinking, schema=None,
-                 job_id=job_id, video_id=video_id, timeout=timeout, max_attempts=4)
+    return _call(purpose, parts, model=model, thinking=thinking, schema=None, job_id=job_id, video_id=video_id,
+                 timeout=timeout, max_attempts=4, max_output_tokens=max_output_tokens)

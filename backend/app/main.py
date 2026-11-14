@@ -1,4 +1,4 @@
-"""FirstShift API and static frontend.
+"""FirstShift API and the built-in test UI.
 
 Run from the backend directory:  uv run uvicorn app.main:app --port 8000
 (Do not use --reload while a pipeline is running: a restart interrupts the job.)

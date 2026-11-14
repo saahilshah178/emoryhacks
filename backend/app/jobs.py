@@ -17,6 +17,7 @@ Stage contract (see app/stages/*.py). Each function takes a StageContext:
   scoring.score(rubric, timeline, evaluation, flags) -> Score
   pose.extract(ctx) -> PoseSummary            (writes frames with repo.replace_pose)
   pose.assign_roles(ctx, people) -> None      (labels tracks with repo.set_track_roles)
+  pose.relabel_flags(video_id, flags) -> list[SafetyFlag]   (names the person once roles are known)
 """
 from __future__ import annotations
 
@@ -73,11 +74,15 @@ class StageContext:
         """gemini.generate_json with this job and video recorded on the call log."""
         return gemini.generate_json(purpose, parts, schema, job_id=self.job_id, video_id=self.video_id, **kwargs)
 
+    def generate_text(self, purpose: str, parts: list[dict], **kwargs) -> str:
+        """gemini.generate_text with this job and video recorded on the call log."""
+        return gemini.generate_text(purpose, parts, job_id=self.job_id, video_id=self.video_id, **kwargs)
+
     def log(self, message: str) -> None:
         self.logs.append(message)
 
 
-class _Tracker:
+class Tracker:
     """Records per-stage status on the jobs row."""
 
     def __init__(self, job_id, names: list[str]):
@@ -127,7 +132,7 @@ def run_reference(job_id, slug: str | None = None, name: str | None = None) -> N
     job = repo.get_job(job_id)
     video = repo.get_video(job["video_id"])
     ctx = StageContext(job_id=job_id, video=video, slug_hint=slug)
-    track = _Tracker(job_id, REFERENCE_STAGES)
+    track = Tracker(job_id, REFERENCE_STAGES)
     try:
         pose_future = _start_pose(ctx)
         track.run("gemini_upload", lambda: None if config.FAKE_AI else gemini.ensure_file(video))
@@ -135,8 +140,11 @@ def run_reference(job_id, slug: str | None = None, name: str | None = None) -> N
         rb = track.run("rubric", lambda: rubric.run(ctx, classification))
         skill_id = repo.create_skill(classification, rb, video["id"], slug=slug, name=name)
         repo.update_job(job_id, skill_id=skill_id)
-        track.run("pose", lambda: _join_pose(pose_future))
+        summary: PoseSummary | None = track.run("pose", lambda: _join_pose(pose_future))
         track.run("roles", lambda: pose.assign_roles(ctx, classification.people))
+        if summary and summary.candidate_flags:  # advisory only: a reference video is never scored
+            repo.save_flags(video["id"], None, pose.relabel_flags(video["id"], summary.candidate_flags),
+                            sources=("pose", "pose_confirmed"))
         repo.update_job(job_id, status="done", stage="done")
     except Exception as exc:
         repo.update_job(job_id, status="error", error=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-1500:]}")
@@ -152,7 +160,7 @@ def run_attempt(job_id) -> None:
     skill = repo.get_skill(attempt["skill_id"])
     rb = repo.get_rubric(attempt["skill_id"])
     ctx = StageContext(job_id=job_id, video=video, skill=skill, attempt=attempt)
-    track = _Tracker(job_id, ATTEMPT_STAGES)
+    track = Tracker(job_id, ATTEMPT_STAGES)
     try:
         pose_future = _start_pose(ctx)
         track.run("gemini_upload", lambda: None if config.FAKE_AI else gemini.ensure_file(video))
@@ -166,10 +174,13 @@ def run_attempt(job_id) -> None:
         summary: PoseSummary | None = track.run("pose", lambda: _join_pose(pose_future))
         track.run("roles", lambda: pose.assign_roles(ctx, ev.people))
 
-        candidates = summary.candidate_flags if summary else []
-        pose_flags = track.run("confirm_flags", lambda: evaluate.confirm_pose_flags(ctx, rb, candidates))
-        if pose_flags is None:
-            pose_flags = candidates
+        # Pose candidates are made before roles are known. Now that tracks have roles, name the
+        # person, and keep caregiver-posture readings out of the patient check: they stay advisory.
+        candidates = pose.relabel_flags(video["id"], summary.candidate_flags) if summary else []
+        about_patient = [f for f in candidates if f.kind != "unsafe_caregiver_posture"]
+        about_caregiver = [f for f in candidates if f.kind == "unsafe_caregiver_posture"]
+        confirmed = track.run("confirm_flags", lambda: evaluate.confirm_pose_flags(ctx, rb, about_patient))
+        pose_flags = (confirmed if confirmed is not None else about_patient) + about_caregiver
         repo.save_flags(video["id"], attempt["id"], pose_flags, sources=("pose", "pose_confirmed"))
 
         flags = repo.get_flags(attempt["id"])

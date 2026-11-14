@@ -286,6 +286,37 @@ def candidate_flags(rows: list[dict], sample_fps: float, labels: dict[int, str] 
     return [f for _, f in scored]
 
 
+def relabel_flags(video_id, flags: list[SafetyFlag]) -> list[SafetyFlag]:
+    """Rewrite candidate flags once assign_roles has labelled the tracks.
+
+    Candidates are created before roles are known, as "track N" with a patient kind.
+      * a patient's flag keeps its kind and is labelled "patient (track N)"
+      * a caregiver's trunk-tilt flag becomes unsafe_caregiver_posture (a bent back is an
+        ergonomic risk to the caregiver, not a sign the patient is unsteady)
+      * a caregiver's off-centre flag is dropped: caregivers shift their weight on purpose
+      * a track with no known role is left as it is
+    """
+    roles = {t["person_idx"]: t["role"] for t in repo.get_tracks(video_id)}
+    out: list[SafetyFlag] = []
+    for flag in flags:
+        label = flag.person_label or ""
+        idx = int(label.split()[-1]) if label.startswith("track ") and label.split()[-1].isdigit() else None
+        role = roles.get(idx, "unknown") if idx is not None else "unknown"
+        if role == "patient":
+            named = f"patient (track {idx})"
+            out.append(flag.model_copy(update={"person_label": named,
+                                               "description": flag.description.replace(label, f"the {named}")}))
+        elif role == "caregiver":
+            if flag.kind == "patient_unsteady":
+                named = f"caregiver (track {idx})"
+                out.append(flag.model_copy(update={
+                    "kind": "unsafe_caregiver_posture", "person_label": named,
+                    "description": flag.description.replace(label, f"the {named}")}))
+        else:
+            out.append(flag)
+    return out
+
+
 # --- roles ----------------------------------------------------------------
 MAX_ROLE_CALLS = 4
 MIN_ROLE_FRAMES = 10   # tracks shorter than this are not worth a Gemini call

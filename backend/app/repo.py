@@ -132,12 +132,12 @@ def patch_skill(skill_id, fields: dict[str, Any]) -> None:
 
 
 def patch_step(skill_id, step_id: str, fields: dict[str, Any]) -> int:
-    allowed = {"title", "description", "critical", "order_dependent", "start_s", "end_s", "evals"}
+    allowed = {"title", "description", "critical", "order_dependent", "must_follow", "start_s", "end_s", "evals"}
     sets, params = [], []
     for key, value in fields.items():
         if key in allowed and value is not None:
             sets.append(f"{key}=%s")
-            params.append(db.J(value) if key == "evals" else value)
+            params.append(db.J(value) if key in ("evals", "must_follow") else value)
     if not sets:
         return 0
     n = db.execute(f"UPDATE skill_steps SET {', '.join(sets)} WHERE skill_id=%s AND step_id=%s",

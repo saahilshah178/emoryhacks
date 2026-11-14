@@ -88,7 +88,7 @@ def delete_skill(skill_id: str):
 def _regenerate(job_id, skill: dict) -> None:
     """Background job: run the rubric stage and store the result with repo.replace_rubric."""
     ctx = jobs.StageContext(job_id=job_id, video=skill["video"], skill=skill, slug_hint=skill["slug"])
-    track = jobs._Tracker(job_id, REGENERATE_STAGES)
+    track = jobs.Tracker(job_id, REGENERATE_STAGES)
     try:
         track.run("gemini_upload", lambda: None if config.FAKE_AI else gemini.ensure_file(skill["video"]))
         rb = track.run("rubric", lambda: rubric.run(ctx, _classification(skill)))

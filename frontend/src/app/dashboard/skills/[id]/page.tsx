@@ -18,6 +18,7 @@ import type { Job, Skill } from "@/lib/types";
 import { BackLink } from "@/shared/layout/BackLink";
 import { PageHeading } from "@/shared/layout/PageHeading";
 import { ConfirmDialog } from "@/nurse/components/skills/ConfirmDialog";
+import { AttemptsSection } from "@/nurse/components/skills/AttemptsSection";
 import { ActionsCard, PeopleCard, SafetyCard, SkillFacts, VersionList } from "@/nurse/components/skills/SkillAside";
 import { CaregiverCopyForm, SkillDetailsForm } from "@/nurse/components/skills/SkillForms";
 import { StepCard } from "@/nurse/components/skills/StepCard";
@@ -152,7 +153,7 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
         <div className="flex flex-wrap items-start gap-3 rounded-[12px] border border-info/20 bg-info-bg px-4 py-3 text-sm">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
           <p className="min-w-0 flex-1 text-ink">
-            This is an older version of the skill, kept because attempts were graded against it. New attempts are
+            This is an older version of the skill, kept because recordings were graded against it. New recordings are
             graded against the newest version.{" "}
             <Link href={`/dashboard/skills/${skill.latest_id}`} className="font-medium text-teal hover:underline">
               Go to the newest version{newest ? ` (version ${newest.version})` : ""}
@@ -166,10 +167,12 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
           <Pencil className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
           <p>
             You are editing version {skill.version}. Each save applies to this version straight away and changes
-            how future attempts against it are graded. Attempts already graded keep their results.
+            how future recordings against it are graded. Recordings already graded keep their results.
           </p>
         </div>
       ) : null}
+
+      <AttemptsSection skill={skill} />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
         <div className="min-w-0 space-y-5">
@@ -353,9 +356,9 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
       >
         <p>
           The steps and criteria are written again from the video and saved as a new version of {skill.name}. New
-          attempts are graded against that version.
+          recordings are graded against that version.
         </p>
-        <p>This version, your edits to it and the attempts graded against it are kept.</p>
+        <p>This version, your edits to it and the recordings graded against it are kept.</p>
       </ConfirmDialog>
 
       <ConfirmDialog
@@ -374,7 +377,7 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
         <p>
           This also deletes{" "}
           <strong className="font-semibold text-ink">
-            {plural(thisVersion?.attempt_count ?? 0, "attempt")} graded against this version
+            {plural(thisVersion?.attempt_count ?? 0, "caregiver recording")} graded against this version
           </strong>
           , with their results and reviews. This can&apos;t be undone.
         </p>

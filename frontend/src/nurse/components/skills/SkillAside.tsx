@@ -114,7 +114,7 @@ export function VersionList({ skill }: { skill: Skill }) {
                 </span>
                 <span className="mt-0.5 block text-xs text-ink-secondary">
                   {formatDate(version.created_at)} · {plural(version.step_count, "step")} ·{" "}
-                  {plural(version.attempt_count, "attempt")}
+                  {version.attempt_count === 0 ? "No recordings graded" : `${plural(version.attempt_count, "recording")} graded`}
                 </span>
               </Link>
             </li>
@@ -217,7 +217,7 @@ export function ActionsCard({
         <ActionRow
           icon={<Trash2 className="h-4 w-4" />}
           title="Delete this version"
-          detail="Also deletes the attempts graded against it."
+          detail="Also deletes the caregiver recordings graded against it."
           onClick={onDelete}
           danger
         />

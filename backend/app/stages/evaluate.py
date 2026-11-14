@@ -17,6 +17,7 @@ Owned by branch feat/evaluate.
 """
 from __future__ import annotations
 
+import math
 from collections.abc import Collection
 from concurrent.futures import ThreadPoolExecutor
 
@@ -83,11 +84,17 @@ class FlagCheckReply(BaseModel):
 
 # --- stage entry points ------------------------------------------------------
 def grade_reply_from(reply: assess.AssessReply) -> GradeReply:
-    """The grading half of the whole-video reply. The span a step was located at is its evidence span."""
+    """The grading half of the whole-video reply. The span a step was located at, widened to
+    whole seconds, is its evidence span."""
+    def outward(s: assess.StepAssessment) -> tuple[int | None, int | None]:
+        if s.start_s is None:
+            return None, None
+        return math.floor(s.start_s), math.ceil(s.end_s) if s.end_s is not None else None
+
     return GradeReply(
         people=reply.people, skill_match=reply.skill_match, skill_match_note=reply.skill_match_note,
-        steps=[StepJudgement(step_id=s.step_id, evidence=s.evidence, evidence_start_s=s.start_s,
-                             evidence_end_s=s.end_s if s.start_s is not None else None, status=s.status,
+        steps=[StepJudgement(step_id=s.step_id, evidence=s.evidence, evidence_start_s=outward(s)[0],
+                             evidence_end_s=outward(s)[1], status=s.status,
                              confidence_pct=s.confidence_pct, feedback=s.feedback) for s in reply.steps],
         safety_flags=reply.safety_flags, overall_feedback=reply.overall_feedback,
     )

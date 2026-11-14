@@ -31,11 +31,13 @@ MAX_OUTPUT_TOKENS = 9000   # thinking plus reply; a typical reply with thinking 
 EXPECTED_OUTPUT_TOKENS = 3500
 
 
-# Times are whole seconds: with float fields the model has been seen to emit a number with
-# tens of thousands of digits, which costs a lot and fails to parse.
+# Where a step happens is given to a tenth of a second, as the timeline pass did: in whole
+# seconds the spans came out a few seconds early and overlapping on a 90 s fall response.
+# Everything else is whole seconds: with float fields the grading pass has been seen to emit
+# a number with tens of thousands of digits (the output cap bounds what that can cost).
 class Observed(BaseModel):
-    start_s: int
-    end_s: int
+    start_s: float
+    end_s: float
     action: str = Field(description="a few words")
 
 
@@ -46,8 +48,8 @@ class StepAssessment(BaseModel):
     step_id: str
     performed: bool
     # No defaults, so the schema keeps them required; null says the step was not performed.
-    start_s: int | None = Field(description="whole seconds from the start; null only when not performed")
-    end_s: int | None = Field(description="whole seconds from the start; null only when not performed")
+    start_s: float | None = Field(description="seconds from the start, one decimal; null only when not performed")
+    end_s: float | None = Field(description="seconds from the start, one decimal; null only when not performed")
     timing_confidence_pct: int = Field(description="0 to 100: how sure you are it happened at that time")
     evidence: str = Field(description="one sentence: what was actually seen or heard")
     status: Status

@@ -214,6 +214,18 @@ def test_timeline_and_evaluate_share_one_whole_video_call(real_ai):
     assert [(r.evidence_start_s, r.status) for r in ev.steps] == [(5.0 * i, "passed") for i in range(1, 7)]
 
 
+def test_located_spans_keep_tenths_and_the_evidence_span_covers_them():
+    from app.stages import timeline
+
+    grade = grade_reply(steps=[judgement(f"s{i}", "passed", 95, start=5 * i, end=5 * i + 3) for i in range(1, 7)])
+    reply = as_assessment(grade)
+    reply.steps[0] = reply.steps[0].model_copy(update={"start_s": 12.4, "end_s": 15.6})
+    [located, *_] = timeline.located_from(reply)
+    assert (located.start_s, located.end_s) == (12.4, 15.6)
+    first = evaluate.grade_reply_from(reply).steps[0]
+    assert (first.evidence_start_s, first.evidence_end_s) == (12, 16)
+
+
 def c_fps(ctx):
     return ctx.calls[0]["video"]["fps"]
 

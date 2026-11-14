@@ -20,7 +20,9 @@ The recording is {duration:.0f} seconds long.
 Work through these in order.
 
 1. observed: what actually happens in the recording, in order, one entry per distinct action
-   (a few words each) with its start and end time. Use what you see and what you hear people say.
+   (a few words each) with its start and end time. Start a new entry whenever the caregiver
+   moves on to a different action, even when it flows straight on from the last one. Use what
+   you see and what you hear people say.
 
 2. people: every person you see, labelled P1, P2, ... Role "caregiver" is the trainee
    performing the skill, "patient" is whoever is being assisted (it may be a colleague or an
@@ -41,8 +43,10 @@ Work through these in order.
    - Steps can be done in any order, skipped, or repeated. Report each step where it really
      happens, even out of the listed order. If a step happens more than once, report its first
      complete performance and mention the repeat in note.
-   - Do not stretch a step to fill a gap, and do not mark a step performed because a related
-     step was. If the recording does not show this skill at all, no step is performed.
+   - Give each step the span of its own action only. Where one step flows into the next, the
+     first ends where the next begins, so the spans of different steps rarely overlap. Do not
+     stretch a step to fill a gap, and do not mark a step performed because a related step
+     was. If the recording does not show this skill at all, no step is performed.
    - The people, room and camera angle may differ from any example of this skill. Judge the actions.
    - timing_confidence_pct (0 to 100): how sure you are that it happened at the time you gave.
    How well it was done:

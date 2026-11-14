@@ -61,6 +61,15 @@
   --font-sans: var(--font-inter);
   --shadow-card: var(--shadow-card);
   --radius-card: 12px;
+  /* A page's content coming back after a refresh. */
+  --animate-refresh-in: refresh-in 0.45s ease-out;
+}
+
+@keyframes refresh-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 html {

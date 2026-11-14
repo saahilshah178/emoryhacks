@@ -8,15 +8,18 @@ import { Sidebar } from "@/nurse/components/layout/Sidebar";
 import { TopNav } from "@/nurse/components/layout/TopNav";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { Logo } from "@/shared/Logo";
+import { useHomeLink } from "@/shared/RefreshBoundary";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { flash, clearFlash, overview, overviewError, reloadOverview } = useDashboard();
+  // On the overview itself the brand link has nowhere to go, so it refreshes the page.
+  const brand = useHomeLink("/dashboard");
 
   return (
     <div className="flex min-h-screen bg-white">
       <div className={cn("sticky top-0 flex h-dvh shrink-0 flex-col bg-white", RAIL_WIDTH)}>
         <div className="flex h-16 shrink-0 items-center justify-center lg:justify-start lg:px-4">
-          <Logo href="/dashboard" nameClassName="hidden lg:inline" />
+          <Logo href="/dashboard" nameClassName="hidden lg:inline" onClick={brand.onClick} />
         </div>
         <Sidebar />
       </div>
@@ -51,7 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           id="main"
           className={cn("min-h-0 flex-1 bg-page py-6 pr-4 md:pr-6 lg:pr-8", SCREEN_CORNER, SCREEN_INSET)}
         >
-          {children}
+          <div className={brand.contentClassName}>{children}</div>
         </main>
       </div>
     </div>

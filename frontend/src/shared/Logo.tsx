@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { MouseEvent } from "react";
 import { cn } from "@/lib/cn";
 import { APP_NAME } from "./brand";
 
@@ -7,13 +8,16 @@ export function Logo({
   href = "/",
   light = false,
   nameClassName,
+  onClick,
 }: {
   href?: string;
   light?: boolean;
   nameClassName?: string;
+  /** Runs before the link is followed; call preventDefault() to stay on the page. */
+  onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   return (
-    <Link href={href} aria-label={APP_NAME} className="flex min-h-11 shrink-0 items-center gap-2.5">
+    <Link href={href} aria-label={APP_NAME} onClick={onClick} className="flex min-h-11 shrink-0 items-center gap-2.5">
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[12px] bg-teal text-sm font-semibold text-white">
         {APP_NAME.charAt(0)}
       </span>

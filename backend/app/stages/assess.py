@@ -3,7 +3,8 @@
 Locating the steps (timeline) and grading them (evaluate) used to be two Gemini calls that
 each sent the whole video. They are now one call: Gemini watches the attempt once and, for
 every rubric step, says whether and when it happened and how well it was done, and lists
-the people, whether the video shows the skill at all, and patient-safety problems.
+the people, whether the video shows the skill at all, and patient-safety problems. The video
+it watches has no sound, so the prompt grades by sight alone (see sight.py).
 
 timeline.run and evaluate.run both call assess(), which makes that call once per context
 and rubric and remembers the reply, so the stage contract (timeline -> Timeline,
@@ -21,7 +22,7 @@ import hashlib
 from pydantic import BaseModel, Field
 
 from .. import gemini
-from ..models import FlagKind, PersonObs, Rubric, Severity, Status
+from ..models import NOT_APPLICABLE, FlagKind, PersonObs, Rubric, RubricStep, Severity, StepStatus
 from . import assess_prompts
 
 DENSE_FPS = 2.0
@@ -51,8 +52,8 @@ class StepAssessment(BaseModel):
     start_s: float | None = Field(description="seconds from the start, one decimal; null only when not performed")
     end_s: float | None = Field(description="seconds from the start, one decimal; null only when not performed")
     timing_confidence_pct: int = Field(description="0 to 100: how sure you are it happened at that time")
-    evidence: str = Field(description="one sentence: what was actually seen or heard")
-    status: Status
+    evidence: str = Field(description="one sentence: what was actually seen")
+    status: StepStatus
     confidence_pct: int = Field(description="0 to 100: how sure you are of the status")
     feedback: str = Field(description="one or two sentences to the caregiver")
     note: str = Field(description="a few words for the nurse when useful, else empty")
@@ -82,6 +83,13 @@ def sample_fps(duration: float) -> float:
     if duration <= MAX_FRAMES / DENSE_FPS:
         return DENSE_FPS
     return round(max(MIN_FPS, MAX_FRAMES / duration), 2)
+
+
+def not_needed(step: RubricStep, status: str, performed: bool) -> bool:
+    """Whether a verdict of not_applicable stands: only for a step with an applies_when
+    condition that the caregiver did not do (a step done anyway is graded as usual).
+    evaluate.settle_not_applicable replaces any other not_applicable verdict."""
+    return status == NOT_APPLICABLE and bool(step.applies_when.strip()) and not performed
 
 
 def _key(rubric: Rubric) -> str:

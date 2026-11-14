@@ -7,11 +7,13 @@ about half a second of hand-labelled truth. Longer videos are sampled more spars
 those a refine pass, which re-locates a found step on a short clip at REFINE_FPS, is offered
 as optional spending: it runs only while the job is within its allowance. Everything after
 that (clamping, performed order, missing steps, order violations) is computed here in code
-so it is deterministic and never left to the model.
+so it is deterministic and never left to the model. A step the reply found not needed
+(assess.not_needed) is not found, but it is not missing either.
 """
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel, Field
@@ -19,6 +21,7 @@ from pydantic import BaseModel, Field
 from .. import config, gemini
 from ..models import OrderViolation, Rubric, RubricStep, Timeline, TimelineStep
 from . import _budget, _fake, assess, timeline_prompts
+from .evaluate_prompts import sight_only
 
 MIN_SPAN_S = 1.0           # a found step lasts at least this long
 ORDER_TOLERANCE_S = 1.0    # starts closer than this are not an order violation
@@ -62,7 +65,16 @@ def run(ctx, rubric: Rubric, refine: bool | None = None) -> Timeline:
         refine = sample_fps(duration) < REFINE_BELOW_FPS
     if refine:
         steps = _refine_all(ctx, rubric, steps)
-    return build_timeline(rubric, steps)
+    return build_timeline(rubric, steps, not_needed_from(rubric, reply))
+
+
+def not_needed_from(rubric: Rubric, reply: assess.AssessReply) -> set[str]:
+    """Steps the whole-video reply found not needed, where that verdict stands (assess.not_needed)."""
+    by_id = {s.step_id: s for s in rubric.steps}
+    first: dict[str, assess.StepAssessment] = {}
+    for s in reply.steps:
+        first.setdefault(s.step_id.strip(), s)
+    return {i for i, s in first.items() if i in by_id and assess.not_needed(by_id[i], s.status, s.performed)}
 
 
 def located_from(reply: assess.AssessReply) -> list[_Located]:
@@ -158,8 +170,8 @@ def _refine(ctx, rs: RubricStep, step: TimelineStep) -> TimelineStep:
     """Tighten one found step's boundaries on a clip around it. Keeps the first-pass times if the
     refine call fails, is skipped for budget, or answers with something outside the clip."""
     clip_start, clip_end = refine_clip(step, ctx.duration)
-    prompt = timeline_prompts.refine(rs.title, rs.description, rs.evals.visual_cues, step.start_s, step.end_s,
-                                     clip_start, clip_end)
+    prompt = timeline_prompts.refine(rs.title, rs.description, sight_only(rs.evals.visual_cues), step.start_s,
+                                     step.end_s, clip_start, clip_end)
     try:
         reply = ctx.generate_json(
             f"timeline_refine:{rs.step_id}",
@@ -180,16 +192,23 @@ def _refine(ctx, rs: RubricStep, step: TimelineStep) -> TimelineStep:
     return step.model_copy(update={"start_s": start, "end_s": end})
 
 
-def build_timeline(rubric: Rubric, steps: list[TimelineStep]) -> Timeline:
-    """Add performed order, missing steps and order violations to located steps."""
+def build_timeline(rubric: Rubric, steps: list[TimelineStep], not_needed: Collection[str] = ()) -> Timeline:
+    """Add performed order, missing steps and order violations to located steps.
+
+    A step in not_needed that was not found is not missing: it was not needed in this
+    recording. For the order check it is like any step not found, so the steps after it are
+    checked against its own prerequisites."""
     order = {s.step_id: i for i, s in enumerate(rubric.steps)}
     found = sorted((s for s in steps if s.found), key=lambda s: (s.start_s, order.get(s.step_id, 0)))
     rank = {s.step_id: i + 1 for i, s in enumerate(found)}
-    steps = [s.model_copy(update={"performed_index": rank.get(s.step_id)}) for s in steps]
+    steps = [s.model_copy(update={"performed_index": rank.get(s.step_id),
+                                  "note": s.note or ("Not needed in this recording."
+                                                     if s.step_id in not_needed and not s.found else "")})
+             for s in steps]
     return Timeline(
         steps=steps,
         order_violations=order_violations(rubric, steps),
-        missing_step_ids=[s.step_id for s in steps if not s.found],
+        missing_step_ids=[s.step_id for s in steps if not s.found and s.step_id not in not_needed],
     )
 
 

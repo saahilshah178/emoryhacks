@@ -55,41 +55,57 @@ def rubric(ctx, classification=None) -> Rubric:
                   order_matters=True, notes="Placeholder rubric (fake AI mode).")
 
 
+def _not_needed(step: RubricStep) -> bool:
+    """In fake AI mode a step with an applies_when condition is never needed: its situation
+    does not come up, so it is not performed and comes back not_applicable. A test that wants
+    a "not needed" result gives a step a condition."""
+    return bool(step.applies_when.strip())
+
+
 def timeline(ctx, rubric: Rubric) -> Timeline:
+    """Every step is performed, in turn, except those not needed (_not_needed), with the second
+    and third performed steps swapped so the order check has something to show."""
     duration = max(ctx.duration, 8.0)
-    n = max(len(rubric.steps), 1)
+    performed = [s for s in rubric.steps if not _not_needed(s)]
+    n = max(len(performed), 1)
     span = duration / n
     steps, violations = [], []
-    order = list(range(n))
-    if n >= 3:  # perform step 3 before step 2 so the order check has something to show
+    order = list(range(len(performed)))
+    if len(order) >= 3:  # perform step 3 before step 2 so the order check has something to show
         order[1], order[2] = order[2], order[1]
     for slot, idx in enumerate(order):
-        s = rubric.steps[idx]
+        s = performed[idx]
         steps.append(TimelineStep(step_id=s.step_id, found=True, start_s=round(slot * span, 1),
                                   end_s=round((slot + 1) * span, 1), performed_index=slot + 1, confidence=0.6,
                                   note="Placeholder timing (fake AI mode)."))
-    if n >= 3:
-        early, late = rubric.steps[2], rubric.steps[1]
+    if len(order) >= 3:
+        early, late = performed[2], performed[1]
         violations.append(OrderViolation(step_id=early.step_id, expected_after=late.step_id,
                                          message=f'"{early.title}" was performed before "{late.title}".',
                                          at_s=round(span, 1)))
+    steps += [TimelineStep(step_id=s.step_id, found=False, note="Not needed in this recording (fake AI mode).")
+              for s in rubric.steps if _not_needed(s)]
     steps.sort(key=lambda t: [s.step_id for s in rubric.steps].index(t.step_id))
     return Timeline(steps=steps, order_violations=violations, missing_step_ids=[])
 
 
 def evaluation(ctx, rubric: Rubric, tl: Timeline) -> Evaluation:
+    """Statuses cycle passed, failed, unverified, passed by the step's place in the rubric;
+    a step with an applies_when condition is not_applicable (_not_needed)."""
     cycle = ["passed", "failed", "unverified", "passed"]
     by_id = {t.step_id: t for t in tl.steps}
     results = []
     for i, s in enumerate(rubric.steps):
         t = by_id.get(s.step_id)
-        status = cycle[i % len(cycle)]
+        status = "not_applicable" if _not_needed(s) else cycle[i % len(cycle)]
+        seen = t is not None and t.found
         results.append(StepResult(
             step_id=s.step_id, status=status, confidence=0.6,
             feedback={"passed": "Done correctly.", "failed": "This step did not meet the criteria.",
-                      "unverified": "The camera could not show this clearly."}[status],
+                      "unverified": "The camera could not show this clearly.",
+                      "not_applicable": "This step was not needed this time."}[status],
             evidence="Placeholder evidence (fake AI mode).",
-            evidence_start_s=t.start_s if t else None, evidence_end_s=t.end_s if t else None,
+            evidence_start_s=t.start_s if seen else None, evidence_end_s=t.end_s if seen else None,
         ))
     flags = [SafetyFlag(kind="patient_off_center", severity="medium", start_s=round(max(ctx.duration, 8.0) * 0.6, 1),
                         end_s=round(max(ctx.duration, 8.0) * 0.7, 1), person_label="P2",

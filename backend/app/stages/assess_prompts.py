@@ -4,25 +4,27 @@ well, who is there, safety), so the video is sent once."""
 from __future__ import annotations
 
 from ..models import Rubric
-from .evaluate_prompts import _GROUND_RULES, _WHOLE_VIDEO_RULES, _rules, _step_block
+from .evaluate_prompts import (
+    _GROUND_RULES, _PURPOSE_RULE, _WHOLE_VIDEO_RULES, _bullet, _feedback_rule, _rules, _step_block, sight_only,
+)
 
 
 def assess_prompt(skill: dict, rubric: Rubric, duration: float) -> str:
     steps = sorted(rubric.steps, key=lambda s: s.order)
-    safety = "\n".join(f"  - {c}" for c in rubric.safety_criteria) or "  (none listed; use general patient safety)"
+    safety = ("\n".join(f"  - {c}" for c in sight_only(rubric.safety_criteria))
+              or "  (none listed; use general patient safety)")
     return f"""\
 You are a clinical skills assessor reviewing a caregiver's practice recording. A nurse will use
 your answer to jump straight to each step and to see how it went.
 The caregiver is practising the skill "{skill.get('name', 'unknown')}": {skill.get('summary', '')}
 The recording is {duration:.0f} seconds long.
 
-{_GROUND_RULES.format(duration=duration)}
+{_GROUND_RULES.format(duration=duration)}{_PURPOSE_RULE}
 Work through these in order.
 
 1. observed: what actually happens in the recording, in order, one entry per distinct action
    (a few words each) with its start and end time. Start a new entry whenever the caregiver
-   moves on to a different action, even when it flows straight on from the last one. Use what
-   you see and what you hear people say.
+   moves on to a different action, even when it flows straight on from the last one.
 
 2. people: every person you see, labelled P1, P2, ... Role "caregiver" is the trainee
    performing the skill, "patient" is whoever is being assisted (it may be a colleague or an
@@ -31,15 +33,14 @@ Work through these in order.
    tell them apart: clothing, position, what they do.
 
 3. skill_match: whether the recording shows the caregiver attempting this skill at all. If it
-   shows something else, set it false and say in skill_match_note what it shows instead.
+   shows something else, set it false and describe in skill_match_note what it shows instead.
 
 4. steps: one entry for every step below, in the order given, exactly once, reusing its step id.
    Where it happens:
    - performed is true only if that action clearly happens in this recording. start_s is when
-     the caregiver begins doing it (its first movement, or for a spoken step the moment they
-     say it) and end_s is when it is complete; null for both when it is not performed.
-     Announcing a plan in advance ("I'll lock the brakes, then help you up") is not the start
-     of those steps.
+     the caregiver begins doing it (its first movement) and end_s is when it is complete; null
+     for both when it is not performed or not needed. A step whose result is already in place
+     when the recording begins is performed, from 0 to when the next action begins.
    - Steps can be done in any order, skipped, or repeated. Report each step where it really
      happens, even out of the listed order. If a step happens more than once, report its first
      complete performance and mention the repeat in note.
@@ -50,21 +51,20 @@ Work through these in order.
    - The people, room and camera angle may differ from any example of this skill. Judge the actions.
    - timing_confidence_pct (0 to 100): how sure you are that it happened at the time you gave.
    How well it was done:
-   - evidence: one sentence on what you actually saw or heard, written before the status.
+   - evidence: one sentence on what you actually saw, written before the status.
 {_rules(_WHOLE_VIDEO_RULES, "   ")}
    - confidence_pct (0 to 100): how sure you are of the status.
-   - feedback speaks to the caregiver as "you", in one or two plain, encouraging sentences:
-     for a pass, what you did well; for a failure, what went wrong and what to do instead;
-     for unverified, what could not be seen and how to record it so it can be.
+{_rules(_bullet(_feedback_rule()), "   ")}
    - note: a few words for the nurse only when useful (a repeat, why a step was not found),
      otherwise empty. Refer to other steps by their title, never by their id.
 
 Steps:
 {chr(10).join(_step_block(s) for s in steps)}
 
-5. safety_flags. Watch the patient throughout. Flag only what is actually seen or heard, with
-   its time span and the person's label:
-   - patient_distress: grimacing, crying out, saying it hurts or that they are dizzy
+5. safety_flags. Watch the patient throughout. Flag only what is actually seen, with its time
+   span and the person's label:
+   - patient_distress: visible signs such as grimacing, flinching, clutching a body part,
+     pulling away or raising a hand to stop
    - patient_off_center: the patient off-centre, leaning to one side or sliding
    - patient_unsteady: unsteadiness, buckling knees or a near fall
    - unsafe_caregiver_posture: unsafe handling, such as pulling on arms or letting go mid-move

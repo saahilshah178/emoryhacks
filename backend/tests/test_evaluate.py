@@ -16,7 +16,7 @@ def as_assessment(grade: GradeReply) -> assess.AssessReply:
     """The whole-video reply that carries the same grading (located where the evidence was seen)."""
     return assess.AssessReply(
         observed=[], people=grade.people, skill_match=grade.skill_match, skill_match_note=grade.skill_match_note,
-        steps=[assess.StepAssessment(step_id=j.step_id, performed=j.evidence_start_s is not None,
+        steps=[assess.StepAssessment(step_id=j.step_id, performed=j.performed,
                                      start_s=j.evidence_start_s, end_s=j.evidence_end_s, timing_confidence_pct=80,
                                      evidence=j.evidence, status=j.status, confidence_pct=j.confidence_pct,
                                      feedback=j.feedback, note="") for j in grade.steps],
@@ -62,8 +62,9 @@ def real_ai(monkeypatch):
     monkeypatch.setattr(config, "FAKE_AI", False)
 
 
-def judgement(step_id, status="passed", pct=90, start=1, end=2, feedback="Good."):
-    return StepJudgement(step_id=step_id, evidence="seen", evidence_start_s=start, evidence_end_s=end,
+def judgement(step_id, status="passed", pct=90, start=1, end=2, feedback="Good.", performed=None):
+    return StepJudgement(step_id=step_id, performed=start is not None if performed is None else performed,
+                         evidence="seen", evidence_start_s=start, evidence_end_s=end,
                          status=status, confidence_pct=pct, feedback=feedback)
 
 
@@ -266,7 +267,7 @@ def test_window_for_a_located_step_takes_in_evidence_seen_elsewhere():
 
 def test_unseen_step_keeps_no_evidence_times(real_ai):
     """Evidence times are nullable, so a step nobody saw is not saved at 0-0."""
-    unseen = StepJudgement(step_id="s6", evidence="not seen", evidence_start_s=None, evidence_end_s=None,
+    unseen = StepJudgement(step_id="s6", performed=False, evidence="not seen", evidence_start_s=None, evidence_end_s=None,
                            status="failed", confidence_pct=90, feedback="Wash your hands.")
     result = evaluate.to_step_result(unseen, 60.0)
     assert (result.evidence_start_s, result.evidence_end_s) == (None, None)
@@ -483,8 +484,8 @@ def test_double_check_prompt_fails_an_absent_step_only_on_the_whole_video():
 def test_whole_video_prompt_fails_a_step_that_was_never_performed():
     prompt = assess.assess_prompts.assess_prompt(GLOVE_SKILL, GLOVE_REMOVAL, 70)
     assert "or the recording ends before it" in prompt
-    assert "A step the recording\n     ends before is failed, not unverified" in prompt
-    assert "null for both when it is not performed" in prompt
+    assert "A step the recording ends before is failed,\n     not unverified" in prompt
+    assert "null\n     for both when it is not performed or not needed" in prompt
     assert "The recording is 70 seconds long" in prompt and "[s1]" in prompt
 
 

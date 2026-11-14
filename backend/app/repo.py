@@ -787,7 +787,8 @@ def load_timeline(attempt_id) -> Timeline:
     from .models import OrderViolation, TimelineStep
 
     rows = db.fetch_all(
-        """SELECT x.step_id, x.found, x.start_s, x.end_s, x.performed_index, x.timeline_confidence, x.timeline_note
+        """SELECT x.step_id, x.found, x.start_s, x.end_s, x.performed_index, x.timeline_confidence, x.timeline_note,
+                  x.status
            FROM attempt_steps x JOIN attempts a ON a.id = x.attempt_id
            LEFT JOIN skill_steps st ON st.skill_id = a.skill_id AND st.step_id = x.step_id
            WHERE x.attempt_id=%s ORDER BY st.ord NULLS LAST, x.step_id""", (attempt_id,))
@@ -797,8 +798,10 @@ def load_timeline(attempt_id) -> Timeline:
     violations = db.fetch_all(
         "SELECT step_id, expected_after, message, at_s FROM order_violations WHERE attempt_id=%s "
         "ORDER BY at_s NULLS LAST, step_id", (attempt_id,))
+    # A step judged not needed was not found but is not missing (timeline.build_timeline).
+    not_needed = {r["step_id"] for r in rows if r["status"] == "not_applicable"}
     return Timeline(steps=steps, order_violations=[OrderViolation(**v) for v in violations],
-                    missing_step_ids=[s.step_id for s in steps if not s.found])
+                    missing_step_ids=[s.step_id for s in steps if not s.found and s.step_id not in not_needed])
 
 
 def load_evaluation(attempt_id) -> Evaluation:

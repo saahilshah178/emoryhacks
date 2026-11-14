@@ -69,12 +69,14 @@ def run(ctx, rubric: Rubric, refine: bool | None = None) -> Timeline:
 
 
 def not_needed_from(rubric: Rubric, reply: assess.AssessReply) -> set[str]:
-    """Steps the whole-video reply found not needed, where that verdict stands (assess.not_needed)."""
+    """Steps the whole-video reply found not needed, as evaluate settles them (assess.not_needed):
+    a conditional step not done whose situation did not come up, or that the model called not needed."""
     by_id = {s.step_id: s for s in rubric.steps}
     first: dict[str, assess.StepAssessment] = {}
     for s in reply.steps:
         first.setdefault(s.step_id.strip(), s)
-    return {i for i, s in first.items() if i in by_id and assess.not_needed(by_id[i], s.status, s.performed)}
+    return {i for i, s in first.items()
+            if i in by_id and assess.not_needed(by_id[i], s.status, s.performed, s.situation_came_up)}
 
 
 def located_from(reply: assess.AssessReply) -> list[_Located]:

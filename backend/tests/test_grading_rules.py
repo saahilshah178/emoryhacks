@@ -81,6 +81,7 @@ def test_refine_prompt_leaves_out_spoken_cues(monkeypatch):
     reply = assess.AssessReply(
         observed=[], people=[], skill_match=True, overall_feedback="",
         steps=[assess.StepAssessment(step_id="s1", performed=True, start_s=20, end_s=40, timing_confidence_pct=90,
+                                     situation_came_up=None,
                                      evidence="seen", status="passed", confidence_pct=90, feedback="", note="")])
     sent = []
 
@@ -119,14 +120,18 @@ def test_a_conditional_step_shows_its_condition_and_the_not_applicable_rules():
     rubric = conditional(GLOVE_REMOVAL, "s6", "The caregiver touched something dirty.")
     text = assess.assess_prompts.assess_prompt(GLOVE_SKILL, rubric, 70)
     assert "  Only needed when: The caregiver touched something dirty.\n" in text
-    assert text.count("Only needed when") == 2  # the s6 block, and the rule that names the line
-    assert '- not_applicable: only for a step that has an "Only needed when" line' in text
-    assert "If you cannot tell whether the situation came up, it is unverified." in text
+    assert text.count("Only needed when") == 3  # the s6 block, and the rules that name the line
+    rule = ("If not, it is not_applicable when the\n     situation does not come up (the evidence describes what "
+            "shows it did not), failed when it\n     does, and unverified when you cannot tell.")
+    assert rule in text
+    assert "The recording ending before such a step is not\n     a failure" in text
+    assert "situation_came_up,\n     answered before the status" in text
     assert "one plain sentence on why the step was not needed this time" in text
     whole = prompts.double_check_prompt(GLOVE_SKILL, rubric.steps[5], 0, 70, 70, whole_video=True)
     clip = prompts.double_check_prompt(GLOVE_SKILL, rubric.steps[5], 20, 40, 70)
-    assert "- not_applicable:" in whole and "- not_applicable:" not in clip
+    assert "- not_applicable is only for such a step." in whole and "not_applicable is only" not in clip
     assert "the clip cannot show whether that situation came up" in clip
+    assert "situation_came_up is null: this clip cannot show" in clip and "situation_came_up is null" not in whole
     assert "Only needed when" not in prompts._step_block(GLOVE_REMOVAL.steps[5])
 
 
@@ -145,20 +150,20 @@ def test_the_start_rule_is_in_the_whole_video_prompts_and_a_clip_only_at_the_sta
 def test_a_not_needed_verdict_stands_only_for_a_conditional_step_that_was_not_done():
     rubric = conditional(GLOVE_REMOVAL, "s6")
     na = result("s6", NA, 0.8, evidence="The patient stood up unaided.")
-    assert evaluate.settle_not_applicable(na, rubric.steps[5], performed=False) == na
+    assert evaluate.settle_status(na, rubric.steps[5], performed=False) == na
 
-    done_anyway = evaluate.settle_not_applicable(na, rubric.steps[5], performed=True)
+    done_anyway = evaluate.settle_status(na, rubric.steps[5], performed=True)
     assert (done_anyway.status, done_anyway.confidence) == ("unverified", 0.0)  # graded on a second look
     assert "how well it was done was not judged" in done_anyway.evidence
 
     always = GLOVE_REMOVAL.steps[5]
-    skipped = evaluate.settle_not_applicable(na, always, performed=False)
+    skipped = evaluate.settle_status(na, always, performed=False)
     assert skipped.status == "failed" and skipped.evidence_start_s is None
     assert skipped.feedback == '"Hand hygiene" is needed every time, and it was not done in this recording.'
-    assert evaluate.settle_not_applicable(na, always, performed=True).status == "unverified"
+    assert evaluate.settle_status(na, always, performed=True).status == "unverified"
 
     passed = result("s6", "passed")
-    assert evaluate.settle_not_applicable(passed, always, performed=True) == passed
+    assert evaluate.settle_status(passed, always, performed=True) == passed
 
 
 def test_build_evaluation_settles_not_applicable_from_the_reply(real_ai):  # noqa: F811
@@ -204,6 +209,10 @@ def test_a_clip_cannot_show_that_a_situation_never_came_up():
     assert evaluate.better_supported(result("s6", "unverified", 0.5), result("s6", NA, 0.9), True).status == NA
     assert evaluate.better_supported(before, absent, whole_video=True).status == "failed"
     assert evaluate.better_supported(before, result("s6", NA, 0.9), False).status == NA
+    unsure = result("s6", "unverified", 0.5)
+    assert evaluate.better_supported(unsure, absent, False, conditional=True).status == "unverified"
+    assert evaluate.better_supported(unsure, absent, False).status == "failed"  # always needed: as before
+    assert evaluate.better_supported(unsure, absent, True, conditional=True).status == "failed"
 
 
 def test_a_low_confidence_not_needed_step_stays_not_needed_when_its_clip_shows_nothing(real_ai):  # noqa: F811
@@ -374,7 +383,8 @@ def test_timeline_knows_which_steps_were_not_needed(monkeypatch):
              ("s5", True, "passed"), ("s6", False, NA)]
     reply = assess.AssessReply(observed=[], people=[], skill_match=True, overall_feedback="", steps=[
         assess.StepAssessment(step_id=i, performed=done, start_s=5.0 * n if done else None,
-                              end_s=5.0 * n + 4 if done else None, timing_confidence_pct=90, evidence="",
+                              end_s=5.0 * n + 4 if done else None, timing_confidence_pct=90,
+                              situation_came_up=None, evidence="",
                               status=status, confidence_pct=90, feedback="", note="")
         for n, (i, done, status) in enumerate(items, start=1)])
     # s1 was done (so it is graded as usual) and s6 is always needed: only s4 was not needed.
@@ -464,3 +474,180 @@ def test_an_unseen_step_before_the_recording_start_gets_no_second_look():
                                               *[result(f"s{i}", "passed") for i in range(3, 7)]])
     assert evaluate.settled_by_recording_start(GLOVE_REMOVAL, STARTED_AT_S3, evaluation, 30.0) == {"s1"}
     assert evaluate.pick_double_checks(GLOVE_REMOVAL, evaluation, skip={"s1"}) == ["s2"]
+
+
+# --- a conditional step is settled by whether its situation came up ------------------------------
+CALL_BELL_WHEN = ("the patient looks hurt or cannot get up without help after being lowered, "
+                  "or the caregiver cannot manage alone")
+
+
+def _fall_response():
+    """The standard fall-response rubric's shape: the call bell is only needed in some situations."""
+    from app.models import Rubric, RubricStep, StepEval
+
+    titles = ["Move to the patient and steady them", "Position yourself closely behind the patient",
+              "Support torso under arms or at waist", "Place one leg under patient's buttocks",
+              "Lower patient gently down your leg", "Stay with patient and check condition",
+              "Use call bell to summon help"]
+    ev_ = StepEval(pass_criteria=["seen"], fail_criteria=["not seen"], unverified_when=["out of frame"])
+    return Rubric(order_matters=True, steps=[
+        RubricStep(step_id=f"s{i}", order=i, title=t, description="", start_s=0, end_s=1, critical=2 < i < 7,
+                   order_dependent=i > 2, must_follow=[f"s{i - 1}"] if i > 2 else [], evals=ev_,
+                   applies_when=CALL_BELL_WHEN if i == 7 else "")
+        for i, t in enumerate(titles, start=1)])
+
+
+# A 12 s recording that starts part-way in: the patient is lowered and checked, then it ends.
+FALL_12S = Timeline(steps=[
+    TimelineStep(step_id="s1", found=False), TimelineStep(step_id="s2", found=False),
+    TimelineStep(step_id="s3", found=True, start_s=0, end_s=2, confidence=0.8),
+    TimelineStep(step_id="s4", found=True, start_s=2, end_s=4, confidence=0.8),
+    TimelineStep(step_id="s5", found=True, start_s=4, end_s=8, confidence=0.8),
+    TimelineStep(step_id="s6", found=True, start_s=8, end_s=12, confidence=0.8),
+    TimelineStep(step_id="s7", found=False),
+])
+
+
+@pytest.mark.parametrize("evidence", [
+    "The recording ends at 12 seconds with the caregiver still crouched behind the seated patient without "
+    "reaching for a call bell or summoning help.",
+    "The recording ends after the patient is lowered to the floor without the caregiver reaching for a call bell "
+    "or summoning help.",
+])
+def test_a_call_bell_not_needed_is_not_failed_when_the_recording_ends(real_ai, evidence):  # noqa: F811
+    """From real recordings: the patient ends seated on the floor, visibly fine, and the recording
+    stops. The model failed the call bell under "the recording ends before it"."""
+    rubric = _fall_response()
+    bell = judgement("s7", "failed", 90, start=None, end=None, situation="no")
+    bell = bell.model_copy(update={"evidence": evidence, "feedback": "You did not use the call bell."})
+    reply = grade_reply(steps=[judgement("s1", "passed", 95, start=None, end=None, performed=False),
+                               judgement("s2", "passed", 95, start=None, end=None, performed=False)]
+                        + [judgement(f"s{i}", "passed", 95, start=2 * i - 6, end=2 * i - 4) for i in (3, 4, 5, 6)]
+                        + [bell])
+    ctx = StubCtx(answer_with(reply), duration=12.0)
+    out = evaluate.run(ctx, rubric, FALL_12S)
+    call_bell = out.steps[6]
+    assert call_bell.status == NA and call_bell.evidence_start_s is None
+    assert call_bell.feedback == ('Not needed this time: "Use call bell to summon help" is only needed when '
+                                  f"{CALL_BELL_WHEN}, and that did not happen.")
+    assert call_bell.evidence == evidence + " That situation was not seen to come up, so the step was not needed."
+    assert not any(c["purpose"] == "evaluate_double_check:s7" for c in ctx.calls)
+    sc = scoring.score(rubric, FALL_12S, out, [])
+    assert "1 of 7 steps was not needed in this recording, so it was not counted." in sc.reasons
+    assert not any("call bell" in r.lower() for r in sc.reasons)
+    assert sc.score_pct == 100.0  # s1 and s2 passed (seen in place at the start), s3-s6 passed, s7 left out
+
+
+def test_a_conditional_step_takes_its_status_from_its_situation():
+    rubric = _fall_response()
+    bell, first = rubric.steps[6], rubric.steps[0]
+    for model_status in ("passed", "failed", "unverified", NA):
+        assert assess.conditional_status(bell, model_status, False, "no") == NA
+        assert assess.conditional_status(bell, model_status, False, "yes") == "failed"
+        assert assess.conditional_status(bell, model_status, False, "cannot_tell") == "unverified"
+        assert assess.conditional_status(bell, model_status, True, "no") == model_status  # done: graded as usual
+        assert assess.conditional_status(bell, model_status, False, None) == model_status
+        assert assess.conditional_status(first, model_status, False, "no") == model_status  # no condition
+    assert assess.not_needed(bell, "failed", False, "no") and not assess.not_needed(bell, "failed", True, "no")
+    assert not assess.not_needed(first, NA, False, "no")
+
+
+def test_code_says_why_when_it_settles_a_conditional_step():
+    rubric = _fall_response()
+    bell = rubric.steps[6]
+    failed = result("s7", "failed", 0.8, evidence="The caregiver does not reach for a bell.")
+    needed = evaluate.settle_status(failed, bell, False, "yes")
+    assert needed == failed  # already failed: the model's own words are kept
+    seen = evaluate.settle_status(result("s7", NA, 0.8, evidence="The patient grimaces."), bell, False, "yes")
+    assert seen.status == "failed" and seen.feedback == (
+        f'"Use call bell to summon help" was needed this time, because {CALL_BELL_WHEN}, and it was not done.')
+    unsure = evaluate.settle_status(failed, bell, False, "cannot_tell")
+    assert unsure.status == "unverified"
+    assert unsure.evidence.endswith("Whether that situation came up could not be told.")
+    assert unsure.feedback == ('We could not tell from this recording whether "Use call bell to summon help" was '
+                               "needed, so a nurse will check.")
+    upper = bell.model_copy(update={"applies_when": "The patient is hurt."})
+    assert evaluate.settled_feedback(upper, NA) == ('Not needed this time: "Use call bell to summon help" is only '
+                                                    "needed when the patient is hurt, and that did not happen.")
+
+
+def test_steps_every_attempt_must_show_are_as_strict_as_before(real_ai):  # noqa: F811
+    # The model wrongly answers the situation for an unconditional step: it is ignored, and a
+    # step the recording ends before is failed as it always was.
+    rubric = _fall_response()
+    reply = grade_reply(steps=[judgement(f"s{i}", "passed", 95, start=2 * i, end=2 * i + 1) for i in (1, 2, 3, 4)]
+                        + [judgement("s5", "unverified", 90, start=None, end=None, situation="no"),
+                           judgement("s6", NA, 90, start=None, end=None, situation="no"),
+                           judgement("s7", "passed", 90, start=None, end=None, situation="yes")])
+    tl = Timeline(steps=[TimelineStep(step_id=f"s{i}", found=True, start_s=2 * i, end_s=2 * i + 1, confidence=0.8)
+                         for i in (1, 2, 3, 4)] + [TimelineStep(step_id=f"s{i}", found=False) for i in (5, 6, 7)])
+    out = evaluate.run(StubCtx(answer_with(reply), duration=10.0), rubric, tl)
+    assert [r.status for r in out.steps[4:]] == ["failed", "failed", "failed"]
+    assert out.steps[6].feedback.startswith('"Use call bell to summon help" was needed this time')
+    sc = scoring.score(rubric, tl, out, [])
+    assert sc.overall == "failed"  # the critical s5 and s6 were not done
+
+
+def test_a_conditional_step_the_recording_ends_before_is_settled_by_its_situation(real_ai):  # noqa: F811
+    rubric = _fall_response()
+    tl = FALL_12S
+    for situation, status in (("no", NA), ("yes", "failed"), ("cannot_tell", "unverified")):
+        reply = grade_reply(steps=[judgement(f"s{i}", "passed", 95, start=2 * i - 6, end=2 * i - 4)
+                                   for i in range(3, 7)]
+                            + [judgement(f"s{i}", "passed", 95, start=None, end=None, performed=False) for i in (1, 2)]
+                            + [judgement("s7", "failed", 60, start=None, end=None, situation=situation)])
+        ctx = StubCtx(answer_with(reply), duration=12.0)
+        out = evaluate.run(ctx, rubric, tl)
+        assert out.steps[6].status == status, situation
+        # The end of the recording has nothing more to show, so none gets a second look.
+        assert not any(c["purpose"] == "evaluate_double_check:s7" for c in ctx.calls), situation
+
+
+def test_a_critical_conditional_step_not_needed_still_goes_to_a_nurse(real_ai):  # noqa: F811
+    rubric = conditional(GLOVE_REMOVAL, "s4", "the caregiver touched something dirty")  # s4 is critical
+    reply = grade_reply(steps=[judgement(f"s{i}", "passed", 95, start=5 * i, end=5 * i + 3) for i in (1, 2, 3, 5, 6)]
+                        + [judgement("s4", "failed", 90, start=None, end=None, situation="no")])
+    tl = Timeline(steps=[TimelineStep(step_id=f"s{i}", found=i != 4, start_s=5 * i if i != 4 else None,
+                                      end_s=5 * i + 3 if i != 4 else None, confidence=0.8) for i in range(1, 7)])
+    out = evaluate.run(StubCtx(answer_with(reply), duration=60.0), rubric, tl)
+    assert out.steps[3].status == NA
+    sc = scoring.score(rubric, tl, out, [])
+    assert (sc.overall, sc.needs_nurse_review) == ("passed", True)
+    assert any(r.startswith("A critical step was judged not needed") for r in sc.reasons)
+
+
+def test_the_timeline_reads_the_situation_too():
+    rubric = _fall_response()
+    reply = assess.AssessReply(observed=[], people=[], skill_match=True, overall_feedback="", steps=[
+        assess.StepAssessment(step_id="s7", performed=False, start_s=None, end_s=None, timing_confidence_pct=90,
+                              situation_came_up=situation, evidence="", status="failed", confidence_pct=90,
+                              feedback="", note="")
+        for situation in ("no",)])
+    assert timeline.not_needed_from(rubric, reply) == {"s7"}
+    reply.steps[0].situation_came_up = "yes"
+    assert timeline.not_needed_from(rubric, reply) == set()
+
+
+def test_only_a_whole_video_second_look_settles_a_conditional_step_by_its_situation(real_ai):  # noqa: F811
+    rubric = conditional(GLOVE_REMOVAL, "s3", "the caregiver drops the glove")
+    first = grade_reply(steps=[judgement(f"s{i}", "passed", 95) for i in (1, 2)]
+                        + [judgement("s3", "unverified", 40, start=None, end=None, situation="cannot_tell")]
+                        + [judgement(f"s{i}", "passed", 95) for i in (4, 5, 6)])
+    second = lambda step_id: judgement(step_id, "failed", 95, start=None, end=None, situation="no")  # noqa: E731
+    # The located neighbours leave a gap, so the second look is a clip: its situation is ignored.
+    out = evaluate.run(StubCtx(answer_with(first, second), duration=70.0), rubric, GLOVE_TIMELINE)
+    # A clip that saw nothing of a conditional step cannot fail it: the first look stands.
+    assert out.steps[2].status == "unverified" and out.steps[2].double_checked
+    nothing = Timeline(steps=[TimelineStep(step_id=s.step_id, found=False) for s in rubric.steps])
+    out = evaluate.run(StubCtx(answer_with(first, second), duration=70.0), rubric, nothing)  # the whole video
+    assert out.steps[2].status == NA and out.steps[2].feedback.startswith("Not needed this time")
+
+
+def test_canned_ai_says_why_a_step_was_not_needed():
+    class Ctx:
+        duration = 60.0
+    rb = _fake.rubric(Ctx())
+    out = _fake.evaluation(Ctx(), rb, _fake.timeline(Ctx(), rb))
+    assert out.steps[3].status == NA
+    assert out.steps[3].feedback == ('Not needed this time: "Steady the person" is only needed when the person '
+                                     "sways or looks unsteady once standing, and that did not happen.")

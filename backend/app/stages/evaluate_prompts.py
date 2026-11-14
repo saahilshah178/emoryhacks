@@ -45,13 +45,18 @@ _START_RULES = [
     "  about the start: a step skipped later on is still failed.",
 ]
 
-# A step with an "Only needed when" line may not have been needed in this attempt.
+# A step with an "Only needed when" line may not have been needed in this attempt. The model
+# answers situation_came_up first; for such a step that was not done, code sets the status
+# from that answer (assess.conditional_status), so the rules here and the code agree.
 _NOT_NEEDED_RULES = [
-    "- not_applicable: only for a step that has an \"Only needed when\" line, when that situation",
-    "  does not come up in the recording and the caregiver does not do the step. If the caregiver",
-    "  does the step anyway, grade it as usual. If the situation comes up and the step is not",
-    "  done, it is failed. If you cannot tell whether the situation came up, it is unverified.",
-    "  For not_applicable the evidence describes what was seen that shows the situation did not arise.",
+    "- A step with an \"Only needed when\" line depends on that situation. situation_came_up,",
+    "  answered before the status, is whether it is seen to come up in the recording: \"yes\",",
+    "  \"no\", or \"cannot_tell\" when what is shown cannot settle it; null for every other step.",
+    "  If the caregiver does such a step, grade it as usual. If not, it is not_applicable when the",
+    "  situation does not come up (the evidence describes what shows it did not), failed when it",
+    "  does, and unverified when you cannot tell. The recording ending before such a step is not",
+    "  a failure: what matters is whether its situation had come up by then.",
+    "- not_applicable is only for such a step.",
 ]
 
 # The status rules for a step seen across the whole recording. A step never performed is
@@ -59,10 +64,13 @@ _NOT_NEEDED_RULES = [
 _WHOLE_VIDEO_RULES = [
     "- passed: the pass criteria are observed and no fail criterion is.",
     "- failed: a fail criterion is observed, or the step was not performed in this attempt: the",
-    "  caregiver moved on without doing it, or the recording ends before it.",
+    "  caregiver moved on without doing it, or the recording ends before it. Not doing a step is",
+    "  a failure only for a step every attempt must show; one with an \"Only needed when\" line",
+    "  follows the rule below.",
     "- unverified: when the step may have been performed but the camera could not show it",
-    "  (out of frame, blocked from view, too dark). A step the recording ends before is failed,",
-    "  not unverified, even if an \"unverified when\" condition mentions the recording ending.",
+    "  (out of frame, blocked from view, too dark). A step every attempt must show that the",
+    "  recording ends before is failed, not unverified, even if an \"unverified when\" condition",
+    "  mentions the recording ending.",
     *_NOT_NEEDED_RULES,
     *_START_RULES,
 ]
@@ -140,6 +148,8 @@ def double_check_prompt(skill: dict, step: RubricStep, start_s: float, end_s: fl
         # The rule for a step done before the recording began only fits a clip that starts
         # where the recording does; mid-video it would read as "before this clip".
         rules = _rules(_CLIP_RULES + (_START_RULES if start_s <= CLIP_START_SLACK_S else []))
+    # A clip cannot show whether a situation came up, so only the whole video answers it.
+    situation = "" if whole_video else "\nsituation_came_up is null: this clip cannot show whether a situation came up."
     return f"""\
 You are a clinical skills assessor taking a careful second look at one step of a caregiver's
 practice recording of "{skill.get('name', 'unknown')}". {shown}
@@ -148,7 +158,7 @@ practice recording of "{skill.get('name', 'unknown')}". {shown}
 Grade only this step:
 {_step_block(step)}
 
-Watch closely. performed is true only if the caregiver does this step in what you are shown.
+Watch closely. performed is true only if the caregiver does this step in what you are shown.{situation}
 Write the evidence first: what you actually saw. evidence_start_s and evidence_end_s are the
 span where you saw the step; use null for both when it is not seen or not needed.
 {rules}

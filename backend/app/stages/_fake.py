@@ -91,7 +91,10 @@ def timeline(ctx, rubric: Rubric) -> Timeline:
 
 def evaluation(ctx, rubric: Rubric, tl: Timeline) -> Evaluation:
     """Statuses cycle passed, failed, unverified, passed by the step's place in the rubric;
-    a step with an applies_when condition is not_applicable (_not_needed)."""
+    a step with an applies_when condition is not_applicable (_not_needed), with the feedback
+    the real grader gives a step it finds not needed."""
+    from .evaluate import settled_feedback  # evaluate imports this module
+
     cycle = ["passed", "failed", "unverified", "passed"]
     by_id = {t.step_id: t for t in tl.steps}
     results = []
@@ -103,7 +106,7 @@ def evaluation(ctx, rubric: Rubric, tl: Timeline) -> Evaluation:
             step_id=s.step_id, status=status, confidence=0.6,
             feedback={"passed": "Done correctly.", "failed": "This step did not meet the criteria.",
                       "unverified": "The camera could not show this clearly.",
-                      "not_applicable": "This step was not needed this time."}[status],
+                      "not_applicable": settled_feedback(s, "not_applicable") if _not_needed(s) else ""}[status],
             evidence="Placeholder evidence (fake AI mode).",
             evidence_start_s=t.start_s if seen else None, evidence_end_s=t.end_s if seen else None,
         ))

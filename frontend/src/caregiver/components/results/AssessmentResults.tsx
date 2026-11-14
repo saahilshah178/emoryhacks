@@ -15,10 +15,11 @@ import { useCaregiver } from "@/caregiver/context/CaregiverContext";
 import { practiceHref } from "@/caregiver/skills";
 import { attemptStateForCaregiver, formatScore, readyToSend } from "@/caregiver/status";
 import { cn } from "@/lib/cn";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, plural } from "@/lib/format";
 import { useApi, useJob, useTitle } from "@/lib/hooks";
 import { flagTitle, personRole, stepStatusForCaregiver, toneClass } from "@/lib/status";
 import { useVideoSegments } from "@/lib/segment";
+import { savedStatus, tallySteps } from "@/lib/steps";
 import type { Attempt, Status } from "@/lib/types";
 
 const STATUS_ORDER: Status[] = ["passed", "unverified", "failed"];
@@ -152,26 +153,33 @@ function Actions({ skillId, practiceFirst, canPractice }: { skillId: string } & 
   );
 }
 
+/** The steps by result. A step that was not needed this time is not counted, only mentioned. */
 function StepTally({ attempt }: { attempt: Attempt }) {
-  const counts = new Map<Status, number>();
-  for (const step of attempt.steps) {
-    const status = step.nurse_status ?? step.status;
-    if (status) counts.set(status, (counts.get(status) ?? 0) + 1);
-  }
-  const present = STATUS_ORDER.filter((status) => counts.has(status));
-  if (present.length === 0) return null;
+  const { counts, notNeeded } = tallySteps(attempt.steps, savedStatus);
+  const present = STATUS_ORDER.filter((status) => counts[status] > 0);
+  if (present.length === 0 && notNeeded === 0) return null;
   return (
-    <div className={cn("mt-4 grid gap-2", present.length === 1 ? "grid-cols-1" : present.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
-      {present.map((status) => {
-        const entry = stepStatusForCaregiver[status];
-        return (
-          <div key={status} className={cn("rounded-[12px] px-3 py-2.5", toneClass[entry.tone])}>
-            <p className="text-xl font-semibold tabular-nums">{counts.get(status)}</p>
-            <p className="text-xs font-medium leading-snug">{entry.label}</p>
-          </div>
-        );
-      })}
-    </div>
+    <>
+      {present.length ? (
+        <div className={cn("mt-4 grid gap-2", present.length === 1 ? "grid-cols-1" : present.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
+          {present.map((status) => {
+            const entry = stepStatusForCaregiver[status];
+            return (
+              <div key={status} className={cn("rounded-[12px] px-3 py-2.5", toneClass[entry.tone])}>
+                <p className="text-xl font-semibold tabular-nums">{counts[status]}</p>
+                <p className="text-xs font-medium leading-snug">{entry.label}</p>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+      {notNeeded ? (
+        <p className="mt-3 text-xs text-ink-secondary">
+          {plural(notNeeded, "step")} {notNeeded === 1 ? "was" : "were"} not needed this time, so{" "}
+          {notNeeded === 1 ? "it isn't" : "they aren't"} counted.
+        </p>
+      ) : null}
+    </>
   );
 }
 
@@ -243,7 +251,7 @@ function Graded({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
   const chapters = useMemo(
     () =>
       attemptChapters(attempt.steps, (step) => {
-        const status = step.nurse_status ?? step.status;
+        const status = savedStatus(step);
         return status ? { tone: stepStatusForCaregiver[status].tone, hint: stepStatusForCaregiver[status].label } : null;
       }),
     [attempt.steps],
@@ -327,6 +335,7 @@ function Graded({ attempt, skillId, onSent }: { attempt: Attempt; skillId: strin
                   label="Steps in your recording"
                   emptyText="The check didn't find the steps in your recording, so there are no times to jump to."
                   missingText="Not seen in your recording"
+                  notNeededText={stepStatusForCaregiver.not_applicable.label}
                 />
               </Card>
             </div>

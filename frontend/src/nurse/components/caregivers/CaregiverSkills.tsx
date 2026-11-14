@@ -215,7 +215,7 @@ function Unassigned({
   onSaved: (next: CaregiverDetail) => void;
   onAssigned: () => void;
 }) {
-  const { reloadOverview } = useDashboard();
+  const { reloadOverview, showFlash } = useDashboard();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -231,6 +231,7 @@ function Unassigned({
       onAssigned();
       reloadOverview();
       setDone(`${name} is now assigned to ${who}.`);
+      showFlash({ tone: "success", message: `${name} is now assigned to ${person.name}.` });
     } catch (e) {
       setError(errorMessage(e));
     } finally {

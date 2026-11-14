@@ -29,28 +29,72 @@ THRESHOLDS = {
     "flag_tilt": pose.FLAG_TILT_DEG,
     "lying_tilt": pose.LYING_TILT_DEG,
     "flag_min_seconds": pose.FLAG_MIN_SECONDS,
+    "min_standing_s": 1.0,                        # balance figures need at least this much standing time
 }
 # Per-frame metrics a client may ask /frames for.
 FRAME_METRICS = [k for k in repo.POSE_ROW_KEYS if k not in ("person_idx", "t_offset", "segment_id", "valid")]
 
-# Readings per role over a set of pose_frames f joined to pose_tracks t (patient balance,
-# caregiver trunk tilt). Uses percentile_agg from the TimescaleDB toolkit for the peak.
-_ROLE_READINGS = """
+# Frame counts and readings per role over pose_frames f joined to pose_tracks t. Balance
+# readings exist only for frames where the person was standing with both feet in view
+# (pose.keep_standing_balance), so count(com_offset) counts standing frames. _role_figures
+# turns the counts into seconds and shares. percentile_agg is from the TimescaleDB toolkit.
+_ROLE_COUNTS = """
+  count(*) FILTER (WHERE f.valid) AS valid_frames,
+  count(*) FILTER (WHERE f.valid AND t.role IN ('patient', 'caregiver')) AS role_frames,
+  count(f.com_offset) FILTER (WHERE f.valid AND t.role = 'patient') AS patient_standing_frames,
+  count(*) FILTER (WHERE f.valid AND t.role = 'patient' AND abs(f.com_offset) > %(off)s) AS patient_off_frames,
   min(f.balance_score) FILTER (WHERE f.valid AND t.role = 'patient') AS patient_balance_min,
   avg(f.balance_score) FILTER (WHERE f.valid AND t.role = 'patient') AS patient_balance_avg,
-  (count(*) FILTER (WHERE f.valid AND t.role = 'patient' AND abs(f.com_offset) > %(off)s))::float
-    / nullif(count(f.com_offset) FILTER (WHERE f.valid AND t.role = 'patient'), 0) AS patient_off_center_share,
+  count(f.trunk_tilt) FILTER (WHERE f.valid AND t.role = 'caregiver') AS caregiver_frames,
+  count(*) FILTER (WHERE f.valid AND t.role = 'caregiver' AND f.trunk_tilt > %(bent)s) AS caregiver_bent_frames,
   avg(f.trunk_tilt) FILTER (WHERE f.valid AND t.role = 'caregiver') AS caregiver_tilt_avg,
   approx_percentile(0.95, percentile_agg(f.trunk_tilt) FILTER (WHERE f.valid AND t.role = 'caregiver'))
-    AS caregiver_tilt_peak,
-  (count(*) FILTER (WHERE f.valid AND t.role = 'caregiver' AND f.trunk_tilt > %(bent)s))::float
-    / nullif(count(f.trunk_tilt) FILTER (WHERE f.valid AND t.role = 'caregiver'), 0) AS caregiver_bent_share
+    AS caregiver_tilt_peak
 """
 _PARAMS = {"off": THRESHOLDS["off_center_offset"], "bent": THRESHOLDS["tilt_bent"]}
+
+# Measured frames per second for each video: one over the median time between a track's
+# consecutive rows. Compared with videos.fps it says whether every frame was measured.
+_SAMPLE_RATE = """
+  SELECT video_id, 1 / nullif(percentile_cont(0.5) WITHIN GROUP (ORDER BY dt), 0) AS sample_fps
+  FROM (SELECT video_id, t_offset - lag(t_offset) OVER (PARTITION BY video_id, person_idx ORDER BY t_offset) AS dt
+        FROM pose_frames {where}) steps
+  WHERE dt > 0 GROUP BY video_id"""
+_ALL_SAMPLE_RATES = _SAMPLE_RATE.format(where="")
 
 
 def _rounded(rows: list[dict], places: int = 3) -> list[dict]:
     return [{k: round(v, places) if isinstance(v, float) else v for k, v in r.items()} for r in rows]
+
+
+def _sampling(sample_fps: float | None, video_fps: float | None) -> dict:
+    """How densely a video was measured: every frame, or a stated rate."""
+    every = bool(sample_fps and video_fps and sample_fps >= 0.95 * video_fps)
+    return {"sample_fps": sample_fps, "video_fps": video_fps, "every_frame": every}
+
+
+def _role_figures(row: dict) -> dict:
+    """Replace the _ROLE_COUNTS frame counts in row with seconds and shares a nurse can read.
+
+    patient_standing_s is how long the patient was seen standing with both feet in view; the
+    patient's balance average, lowest and off-centre share are shares of that time, and are
+    None when it is under THRESHOLDS["min_standing_s"] (there is nothing to judge, so neither
+    0 nor 100 percent is true). caregiver_bent_share is a share of caregiver_tracked_s.
+    role_share is the share of measured person-frames whose person has a known role."""
+    fps = row.get("sample_fps") or 0
+    seconds = (lambda n: (n or 0) / fps) if fps else (lambda n: None)
+    standing, off = row.pop("patient_standing_frames"), row.pop("patient_off_frames")
+    tracked, bent = row.pop("caregiver_frames"), row.pop("caregiver_bent_frames")
+    valid, labelled = row.pop("valid_frames"), row.pop("role_frames")
+    row["patient_standing_s"], row["patient_off_center_s"] = seconds(standing), seconds(off)
+    enough = row["patient_standing_s"] is not None and row["patient_standing_s"] >= THRESHOLDS["min_standing_s"]
+    row["patient_off_center_share"] = off / standing if enough else None
+    if not enough:
+        row["patient_balance_avg"] = row["patient_balance_min"] = None
+    row["caregiver_tracked_s"] = seconds(tracked)
+    row["caregiver_bent_share"] = bent / tracked if tracked else None
+    row["role_share"] = labelled / valid if valid else None
+    return row
 
 
 def _video_or_404(video_id: str) -> dict:
@@ -65,27 +109,31 @@ def _video_or_404(video_id: str) -> dict:
 
 @router.get("/overview")
 def overview():
-    """One row per video with pose data: what it is, the pose_1s rollup, per-role readings
-    and safety-flag counts. peak trunk tilt is the 95th percentile, robust to single bad frames."""
+    """One row per video with pose data: what it is, how densely it was measured, the pose_1s
+    rollup, per-role readings with the time they cover (_role_figures), and safety-flag
+    counts. Peak trunk tilt is the 95th percentile, robust to single bad frames. Attempts
+    whose skill was deleted are left out; skill_match False marks an attempt rejected as
+    the wrong skill."""
     rows = db.fetch_all(
         f"""WITH roll AS (
               SELECT video_id, count(DISTINCT bucket) AS seconds_tracked, avg(balance_avg) AS balance_avg,
                      min(balance_min) AS balance_min, max(trunk_tilt_max) AS trunk_tilt_max
               FROM pose_1s GROUP BY video_id),
+            rate AS ({_ALL_SAMPLE_RATES}),
             roles AS (
-              SELECT f.video_id, count(*) AS person_frames, count(*) FILTER (WHERE f.valid) AS valid_frames,
-                     count(DISTINCT f.person_idx) AS tracks,
-                     count(DISTINCT f.person_idx) FILTER (WHERE t.role IN ('caregiver', 'patient')) AS tracks_with_role,
-                     {_ROLE_READINGS}
+              SELECT f.video_id, count(*) AS person_frames, count(DISTINCT f.person_idx) AS tracks,
+                     {_ROLE_COUNTS}
               FROM pose_frames f LEFT JOIN pose_tracks t ON t.video_id = f.video_id AND t.person_idx = f.person_idx
               GROUP BY f.video_id)
-            SELECT v.id AS video_id, v.kind, v.original_name, v.duration_s, v.recorded_at,
+            SELECT v.id AS video_id, v.kind, v.original_name, v.duration_s, v.recorded_at, v.fps AS video_fps,
+                   q.sample_fps,
                    a.id AS attempt_id, a.caregiver_name, coalesce(a.nurse_status, a.status) AS attempt_status,
-                   a.score_pct, coalesce(sa.name, sr.name) AS skill_name, coalesce(sa.slug, sr.slug) AS skill_slug,
+                   a.score_pct, a.skill_match,
+                   coalesce(sa.name, sr.name) AS skill_name, coalesce(sa.slug, sr.slug) AS skill_slug,
                    r.seconds_tracked, r.balance_avg, r.balance_min, r.trunk_tilt_max,
-                   x.person_frames, x.valid_frames, x.tracks, x.tracks_with_role,
-                   x.patient_balance_min, x.patient_balance_avg, x.patient_off_center_share,
-                   x.caregiver_tilt_avg, x.caregiver_tilt_peak, x.caregiver_bent_share,
+                   x.person_frames, x.tracks, x.valid_frames, x.role_frames,
+                   x.patient_standing_frames, x.patient_off_frames, x.patient_balance_min, x.patient_balance_avg,
+                   x.caregiver_frames, x.caregiver_bent_frames, x.caregiver_tilt_avg, x.caregiver_tilt_peak,
                    (SELECT count(*) FROM safety_flags sf WHERE sf.video_id = v.id) AS flag_count,
                    (SELECT count(*) FROM safety_flags sf WHERE sf.video_id = v.id AND sf.counts_toward_score)
                      AS scored_flag_count,
@@ -93,13 +141,18 @@ def overview():
                      AS high_flag_count
             FROM roll r JOIN videos v ON v.id = r.video_id
             LEFT JOIN roles x ON x.video_id = v.id
+            LEFT JOIN rate q ON q.video_id = v.id
             LEFT JOIN attempts a ON a.video_id = v.id
             LEFT JOIN skills sa ON sa.id = a.skill_id
             LEFT JOIN LATERAL (SELECT name, slug FROM skills s WHERE s.reference_video_id = v.id
                                ORDER BY s.version DESC LIMIT 1) sr ON true
+            WHERE NOT (v.kind = 'attempt' AND a.id IS NULL)
             ORDER BY v.recorded_at DESC""",
         _PARAMS,
     )
+    for r in rows:
+        r["every_frame"] = _sampling(r["sample_fps"], r["video_fps"])["every_frame"]
+        _role_figures(r)
     return _rounded(rows)
 
 
@@ -198,8 +251,10 @@ def frames(video_id: str, metrics: str = Query("l_knee,r_knee"), points: int = Q
 
 @router.get("/videos/{video_id}/summary")
 def summary(video_id: str):
-    """Tracks with roles and per-track statistics, the stored safety flags, sustained pose
-    windows recomputed from the stored frames, and the thresholds in use."""
+    """Tracks with roles and per-track statistics, the stored safety flags (pose flags were
+    already named by role with pose.relabel_flags), how densely the video was measured, and
+    the thresholds in use. A track's balance figures are shares of its standing_s and are
+    None when it stood for less than THRESHOLDS["min_standing_s"]."""
     video = _video_or_404(video_id)
     attempt = db.fetch_one(
         """SELECT a.id, a.caregiver_name, coalesce(a.nurse_status, a.status) AS status, a.score_pct,
@@ -233,46 +288,55 @@ def summary(video_id: str):
         flags = db.fetch_all("SELECT * FROM safety_flags WHERE attempt_id=%s ORDER BY start_s", (attempt["id"],))
     else:
         flags = db.fetch_all("SELECT * FROM safety_flags WHERE video_id=%s ORDER BY start_s", (video["id"],))
-    frame_rows = db.fetch_all(
-        """SELECT person_idx, t_offset, valid, com_offset, trunk_tilt FROM pose_frames
-           WHERE video_id=%s ORDER BY t_offset""", (video["id"],))
-    rate = pose.sample_rate(float(video["duration_s"] or 0), float(video["fps"] or 30))
-    windows = []
+    rate = db.fetch_one(_SAMPLE_RATE.format(where="WHERE video_id = %(video_id)s"), {"video_id": video["id"]})
+    sampling = _sampling(rate["sample_fps"] if rate else None, video["fps"])
     for t in tracks:
-        idx = t["person_idx"]
-        label = f"{t['role']} (track {idx})" if t["role"] != "unknown" else f"track {idx}"
-        found = pose.candidate_flags([r for r in frame_rows if r["person_idx"] == idx], rate, {idx: label})
-        windows += [{**w.model_dump(), "person_idx": idx} for w in found]
-    windows.sort(key=lambda w: w["start_s"])
+        fps = sampling["sample_fps"]
+        t["standing_s"] = t["balance_frames"] / fps if fps else None
+        if not (t["standing_s"] and t["standing_s"] >= THRESHOLDS["min_standing_s"]):
+            t["balance_avg"] = t["balance_min"] = t["off_center_share"] = None
     return {"video": {k: video[k] for k in ("id", "kind", "original_name", "duration_s", "width", "height",
                                            "recorded_at")},
             "attempt": attempt, "skill": skill, "segments": len({t["segment_id"] for t in tracks}),
-            "tracks": _rounded(tracks), "flags": flags, "pose_windows": windows, "thresholds": THRESHOLDS}
+            "sampling": _rounded([sampling])[0], "tracks": _rounded(tracks), "flags": flags,
+            "thresholds": THRESHOLDS}
 
 
 @router.get("/trends")
 def trends(bucket: str = Query("1 day", pattern=r"^\d+ (hour|hours|day|days|week|weeks)$")):
     """Per-role readings across attempts over calendar time, grouped by skill: one point per
-    attempt and one row per skill per time_bucket of the frames' timestamps."""
+    attempt, and one row per skill per time_bucket of the attempts' recording times that
+    averages the attempts in it (so a long attempt counts once, like a short one).
+    Attempts rejected as the wrong skill (skill_match false) are left out."""
     attempts = db.fetch_all(
-        f"""SELECT a.id AS attempt_id, v.recorded_at, a.caregiver_name, coalesce(a.nurse_status, a.status) AS status,
-                   a.score_pct, s.slug AS skill_slug, s.name AS skill_name, {_ROLE_READINGS}
+        f"""WITH rate AS ({_ALL_SAMPLE_RATES})
+            SELECT a.id AS attempt_id, v.recorded_at, time_bucket(%(bucket)s::interval, v.recorded_at) AS bucket,
+                   a.caregiver_name, coalesce(a.nurse_status, a.status) AS status, a.score_pct,
+                   s.slug AS skill_slug, s.name AS skill_name, q.sample_fps, {_ROLE_COUNTS}
             FROM pose_frames f
             JOIN attempts a ON a.video_id = f.video_id JOIN skills s ON s.id = a.skill_id
             JOIN videos v ON v.id = f.video_id
+            LEFT JOIN rate q ON q.video_id = f.video_id
             LEFT JOIN pose_tracks t ON t.video_id = f.video_id AND t.person_idx = f.person_idx
-            GROUP BY a.id, v.recorded_at, s.slug, s.name ORDER BY v.recorded_at""",
-        _PARAMS,
-    )
-    buckets = db.fetch_all(
-        f"""SELECT time_bucket(%(bucket)s::interval, f.ts) AS bucket, s.slug AS skill_slug, s.name AS skill_name,
-                   count(DISTINCT a.id) AS attempts, {_ROLE_READINGS}
-            FROM pose_frames f
-            JOIN attempts a ON a.video_id = f.video_id JOIN skills s ON s.id = a.skill_id
-            LEFT JOIN pose_tracks t ON t.video_id = f.video_id AND t.person_idx = f.person_idx
-            GROUP BY 1, s.slug, s.name ORDER BY 1, s.slug""",
+            WHERE a.skill_match IS NOT FALSE
+            GROUP BY a.id, v.recorded_at, s.slug, s.name, q.sample_fps ORDER BY v.recorded_at""",
         {**_PARAMS, "bucket": bucket},
     )
+    groups: dict[tuple, list[dict]] = {}
+    for a in attempts:
+        _role_figures(a)
+        groups.setdefault((a.pop("bucket"), a["skill_slug"]), []).append(a)
+
+    def mean(items: list[dict], key: str) -> float | None:
+        values = [i[key] for i in items if i[key] is not None]
+        return sum(values) / len(values) if values else None
+
+    buckets = [{"bucket": b, "skill_slug": slug, "skill_name": items[0]["skill_name"], "attempts": len(items),
+                "patient_attempts": sum(1 for i in items if i["patient_off_center_share"] is not None),
+                "patient_standing_s": sum(i["patient_standing_s"] or 0 for i in items),
+                **{k: mean(items, k) for k in ("patient_balance_avg", "patient_balance_min", "patient_off_center_share",
+                                               "caregiver_tilt_avg", "caregiver_tilt_peak", "caregiver_bent_share")}}
+               for (b, slug), items in sorted(groups.items(), key=lambda g: (g[0][0], g[0][1]))]
     return {"bucket": bucket, "attempts": _rounded(attempts), "buckets": _rounded(buckets)}
 
 

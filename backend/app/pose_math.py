@@ -16,9 +16,10 @@ What a single 2D camera can and cannot tell you:
   * trunk_lateral, the centre of mass and the base of support are measured in the image
     plane only. com_offset therefore shows side-to-side balance when the person faces the
     camera and front-to-back balance when they are side-on, never both at once.
-  * balance readings need both feet visible and are only computed while the person is
-    on their feet (thighs near vertical): seated or lying people have no meaningful
-    base of support under the feet.
+  * balance readings need both legs and feet visible and are only computed while the
+    person is standing (is_standing): seated, kneeling or lying people have no meaningful
+    base of support under the feet. The pose stage further keeps them only inside
+    stable_runs of standing frames, so a single frame that happens to pass is ignored.
 """
 from __future__ import annotations
 
@@ -53,7 +54,12 @@ VISIBLE = 0.5             # a landmark counts as seen above this visibility
 MIN_VALID_LANDMARKS = 8
 BODY_LANDMARKS = [*range(L_SHOULDER, R_WRIST + 1), *range(L_HIP, R_TOE + 1)]
 UPSIDE_DOWN_DEG = 135     # a trunk further than this from upright in the image is a false detection
-ON_FEET_MAX_THIGH_DEG = 45.0  # thighs within this angle of vertical: weight is on the feet
+# Standing (weight on the feet), per frame. A seated person seen from a raised three-quarter
+# camera has foreshortened thighs that MediaPipe can put at 40-45 degrees from vertical, so
+# the thigh test alone is not enough: the knees must also be nearly straight.
+STANDING_MAX_THIGH_DEG = 35.0  # mean thigh angle from vertical, world landmarks
+STANDING_MIN_KNEE_DEG = 130.0  # both knees at least this straight (180 is straight)
+LYING_TILT_DEG = 75.0          # a trunk this far from upright is lying down, not standing
 # The foot landmarks run down the middle of each foot, so the base of support is widened
 # by half a foot's width (about 5 cm, a tenth of a 50 cm torso) on each side.
 FOOT_HALF_WIDTH_TORSO = 0.1
@@ -143,14 +149,26 @@ def torso_length(img: np.ndarray, vis: np.ndarray) -> float | None:
     return length if length > 1e-6 else None
 
 
-def is_on_feet(points: np.ndarray, vis: np.ndarray) -> bool:
-    """True when both thighs are seen and, on average, within ON_FEET_MAX_THIGH_DEG of vertical."""
-    if not _seen(vis, L_HIP, R_HIP, L_KNEE, R_KNEE):
+def is_standing(body: np.ndarray, img: np.ndarray, vis: np.ndarray) -> bool:
+    """True when this one frame looks like a person standing on their feet: both legs seen,
+    thighs within STANDING_MAX_THIGH_DEG of vertical on average, both knees at least
+    STANDING_MIN_KNEE_DEG straight, the trunk short of lying flat, and in the image each hip
+    above its knee and each knee above its ankle (which rules out lying across the frame).
+    body holds the points angles are measured on (world landmarks); img the aspect-corrected
+    image points."""
+    legs = ((L_HIP, L_KNEE, L_ANKLE), (R_HIP, R_KNEE, R_ANKLE))
+    if not _seen(vis, L_SHOULDER, R_SHOULDER, *legs[0], *legs[1]):
         return False
-    angles = [angle_from_vertical(points[k], points[h]) for h, k in ((L_HIP, L_KNEE), (R_HIP, R_KNEE))]
-    if any(a is None for a in angles):
+    if not all(img[h][1] < img[k][1] < img[a][1] for h, k, a in legs):
         return False
-    return sum(angles) / 2 <= ON_FEET_MAX_THIGH_DEG
+    thighs = [angle_from_vertical(body[k], body[h]) for h, k, _ in legs]
+    knees = [joint_angle(body[h], body[k], body[a]) for h, k, a in legs]
+    pts, _ = _with_midpoints(body, vis)
+    tilt = angle_from_vertical(pts[HIP_MID], pts[SHOULDER_MID])
+    if any(v is None for v in (*thighs, *knees, tilt)):
+        return False
+    return (sum(thighs) / 2 <= STANDING_MAX_THIGH_DEG and min(knees) >= STANDING_MIN_KNEE_DEG
+            and tilt < LYING_TILT_DEG)
 
 
 def centre_of_mass(xy: np.ndarray, vis: np.ndarray) -> tuple[float, float] | None:
@@ -224,12 +242,14 @@ def is_valid(img: np.ndarray, vis: np.ndarray) -> bool:
 
 
 def frame_readings(xy: np.ndarray, vis: np.ndarray, world: np.ndarray | None, aspect: float) -> dict:
-    """All per-frame pose_frames readings for one person except sway_velocity and ids.
+    """All per-frame pose_frames readings for one person except sway_velocity and ids, plus
+    "standing" (is_standing for this frame; not a stored column). Balance readings (bos_*,
+    com_offset, balance_score) are only given for a standing frame.
     world=None measures angles in the image plane instead (used by tests)."""
     xy, vis = np.asarray(xy, float), np.asarray(vis, float)
     img = xy * np.array([aspect, 1.0])
     x0, y0, x1, y1 = bounding_box(xy, vis)
-    row: dict = {"valid": is_valid(img, vis), "visibility": float(vis.mean()),
+    row: dict = {"valid": is_valid(img, vis), "visibility": float(vis.mean()), "standing": False,
                  "bbox_x0": x0, "bbox_y0": y0, "bbox_x1": x1, "bbox_y1": y1}
     if not row["valid"]:
         return row
@@ -245,7 +265,8 @@ def frame_readings(xy: np.ndarray, vis: np.ndarray, world: np.ndarray | None, as
     if com is not None:
         row["com_x"], row["com_y"] = com
     torso = torso_length(img, vis)
-    if com is not None and torso and is_on_feet(body, vis):
+    row["standing"] = is_standing(body, img, vis)
+    if com is not None and torso and row["standing"]:
         bos = base_of_support(xy, vis, margin=FOOT_HALF_WIDTH_TORSO * torso / aspect)
         if bos is not None:
             row["bos_center_x"], row["bos_width"] = bos
@@ -289,32 +310,85 @@ def match_boxes(a: list, b: list, min_iou: float = 0.1, max_centre_dist: float =
     return [(int(i), int(j)) for i, j in zip(rows, cols) if cost[i, j] < blocked]
 
 
+# Tracker gates. MediaPipe's video mode can slide from one person to another who overlaps
+# them (a caregiver standing behind a seated patient) within a frame or two; the box barely
+# moves, but the shoulders, hips and knees jump by about half a torso. A match that moves
+# or resizes more than this starts a new track instead.
+TRACK_MIN_IOU = 0.3           # boxes must overlap at least this much when no body points compare
+TRACK_MAX_RESIZE = 0.35       # torso length (or box diagonal) may change by this fraction
+TRACK_MAX_JUMP_TORSO = 0.35   # mean move of seen shoulders, hips and knees, in torso lengths...
+TRACK_SPEED_TORSO_S = 1.0     # ...plus this many torso lengths per second since last seen
+TRACK_POINTS = (L_SHOULDER, R_SHOULDER, L_HIP, R_HIP, L_KNEE, R_KNEE)
+
+
+def _diagonal(box: Sequence[float]) -> float:
+    return math.hypot(box[2] - box[0], box[3] - box[1])
+
+
+def _ratio(a: float, b: float) -> float:
+    return max(a, b) / max(min(a, b), 1e-9)
+
+
+def same_person(prev: dict, new: dict, dt: float) -> bool:
+    """Whether detection `new` can be the person last seen as `prev`, dt seconds earlier.
+    Each is {"box": (x0, y0, x1, y1), "img": aspect-corrected (33, 2) points or None,
+    "vis": (33,) visibility or None}. With at least three body points seen in both, the
+    points must not jump (TRACK_MAX_JUMP_TORSO plus TRACK_SPEED_TORSO_S * dt) and the torso
+    must not resize by more than TRACK_MAX_RESIZE; otherwise the boxes must overlap by
+    TRACK_MIN_IOU and not resize by more than TRACK_MAX_RESIZE."""
+    if prev.get("img") is not None and new.get("img") is not None:
+        both = [i for i in TRACK_POINTS if prev["vis"][i] > VISIBLE and new["vis"][i] > VISIBLE]
+        torsos = [torso_length(prev["img"], prev["vis"]), torso_length(new["img"], new["vis"])]
+        if len(both) >= 3 and all(torsos):
+            if _ratio(*torsos) > 1 + TRACK_MAX_RESIZE:
+                return False
+            jump = float(np.mean([np.linalg.norm(new["img"][i] - prev["img"][i]) for i in both]))
+            return jump / (sum(torsos) / 2) <= TRACK_MAX_JUMP_TORSO + TRACK_SPEED_TORSO_S * max(dt, 0.0)
+    return (box_iou(prev["box"], new["box"]) >= TRACK_MIN_IOU
+            and _ratio(_diagonal(prev["box"]), _diagonal(new["box"])) <= 1 + TRACK_MAX_RESIZE)
+
+
 class BoxTracker:
     """Gives each detected person a track id that stays the same from frame to frame.
 
-    Ids are unique for the tracker's lifetime: reset() (on a camera cut) forgets the
-    open tracks but keeps counting, and a track unseen for more than max_gap_s ends."""
+    Detections are matched to open tracks by box overlap (Hungarian assignment), but only
+    where same_person allows it, so a detection that jumps to someone else starts a new id.
+    Ids are unique for the tracker's lifetime: reset() (on a camera cut) forgets the open
+    tracks but keeps counting, and a track unseen for more than max_gap_s ends."""
 
     def __init__(self, max_gap_s: float = 1.0):
         self.max_gap_s = max_gap_s
         self.next_id = 0
-        self.tracks: dict[int, tuple[tuple, float]] = {}  # id -> (last box, last time)
+        self.tracks: dict[int, dict] = {}  # id -> {"box", "img", "vis", "t"} when last seen
 
     def reset(self) -> None:
         self.tracks.clear()
 
-    def update(self, t: float, boxes: list) -> list[int]:
-        """Assign a track id to each box seen at time t, in the order given."""
-        self.tracks = {k: v for k, v in self.tracks.items() if t - v[1] <= self.max_gap_s}
+    def update(self, t: float, boxes: list, bodies: list | None = None) -> list[int]:
+        """Assign a track id to each box seen at time t, in the order given. bodies, when
+        given, holds (aspect-corrected image points, visibility) for each box."""
+        self.tracks = {k: v for k, v in self.tracks.items() if t - v["t"] <= self.max_gap_s}
+        found = [{"box": tuple(b), "img": None, "vis": None, "t": t} for b in boxes]
+        for d, body in zip(found, bodies or []):
+            d["img"], d["vis"] = (np.asarray(body[0], float), np.asarray(body[1], float))
         ids = list(self.tracks)
         out: list[int | None] = [None] * len(boxes)
-        for i, j in match_boxes([self.tracks[k][0] for k in ids], boxes):
-            out[j] = ids[i]
-        for j, box in enumerate(boxes):
+        if ids and found:
+            blocked = 1e6
+            cost = np.full((len(ids), len(found)), blocked)
+            for i, k in enumerate(ids):
+                prev = self.tracks[k]
+                for j, d in enumerate(found):
+                    if same_person(prev, d, t - prev["t"]):
+                        cost[i, j] = (1 - box_iou(prev["box"], d["box"])) + _centre_distance(prev["box"], d["box"])
+            for i, j in zip(*linear_sum_assignment(cost)):
+                if cost[i, j] < blocked:
+                    out[j] = ids[i]
+        for j, d in enumerate(found):
             if out[j] is None:
                 out[j] = self.next_id
                 self.next_id += 1
-            self.tracks[out[j]] = (tuple(box), t)
+            self.tracks[out[j]] = d
         return out  # type: ignore[return-value]
 
 
@@ -374,3 +448,21 @@ def sustained_windows(times: Sequence[float], mask: Sequence[bool], min_duration
     if current:
         windows.append(current)
     return [w for w in windows if times[w[-1]] - times[w[0]] >= min_duration]
+
+
+def stable_runs(times: Sequence[float], mask: Sequence[bool], min_duration: float,
+                max_gap: float) -> list[list[int]]:
+    """Runs of consecutive indices where mask is true, lasting at least min_duration seconds.
+    Unlike sustained_windows, any false entry ends a run; only a gap in time with no entry
+    at all (the person not detected) up to max_gap seconds is bridged. times must be sorted."""
+    runs: list[list[int]] = []
+    current: list[int] = []
+    for i, (t, on) in enumerate(zip(times, mask)):
+        if current and (not on or t - times[current[-1]] > max_gap):
+            runs.append(current)
+            current = []
+        if on:
+            current.append(i)
+    if current:
+        runs.append(current)
+    return [r for r in runs if times[r[-1]] - times[r[0]] >= min_duration]

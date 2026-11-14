@@ -73,14 +73,16 @@ def test_pose_flags_are_renamed_once_tracks_have_roles(migrated):
         flag("patient_unsteady", 0),    # caregiver bending -> caregiver posture
         flag("patient_off_center", 0),  # caregiver shifting weight -> dropped
         flag("patient_off_center", 1),  # patient -> kept and named
-        flag("patient_unsteady", 2),    # unknown role -> unchanged
+        flag("patient_unsteady", 2),    # unknown role -> not claimed to be the patient
     ])
     assert [(f.kind, f.person_label) for f in out] == [
-        ("unsafe_caregiver_posture", "caregiver (track 0)"),
-        ("patient_off_center", "patient (track 1)"),
-        ("patient_unsteady", "track 2"),
+        ("patient_off_center", "patient"),            # patient flags come first
+        ("unsafe_caregiver_posture", "caregiver"),
+        ("other", None),
     ]
-    assert "the patient (track 1)'s reading" in out[1].description
+    assert out[0].description == "Pose readings: the patient's reading was out of range."
+    assert out[2].description == "Pose readings: a person's reading was out of range."
+    assert not any("track" in f.description for f in out)  # tracker ids never reach a nurse
     assert all(f.source == "pose" and not f.counts_toward_score for f in out)
 
 

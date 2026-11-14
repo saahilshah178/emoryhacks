@@ -347,7 +347,7 @@ def replace_pose(video_id, recorded_at: dt.datetime, rows: Iterable[dict], track
     rows: dicts with the POSE_ROW_KEYS (missing keys are stored as NULL); t_offset is required.
     tracks: dicts with person_idx, segment_id, first_t, last_t, n_frames, mean_visibility, and optionally role."""
     n = 0
-    with db.pool().connection() as conn:
+    with db.tx() as conn:  # one transaction: readers never see a video with half its frames
         conn.execute("DELETE FROM pose_frames WHERE video_id=%s", (video_id,))
         conn.execute("DELETE FROM pose_tracks WHERE video_id=%s", (video_id,))
         with conn.cursor() as cur:

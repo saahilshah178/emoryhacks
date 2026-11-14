@@ -124,6 +124,20 @@ def _join_pose(future: Future | None) -> PoseSummary:
     return future.result(timeout=3600)
 
 
+def _as_named(detected: Classification, slug: str | None, name: str | None) -> Classification:
+    """The classification with a forced slug and name applied (and the catalog's category)."""
+    if not slug or slug == detected.skill_slug:
+        return detected
+    from . import catalog
+
+    known = catalog.BY_SLUG.get(slug, {})
+    return detected.model_copy(update={
+        "skill_slug": slug,
+        "skill_name": name or known.get("name") or detected.skill_name,
+        "category": known.get("category") or detected.category,
+    })
+
+
 def run_reference(job_id, slug: str | None = None, name: str | None = None) -> None:
     """Run the nurse-side pipeline. slug/name force the stored skill's identity
     (used when seeding known reference videos); the classifier still runs."""
@@ -136,9 +150,12 @@ def run_reference(job_id, slug: str | None = None, name: str | None = None) -> N
         track = Tracker(job_id, REFERENCE_STAGES)
         pose_future = _start_pose(ctx)
         track.run("gemini_upload", lambda: None if config.FAKE_AI else gemini.ensure_file(video))
-        classification: Classification = track.run("classify", lambda: classify.run(ctx))
+        detected: Classification = track.run("classify", lambda: classify.run(ctx))
+        # When the skill is named up front (seeding), write the rubric for that skill, not for
+        # whatever the classifier guessed. What the classifier detected is still stored.
+        classification = _as_named(detected, slug, name)
         rb = track.run("rubric", lambda: rubric.run(ctx, classification))
-        skill_id = repo.create_skill(classification, rb, video["id"], slug=slug, name=name)
+        skill_id = repo.create_skill(detected, rb, video["id"], slug=slug, name=name)
         repo.update_job(job_id, skill_id=skill_id)
         summary: PoseSummary | None = track.run("pose", lambda: _join_pose(pose_future))
         track.run("roles", lambda: pose.assign_roles(ctx, classification.people))
@@ -175,12 +192,13 @@ def run_attempt(job_id) -> None:
         track.run("roles", lambda: pose.assign_roles(ctx, ev.people))
 
         # Pose candidates are made before roles are known. Now that tracks have roles, name the
-        # person, and keep caregiver-posture readings out of the patient check: they stay advisory.
+        # person. Only readings about a patient go to Gemini for confirmation; a caregiver's
+        # posture and readings from someone whose role is unknown stay advisory.
         candidates = pose.relabel_flags(video["id"], summary.candidate_flags) if summary else []
-        about_patient = [f for f in candidates if f.kind != "unsafe_caregiver_posture"]
-        about_caregiver = [f for f in candidates if f.kind == "unsafe_caregiver_posture"]
+        about_patient = [f for f in candidates if f.kind.startswith("patient_")]
+        advisory = [f for f in candidates if not f.kind.startswith("patient_")]
         confirmed = track.run("confirm_flags", lambda: evaluate.confirm_pose_flags(ctx, rb, about_patient))
-        pose_flags = (confirmed if confirmed is not None else about_patient) + about_caregiver
+        pose_flags = (confirmed if confirmed is not None else about_patient) + advisory
         repo.save_flags(video["id"], attempt["id"], pose_flags, sources=("pose", "pose_confirmed"))
 
         flags = repo.get_flags(attempt["id"])

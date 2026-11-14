@@ -7,12 +7,14 @@ in frontend/, which forwards /api to this server.
 """
 from __future__ import annotations
 
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import config, db, gemini, repo
+from . import builtin, config, db, gemini, repo
+from . import jobs as pipeline
 from .routers import accounts, attempts, jobs, people, review, safety, skills, videos
 
 
@@ -20,18 +22,28 @@ from .routers import accounts, attempts, jobs, people, review, safety, skills, v
 async def lifespan(app: FastAPI):
     config.ensure_dirs()
     db.migrate()
-    repo.fail_interrupted_jobs()
+    builtin.ensure()  # the nine standard skills, on any database, without a Gemini call
+    pipeline.resume_interrupted()  # grading cut short by the last shutdown carries on where it stopped
     yield
     db.close()
 
 
 app = FastAPI(title="FirstShift", lifespan=lifespan)
 
+def allowed_origin_regex(origins: list[str]) -> str:
+    """A pattern for the origins whose pages may call this API: any local address, plus the web
+    app's own origins from config.WEB_ORIGINS, where "*" stands for one host-name label."""
+    patterns = [r"https?://(localhost|127\.0\.0\.1)(:\d+)?"]
+    patterns += [re.escape(origin).replace(r"\*", "[A-Za-z0-9-]+") for origin in origins]
+    return "|".join(f"(?:{pattern})" for pattern in patterns)
+
+
 # The Next.js app proxies /api to this server, so the browser sees one origin and the session
-# cookie just works. CORS with credentials stays on for calling the API directly in development.
+# cookie just works. Two things call the API from another origin: local development, and video
+# uploads from the hosted web app, which go straight here with an upload ticket (routers/videos.py).
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=allowed_origin_regex(config.WEB_ORIGINS),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,7 +66,12 @@ def health():
         "database": {"source": config.DB_SOURCE, "tiger_cloud": config.DB_IS_TIGER_CLOUD, **row},
         "gemini": {"key_set": bool(config.GEMINI_API_KEY), "model_main": config.GEMINI_MODEL_MAIN,
                    "model_strong": config.GEMINI_MODEL_STRONG, "fake_ai": config.FAKE_AI,
+                   # spend of the key now configured, which is what the budget applies to
                    "spent_usd": round(gemini.spent_usd(), 4), "budget_usd": config.GEMINI_BUDGET_USD,
+                   "key_id": gemini.key_id() if config.GEMINI_API_KEY else None,
+                   "spent_all_keys_usd": round(gemini.spent_all_usd(), 4),
+                   "job_budget_usd": config.GEMINI_JOB_BUDGET_USD,
+                   "reference_budget_usd": config.GEMINI_REFERENCE_BUDGET_USD,
                    # set when the last video failed because of the AI account (credit, budget, key)
                    "problem": repo.ai_problem()},
     }

@@ -179,7 +179,9 @@ def list_skills(all_versions: bool = False, org_id=None) -> list[dict]:
                   (SELECT count(*) FROM skill_steps st WHERE st.skill_id = s.id) AS step_count,
                   (SELECT coalesce(sum(greatest(st.end_s - st.start_s, 0)), 0) FROM skill_steps st
                     WHERE st.skill_id = s.id) AS steps_s,
-                  (SELECT count(*) FROM attempts a WHERE a.skill_id = s.id) AS attempt_count
+                  (SELECT count(*) FROM attempts a WHERE a.skill_id = s.id) AS attempt_count,
+                  (SELECT count(*) FROM attempts a WHERE a.skill_id = s.id AND a.submitted_at IS NOT NULL)
+                    AS submission_count
            FROM skills s LEFT JOIN videos v ON v.id = s.reference_video_id
            {"WHERE " + " AND ".join(where) if where else ""}
            ORDER BY s.name, s.version DESC""",
@@ -187,7 +189,25 @@ def list_skills(all_versions: bool = False, org_id=None) -> list[dict]:
     )
     for row in rows:
         row["guide"] = skill_guide(row, steps=None, steps_s=row.pop("steps_s"))
+    _attach_policies(rows)
     return rows
+
+
+def _attach_policies(skills: list[dict]) -> None:
+    """Add policy {max_attempts, submit_pct, force_pct, assign_all, assigned_count} to skill rows."""
+    for org_id in {s["org_id"] for s in skills}:
+        policies = all_policies(org_id)
+        caregiver_count = db.fetch_one("SELECT count(*) AS n FROM users WHERE org_id=%s AND role='caregiver'",
+                                       (org_id,))["n"]
+        picked = {r["slug"]: r["n"] for r in db.fetch_all(
+            """SELECT x.slug, count(*) AS n FROM skill_assignments x JOIN users u ON u.id = x.caregiver_id
+               WHERE x.org_id=%s AND x.assigned AND u.role='caregiver' AND u.org_id = x.org_id
+               GROUP BY x.slug""", (org_id,))}
+        for s in skills:
+            if s["org_id"] != org_id:
+                continue
+            pol = policies.get((org_id, s["slug"])) or progress.policy(None)
+            s["policy"] = {**pol, "assigned_count": caregiver_count if pol["assign_all"] else picked.get(s["slug"], 0)}
 
 
 def get_skill(skill_id) -> dict | None:
@@ -279,11 +299,16 @@ def delete_skill(skill_id) -> int:
 
 # --- attempts -------------------------------------------------------------
 def create_attempt(skill_id, video_id, caregiver_name: str = "", caregiver_id=None) -> uuid.UUID:
+    """A caregiver's attempt stays with them until they send it (submit_attempt). One with no
+    caregiver account, uploaded by a nurse or a script, counts as sent when it is created."""
     attempt_id = uuid.uuid4()
     with db.tx() as conn:
         conn.execute(
-            "INSERT INTO attempts (id, skill_id, video_id, caregiver_name, caregiver_id) VALUES (%s,%s,%s,%s,%s)",
-            (attempt_id, skill_id, video_id, caregiver_name, caregiver_id))
+            """INSERT INTO attempts (id, skill_id, video_id, caregiver_name, caregiver_id, submitted_at, submit_kind)
+               VALUES (%s,%s,%s,%s,%s, CASE WHEN %s THEN NULL ELSE now() END,
+                       CASE WHEN %s THEN NULL ELSE 'standard' END)""",
+            (attempt_id, skill_id, video_id, caregiver_name, caregiver_id,
+             caregiver_id is not None, caregiver_id is not None))
         steps = conn.execute("SELECT step_id FROM skill_steps WHERE skill_id=%s ORDER BY ord", (skill_id,)).fetchall()
         for s in steps:
             conn.execute("INSERT INTO attempt_steps (id, attempt_id, step_id) VALUES (%s,%s,%s)",
@@ -367,17 +392,32 @@ def save_score(attempt_id, score: Score) -> None:
     )
 
 
-def list_attempts(skill_id=None, org_id=None, caregiver_id=None, state: str | None = None) -> list[dict]:
-    """Attempts, newest first, each with review_state and ai_assessment (see progress.py).
-    org_id limits the list to one agency; state keeps only one review_state."""
+# Whether the same caregiver sent a later attempt at the same skill (any version), which makes
+# an unreviewed submission "superseded" (progress.review_state). Needs a (attempts) and s (skills).
+_NEWER_SUBMISSION = """(a.caregiver_id IS NOT NULL AND a.submitted_at IS NOT NULL AND EXISTS (
+    SELECT 1 FROM attempts b JOIN skills bs ON bs.id = b.skill_id
+    WHERE b.caregiver_id = a.caregiver_id AND bs.org_id = s.org_id AND bs.slug = s.slug
+      AND b.submitted_at IS NOT NULL AND b.id <> a.id
+      AND (b.submitted_at, b.created_at, b.id) > (a.submitted_at, a.created_at, a.id))) AS newer_submission"""
+
+
+def list_attempts(skill_id=None, org_id=None, caregiver_id=None, state: str | None = None,
+                  slug: str | None = None, submitted_only: bool = False) -> list[dict]:
+    """Attempts, newest first, each with review_state, ai_assessment and submission (see
+    progress.py). org_id limits the list to one agency; slug to one skill across its versions;
+    submitted_only to attempts sent to a nurse (or uploaded by one); state keeps one review_state."""
     where, params = [], []
-    for column, value in (("a.skill_id", skill_id), ("s.org_id", org_id), ("a.caregiver_id", caregiver_id)):
+    for column, value in (("a.skill_id", skill_id), ("s.org_id", org_id), ("a.caregiver_id", caregiver_id),
+                          ("s.slug", slug)):
         if value:
             where.append(f"{column}=%s")
             params.append(value)
+    if submitted_only:
+        where.append("a.submitted_at IS NOT NULL")
     rows = db.fetch_all(
         f"""SELECT a.id, a.skill_id, a.video_id, a.caregiver_id, a.status, a.score_pct, a.needs_review,
-                   a.nurse_status, a.nurse_note, a.reviewed_at, a.reviewed_by, a.created_at, a.overall_feedback,
+                   a.skill_match, a.nurse_status, a.nurse_note, a.reviewed_at, a.reviewed_by, a.created_at,
+                   a.submitted_at, a.submit_kind, a.submit_note, a.overall_feedback,
                    coalesce(nullif(u.name, ''), a.caregiver_name) AS caregiver_name, u.title AS caregiver_title,
                    r.name AS reviewer_name, r.credentials AS reviewer_credentials,
                    s.name AS skill_name, s.slug AS skill_slug, s.version AS skill_version, s.org_id,
@@ -387,23 +427,34 @@ def list_attempts(skill_id=None, org_id=None, caregiver_id=None, state: str | No
                              'id', f.id, 'kind', f.kind, 'title', f.title, 'description', f.description,
                              'severity', f.severity, 'start_s', f.start_s, 'end_s', f.end_s) ORDER BY f.start_s), '[]')
                       FROM safety_flags f WHERE f.attempt_id = a.id AND f.counts_toward_score) AS flags,
-                   (SELECT j.status FROM jobs j WHERE j.attempt_id = a.id ORDER BY j.created_at DESC LIMIT 1) AS job_status
+                   (SELECT j.status FROM jobs j WHERE j.attempt_id = a.id ORDER BY j.created_at DESC LIMIT 1) AS job_status,
+                   {_NEWER_SUBMISSION}
             FROM attempts a JOIN skills s ON s.id = a.skill_id JOIN videos v ON v.id = a.video_id
             LEFT JOIN users u ON u.id = a.caregiver_id LEFT JOIN users r ON r.id = a.reviewed_by
             {"WHERE " + " AND ".join(where) if where else ""} ORDER BY a.created_at DESC""",
         params,
     )
-    rows = [progress.describe(r) for r in rows]
+    policies = all_policies(org_id)
+    for r in rows:
+        progress.describe(r)
+        r["submission"] = progress.submission(r, policies.get((r["org_id"], r["skill_slug"])) or progress.policy(None))
     return [r for r in rows if r["review_state"] == state] if state else rows
 
 
+HISTORY_KEYS = ("id", "created_at", "submitted_at", "submit_kind", "score_pct", "status", "final_status",
+                "review_state", "skill_id", "skill_version")
+
+
 def get_attempt(attempt_id) -> dict | None:
-    """The attempt with its rubric steps joined to their results, violations and flags."""
+    """The attempt with its rubric steps joined to their results, violations and flags; whether
+    and how it can be sent (submission); the skill's policy; the caregiver's attempts used and
+    left on the skill; and their other attempts at it (history, newest first)."""
     attempt = db.fetch_one(
-        """SELECT a.*, s.name AS skill_name, s.slug AS skill_slug, s.version AS skill_version, s.order_matters,
+        f"""SELECT a.*, s.name AS skill_name, s.slug AS skill_slug, s.version AS skill_version, s.order_matters,
                   s.reference_video_id, s.org_id,
                   u.title AS caregiver_title, u.name AS caregiver_account_name,
-                  r.name AS reviewer_name, r.credentials AS reviewer_credentials
+                  r.name AS reviewer_name, r.credentials AS reviewer_credentials,
+                  {_NEWER_SUBMISSION}
            FROM attempts a JOIN skills s ON s.id = a.skill_id
            LEFT JOIN users u ON u.id = a.caregiver_id LEFT JOIN users r ON r.id = a.reviewed_by
            WHERE a.id=%s""",
@@ -437,7 +488,29 @@ def get_attempt(attempt_id) -> dict | None:
     )
     attempt["job_status"] = attempt["job"]["status"] if attempt["job"] else None
     attempt["flag_count"] = sum(1 for f in attempt["safety_flags"] if f["counts_toward_score"])
-    return progress.describe(attempt)
+    progress.describe(attempt)
+
+    pol = get_policy(attempt["org_id"], attempt["skill_slug"])
+    attempt["submission"] = progress.submission(attempt, pol)
+    attempt["policy"] = {k: pol[k] for k in ("max_attempts", "submit_pct", "force_pct")}
+    if attempt["caregiver_id"]:
+        mine = list_attempts(org_id=attempt["org_id"], caregiver_id=attempt["caregiver_id"], slug=attempt["skill_slug"])
+        assignment = get_assignments(attempt["org_id"], slug=attempt["skill_slug"],
+                                     caregiver_id=attempt["caregiver_id"]).get(
+                                         (attempt["skill_slug"], attempt["caregiver_id"]))
+        attempt["attempts"] = progress.allowance(pol, assignment, mine)
+        attempt["history"] = [{k: a[k] for k in HISTORY_KEYS} for a in mine if a["id"] != attempt["id"]]
+    else:
+        attempt["attempts"] = {"used": None, "allowed": None, "left": None}
+        attempt["history"] = []
+    return attempt
+
+
+def submit_attempt(attempt_id, kind: str, note: str) -> bool:
+    """Send a graded attempt to the nurse. Returns False if it had already been sent."""
+    return bool(db.execute(
+        "UPDATE attempts SET submitted_at=now(), submit_kind=%s, submit_note=%s WHERE id=%s AND submitted_at IS NULL",
+        (kind, note, attempt_id)))
 
 
 def review_attempt(attempt_id, overall: str | None, note: str, steps: list[dict], reviewed_by=None) -> None:
@@ -452,6 +525,79 @@ def review_attempt(attempt_id, overall: str | None, note: str, steps: list[dict]
                 "UPDATE attempt_steps SET nurse_status=%s, nurse_note=%s WHERE attempt_id=%s AND step_id=%s",
                 (s.get("status"), s.get("note", ""), attempt_id, s["step_id"]),
             )
+
+
+# --- skill policies and assignments ------------------------------------------
+def all_policies(org_id=None) -> dict[tuple, dict]:
+    """(org_id, slug) -> the policy a nurse saved (progress.policy shape). Skills without a
+    row are not listed: use progress.policy(None) for the defaults."""
+    rows = db.fetch_all("SELECT * FROM skill_policies" + (" WHERE org_id=%s" if org_id else ""),
+                        (org_id,) if org_id else None)
+    return {(r["org_id"], r["slug"]): progress.policy(r) for r in rows}
+
+
+def get_policy(org_id, slug: str) -> dict:
+    """The skill's policy, with the defaults when the nurse has not set one."""
+    return progress.policy(db.fetch_one("SELECT * FROM skill_policies WHERE org_id=%s AND slug=%s", (org_id, slug)))
+
+
+def save_policy(org_id, slug: str, pol: dict, updated_by=None) -> None:
+    db.execute(
+        """INSERT INTO skill_policies (org_id, slug, max_attempts, submit_pct, force_pct, assign_all, updated_by)
+           VALUES (%s,%s,%s,%s,%s,%s,%s)
+           ON CONFLICT (org_id, slug) DO UPDATE SET max_attempts=EXCLUDED.max_attempts,
+             submit_pct=EXCLUDED.submit_pct, force_pct=EXCLUDED.force_pct, assign_all=EXCLUDED.assign_all,
+             updated_by=EXCLUDED.updated_by, updated_at=now()""",
+        (org_id, slug, pol["max_attempts"], pol["submit_pct"], pol["force_pct"], pol["assign_all"], updated_by))
+
+
+def get_assignments(org_id, slug: str | None = None, caregiver_id=None) -> dict[tuple, dict]:
+    """(slug, caregiver_id) -> skill_assignments row, for one agency."""
+    where, params = ["org_id=%s"], [org_id]
+    if slug:
+        where.append("slug=%s")
+        params.append(slug)
+    if caregiver_id:
+        where.append("caregiver_id=%s")
+        params.append(caregiver_id)
+    rows = db.fetch_all(f"SELECT * FROM skill_assignments WHERE {' AND '.join(where)}", params)
+    return {(r["slug"], r["caregiver_id"]): r for r in rows}
+
+
+def set_assignment(org_id, slug: str, caregiver_id, **fields) -> None:
+    """Create or change one caregiver's assignment row. fields: assigned, limit_mode, max_attempts."""
+    fields = {k: v for k, v in fields.items() if k in ("assigned", "limit_mode", "max_attempts")}
+    columns = ["org_id", "slug", "caregiver_id", *fields]
+    updates = ", ".join([f"{k}=EXCLUDED.{k}" for k in fields] + ["updated_at=now()"])
+    db.execute(
+        f"""INSERT INTO skill_assignments ({', '.join(columns)}) VALUES ({', '.join(['%s'] * len(columns))})
+            ON CONFLICT (org_id, slug, caregiver_id) DO UPDATE SET {updates}""",
+        (org_id, slug, caregiver_id, *fields.values()))
+
+
+def allowance(org_id, slug: str, caregiver_id) -> dict:
+    """{used, allowed, left} for one caregiver on one skill (see progress.allowance)."""
+    assignment = get_assignments(org_id, slug=slug, caregiver_id=caregiver_id).get((slug, caregiver_id))
+    mine = list_attempts(org_id=org_id, caregiver_id=caregiver_id, slug=slug)
+    return progress.allowance(get_policy(org_id, slug), assignment, mine)
+
+
+def list_caregivers(org_id) -> list[dict]:
+    """The agency's caregivers, by name."""
+    return db.fetch_all(
+        """SELECT id, name, email, title, location, hire_date, employment, next_shift, created_at
+           FROM users WHERE org_id=%s AND role='caregiver' ORDER BY name""", (org_id,))
+
+
+def assigned_slugs(org_id, caregiver_id) -> set[str]:
+    """The slugs of the agency's skills assigned to one caregiver (see progress.is_assigned)."""
+    rows = db.fetch_all(
+        """SELECT DISTINCT s.slug FROM skills s
+           LEFT JOIN skill_policies p ON p.org_id = s.org_id AND p.slug = s.slug
+           LEFT JOIN skill_assignments x ON x.org_id = s.org_id AND x.slug = s.slug AND x.caregiver_id = %s
+           WHERE s.org_id = %s AND (coalesce(p.assign_all, true) OR coalesce(x.assigned, false))""",
+        (caregiver_id, org_id))
+    return {r["slug"] for r in rows}
 
 
 # --- pose -----------------------------------------------------------------
@@ -515,8 +661,34 @@ def get_tracks(video_id) -> list[dict]:
 
 
 # --- jobs -----------------------------------------------------------------
+_boot: str | None = None
+
+
+def _boot_id() -> str:
+    """Changes every time the machine boots, so a job recorded under the same host and pid
+    before a reboot is recognised as dead even if that pid now belongs to something else."""
+    global _boot
+    if _boot is None:
+        try:
+            _boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip().replace("-", "")[:8]
+        except OSError:
+            import re
+            import subprocess
+
+            try:
+                out = subprocess.run(["sysctl", "-n", "kern.boottime"], capture_output=True, text=True,
+                                     timeout=3).stdout
+                match = re.search(r"sec = (\d+)", out)
+                _boot = match.group(1) if match else ""
+            except Exception:
+                _boot = ""
+    return _boot
+
+
 def _runner() -> str:
-    return f"{socket.gethostname()}:{os.getpid()}"
+    """Which process runs a job: "host:pid:boot" ("host:pid" when the boot id is unknown)."""
+    boot = _boot_id()
+    return f"{socket.gethostname()}:{os.getpid()}" + (f":{boot}" if boot else "")
 
 
 def create_job(kind: str, video_id, skill_id=None, attempt_id=None) -> uuid.UUID:
@@ -534,8 +706,14 @@ def update_job(job_id, **fields) -> None:
     sets, params = [], []
     for key, value in fields.items():
         sets.append(f"{key}=%s")
-        params.append(db.J(value) if key == "stages" else value)
+        params.append(db.J(value) if key in ("stages", "checkpoint") else value)
     db.execute(f"UPDATE jobs SET {', '.join(sets)}, updated_at=now() WHERE id=%s", (*params, job_id))
+
+
+def save_checkpoint(job_id, **values) -> None:
+    """Merge values (JSON-able) into the job's checkpoint, which a resumed job reads back."""
+    db.execute("UPDATE jobs SET checkpoint = checkpoint || %s, updated_at=now() WHERE id=%s",
+               (db.J(values), job_id))
 
 
 def _process_alive(pid: int) -> bool:
@@ -548,25 +726,98 @@ def _process_alive(pid: int) -> bool:
     return True
 
 
-def fail_interrupted_jobs() -> int:
-    """Mark unfinished jobs whose process is gone as interrupted. Called at server start.
+def interrupted_jobs(skip: Iterable = ()) -> tuple[list[dict], list[dict]]:
+    """Unfinished jobs whose process is gone, as (ran on this machine, ran elsewhere).
 
-    A job started by another live process on this machine (a seeding script, say) is left
-    alone. A job from another machine is only given up on after two hours without progress."""
-    host = socket.gethostname()
-    dead = []
-    for job in db.fetch_all("SELECT id, runner, updated_at FROM jobs WHERE status IN ('queued', 'running')"):
-        job_host, _, pid = (job["runner"] or "").rpartition(":")
-        if job_host == host and pid.isdigit():
-            if int(pid) == os.getpid() or not _process_alive(int(pid)):
-                dead.append(job["id"])
+    A job on this machine is dead when it was started before the last reboot, by this very
+    process (called at server start, so it cannot be running here, except for ids in skip,
+    which this process is running right now), or by a process that no longer exists. A job
+    started by another live process on this machine (a seeding script, say) is left alone. A
+    job from another machine is only counted after two hours without progress, because its
+    video file is on that machine."""
+    host, skip = socket.gethostname(), {str(s) for s in skip}
+    here, elsewhere = [], []
+    for job in db.fetch_all("SELECT * FROM jobs WHERE status IN ('queued', 'running')"):
+        if str(job["id"]) in skip:
+            continue
+        parts = (job["runner"] or "").split(":")
+        job_host, pid = parts[0], parts[1] if len(parts) > 1 else ""
+        boot = parts[2] if len(parts) > 2 else None
+        if job_host == host:
+            if (not pid.isdigit() or (boot is not None and boot != _boot_id()) or int(pid) == os.getpid()
+                    or not _process_alive(int(pid))):
+                here.append(job)
         elif dt.datetime.now(dt.timezone.utc) - job["updated_at"] > dt.timedelta(hours=2):
-            dead.append(job["id"])
+            elsewhere.append(job)
+    return here, elsewhere
+
+
+INTERRUPTED = "Interrupted by a server restart. Upload again or re-run."
+
+
+def fail_interrupted_jobs() -> int:
+    """Mark every unfinished job whose process is gone as interrupted (see interrupted_jobs)."""
+    here, elsewhere = interrupted_jobs()
+    dead = [j["id"] for j in here + elsewhere]
     if dead:
-        db.execute(
-            "UPDATE jobs SET status='error', error='Interrupted by a server restart. Upload again or re-run.', "
-            "updated_at=now() WHERE id = ANY(%s)", (dead,))
+        db.execute("UPDATE jobs SET status='error', error=%s, updated_at=now() WHERE id = ANY(%s)",
+                   (INTERRUPTED, dead))
     return len(dead)
+
+
+def claim_job(job: dict) -> bool:
+    """Take over an interrupted job for this process: it becomes queued under this runner with
+    one more resume counted. False if another process claimed it first."""
+    row = db.fetch_one(
+        """UPDATE jobs SET runner=%s, resumes=resumes + 1, status='queued', error=NULL, updated_at=now()
+           WHERE id=%s AND runner IS NOT DISTINCT FROM %s AND status IN ('queued', 'running') RETURNING id""",
+        (_runner(), job["id"], job["runner"]))
+    return row is not None
+
+
+def load_timeline(attempt_id) -> Timeline:
+    """The timeline save_timeline stored for an attempt, in rubric order."""
+    from .models import OrderViolation, TimelineStep
+
+    rows = db.fetch_all(
+        """SELECT x.step_id, x.found, x.start_s, x.end_s, x.performed_index, x.timeline_confidence, x.timeline_note
+           FROM attempt_steps x JOIN attempts a ON a.id = x.attempt_id
+           LEFT JOIN skill_steps st ON st.skill_id = a.skill_id AND st.step_id = x.step_id
+           WHERE x.attempt_id=%s ORDER BY st.ord NULLS LAST, x.step_id""", (attempt_id,))
+    steps = [TimelineStep(step_id=r["step_id"], found=bool(r["found"]), start_s=r["start_s"], end_s=r["end_s"],
+                          performed_index=r["performed_index"], confidence=r["timeline_confidence"] or 0.0,
+                          note=r["timeline_note"] or "") for r in rows]
+    violations = db.fetch_all(
+        "SELECT step_id, expected_after, message, at_s FROM order_violations WHERE attempt_id=%s "
+        "ORDER BY at_s NULLS LAST, step_id", (attempt_id,))
+    return Timeline(steps=steps, order_violations=[OrderViolation(**v) for v in violations],
+                    missing_step_ids=[s.step_id for s in steps if not s.found])
+
+
+def load_evaluation(attempt_id) -> Evaluation:
+    """The evaluation save_evaluation stored for an attempt, in rubric order."""
+    from .models import StepResult
+
+    attempt = db.fetch_one("SELECT people, overall_feedback, skill_match, skill_match_note FROM attempts WHERE id=%s",
+                           (attempt_id,))
+    rows = db.fetch_all(
+        """SELECT x.step_id, x.status, x.confidence, x.feedback, x.evidence, x.evidence_start_s, x.evidence_end_s,
+                  x.double_checked
+           FROM attempt_steps x JOIN attempts a ON a.id = x.attempt_id
+           LEFT JOIN skill_steps st ON st.skill_id = a.skill_id AND st.step_id = x.step_id
+           WHERE x.attempt_id=%s AND x.status IS NOT NULL ORDER BY st.ord NULLS LAST, x.step_id""", (attempt_id,))
+    flags = db.fetch_all("SELECT * FROM safety_flags WHERE attempt_id=%s AND source='gemini' ORDER BY start_s",
+                         (attempt_id,))
+    return Evaluation(
+        people=people_from(attempt["people"]),
+        steps=[StepResult(step_id=r["step_id"], status=r["status"], confidence=r["confidence"] or 0.0,
+                          feedback=r["feedback"], evidence=r["evidence"], evidence_start_s=r["evidence_start_s"],
+                          evidence_end_s=r["evidence_end_s"], double_checked=r["double_checked"]) for r in rows],
+        safety_flags=[SafetyFlag(**{k: f[k] for k in SafetyFlag.model_fields}) for f in flags],
+        overall_feedback=attempt["overall_feedback"],
+        skill_match=attempt["skill_match"] is not False,
+        skill_match_note=attempt["skill_match_note"],
+    )
 
 
 def ai_problem() -> str | None:

@@ -22,7 +22,7 @@ API_URL=http://127.0.0.1:8000 npm run dev    # http://localhost:3000, or the nex
 `API_URL` defaults to `http://127.0.0.1:8000`, where `make dev` puts the API.
 
 - `/` marketing
-- `/login`
+- `/login` the six fixed logins (usernames and passwords are in `LOGINS.md`, made by `make logins`; there is no sign-up)
 - `/portal` caregiver portal
 - `/dashboard` nurse dashboard
 
@@ -34,8 +34,10 @@ Where things are:
 | `src/lib/api.ts`, `types.ts`, `hooks.ts` | API client, the API's response shapes, data-loading hooks |
 | `src/lib/status.ts` | The label and colour of every state, shared by both portals |
 | `src/lib/segment.ts` | Playing one stretch of a video and stopping at its end |
-| `src/lib/recorder.ts` | Camera recording with a file-upload fallback |
+| `src/lib/recorder.ts` | Camera recording with a file-upload fallback; its resolution, bitrate and length limit |
+| `src/lib/upload.ts` | The largest video that can be sent (`MAX_UPLOAD_BYTES`) |
 | `src/components/ui`, `src/components/media` | The one UI kit, and the video / time-range / job-progress pieces |
+| `src/components/media/StepChapters.tsx`, `chapters.ts` | The step chapters bar under every video with steps: a segment per timed step, the current step named, Previous / Next |
 | `src/shared` | Auth provider, login form, role gate, logo, public pages |
 | `src/nurse`, `src/app/dashboard` | Nurse dashboard |
 | `src/shared/layout` | What both portals' frames are built from: the rail, the account menu, the page heading, the back link |

@@ -12,6 +12,13 @@ primary_region = "iad"
 [build]
   dockerfile = "Dockerfile"
 
+# Video uploads go from the browser straight to this address, with a short-lived ticket,
+# because the web app's host (Vercel) refuses forwarded request bodies above about 20 MB.
+# WEB_ORIGINS is the web app that may do so. See backend/app/routers/videos.py.
+[env]
+  FIRSTSHIFT_PUBLIC_API_URL = "https://emoryhacks-api.fly.dev"
+  FIRSTSHIFT_WEB_ORIGINS = "https://emoryhacks.vercel.app"
+
 # Uploaded videos, thumbnails and the pose model (FIRSTSHIFT_DATA_DIR in the Dockerfile).
 [[mounts]]
   source = "data"

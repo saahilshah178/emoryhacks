@@ -1,0 +1,2884 @@
+{
+ "skills": [
+  {
+   "slug": "wheelchair_transfer",
+   "name": "Wheelchair transfer",
+   "category": "transfer",
+   "summary": "A caregiver uses a transfer belt to safely assist a patient from lying in a bed to sitting in a wheelchair.",
+   "order_matters": true,
+   "safety_criteria": [
+    "Both wheelchair brakes and bed wheels remain locked throughout the transfer.",
+    "The caregiver uses a wide stance, bends at the knees, and keeps a straight back without twisting.",
+    "The patient wears non-skid shoes and is supported by the transfer belt rather than pulled by the arms.",
+    "The caregiver monitors the patient for dizziness, pain, or unsteadiness during sitting and standing.",
+    "The patient's legs touch the front of the wheelchair before lowering into the seat."
+   ],
+   "people": [
+    {
+     "role": "patient",
+     "label": "P1",
+     "description": "Woman with dark hair in a braid, wearing a dark blue scrub top over a black long-sleeve shirt and dark blue scrub pants; she starts lying in the bed and is assisted into the wheelchair."
+    },
+    {
+     "role": "caregiver",
+     "label": "P2",
+     "description": "Woman with brown hair tied back, wearing a grey scrub top and black pants; she prepares the wheelchair, applies the transfer belt, and assists the patient to stand and sit in the wheelchair."
+    }
+   ],
+   "classification": {
+    "people": [
+     {
+      "role": "patient",
+      "label": "P1",
+      "description": "Woman with dark hair in a braid, wearing a dark blue scrub top over a black long-sleeve shirt and dark blue scrub pants; she starts lying in the bed and is assisted into the wheelchair."
+     },
+     {
+      "role": "caregiver",
+      "label": "P2",
+      "description": "Woman with brown hair tied back, wearing a grey scrub top and black pants; she prepares the wheelchair, applies the transfer belt, and assists the patient to stand and sit in the wheelchair."
+     }
+    ],
+    "summary": "A caregiver uses a transfer belt to safely assist a patient from lying in a bed to sitting in a wheelchair.",
+    "category": "transfer",
+    "confidence": 1.0,
+    "skill_name": "Wheelchair transfer",
+    "skill_slug": "wheelchair_transfer",
+    "alternatives": [],
+    "order_matters": true
+   },
+   "notes": "Left out the opening title card (0-9 s), the brief supply-announcement pause (35-39 s), and the closing contact card (230-235 s).",
+   "guide": {},
+   "video": {
+    "original_name": "wheelchairprimary.mp4",
+    "duration_s": 235.13,
+    "width": 640,
+    "height": 360,
+    "fps": 29.97
+   },
+   "steps": [
+    {
+     "step_id": "s1",
+     "ord": 1,
+     "title": "Perform routine preparation and greet patient",
+     "description": "The caregiver washes hands, provides privacy, greets the patient, explains the transfer, and checks the ID band to ensure safe, informed care.",
+     "start_s": 10.0,
+     "end_s": 34.0,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "The caregiver stands at the sink washing hands.",
+       "The caregiver pulls the privacy curtain and approaches the bedside."
+      ],
+      "fail_criteria": [
+       "The caregiver skips handwashing before touching the patient.",
+       "The caregiver fails to provide privacy or explain the procedure.",
+       "The caregiver does not verify the patient's identity."
+      ],
+      "pass_criteria": [
+       "The caregiver washes hands at the sink before approaching the bed.",
+       "The caregiver closes the privacy curtain or door.",
+       "The caregiver greets the patient by name, explains the transfer, and checks the ID band."
+      ],
+      "unverified_when": [
+       "The sink or privacy curtain is outside the recording frame.",
+       "The audio is muted or too quiet to hear the greeting and explanation."
+      ]
+     }
+    },
+    {
+     "step_id": "s2",
+     "ord": 2,
+     "title": "Position the wheelchair alongside the bed",
+     "description": "The caregiver places the wheelchair next to the bed facing the foot or head so the transfer path is short and direct.",
+     "start_s": 40.0,
+     "end_s": 52.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s1"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver wheels the wheelchair into the room and parks it beside the bed."
+      ],
+      "fail_criteria": [
+       "The wheelchair is placed too far from the bed, requiring the patient to walk.",
+       "The wheelchair is positioned facing away from the bed."
+      ],
+      "pass_criteria": [
+       "The caregiver rolls the wheelchair up alongside the bed.",
+       "The wheelchair is angled close to the bed within an easy pivot distance."
+      ],
+      "unverified_when": [
+       "The wheelchair placement area next to the bed is blocked or out of frame."
+      ]
+     }
+    },
+    {
+     "step_id": "s3",
+     "ord": 3,
+     "title": "Lock the wheelchair brakes",
+     "description": "The caregiver engages both wheel locks on the wheelchair to prevent it from rolling during the transfer.",
+     "start_s": 53.0,
+     "end_s": 58.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s2"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver bends down beside the wheelchair wheels and presses the brake levers."
+      ],
+      "fail_criteria": [
+       "The caregiver forgets to lock one or both wheelchair brakes.",
+       "The wheelchair rolls or shifts during the transfer."
+      ],
+      "pass_criteria": [
+       "The caregiver pushes down or engages the brake lever on both sides of the wheelchair.",
+       "The wheelchair remains stationary when touched."
+      ],
+      "unverified_when": [
+       "The caregiver's body blocks the view of the wheelchair brake levers."
+      ]
+     }
+    },
+    {
+     "step_id": "s4",
+     "ord": 4,
+     "title": "Clear the wheelchair footrests",
+     "description": "The caregiver folds up or swings away the wheelchair footrests so the patient does not trip while standing or sitting.",
+     "start_s": 59.0,
+     "end_s": 65.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s2"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver reaches to the lower front of the wheelchair and swings or folds the footrests aside."
+      ],
+      "fail_criteria": [
+       "The footrests are left down in the transfer path.",
+       "Only one footrest is moved out of the way."
+      ],
+      "pass_criteria": [
+       "The caregiver flips up or swings away both footrests.",
+       "The space directly in front of the wheelchair seat is clear."
+      ],
+      "unverified_when": [
+       "The lower front section of the wheelchair is out of frame or obscured."
+      ]
+     }
+    },
+    {
+     "step_id": "s5",
+     "ord": 5,
+     "title": "Assist patient to sit with shoes",
+     "description": "The caregiver checks bed locks, raises the head of the bed, supports the patient to sit with feet flat on the floor, and ensures shoes are worn.",
+     "start_s": 65.0,
+     "end_s": 116.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s1"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver adjusts the bed head upward and helps the patient pivot to sit on the edge.",
+       "The patient puts on shoes while seated at the bedside."
+      ],
+      "fail_criteria": [
+       "The caregiver pulls on the patient's arms instead of supporting the shoulders and knees.",
+       "The patient is left dangling without feet touching the floor or without shoes.",
+       "The caregiver fails to check that the bed is locked and at a safe low height."
+      ],
+      "pass_criteria": [
+       "The caregiver checks that the bed wheels are locked and raises the head of the bed.",
+       "The caregiver supports the patient's shoulders and knees on a count of three to swing legs over the edge.",
+       "The patient sits at the edge of the bed with both feet flat on the floor wearing shoes."
+      ],
+      "unverified_when": [
+       "The patient's feet or shoes are hidden below the frame edge.",
+       "The bed wheel locks are out of view."
+      ]
+     }
+    },
+    {
+     "step_id": "s6",
+     "ord": 6,
+     "title": "Apply the transfer belt securely",
+     "description": "The caregiver wraps the gait belt around the patient's waist over clothing and tightens it so two fingers fit underneath for a secure handhold.",
+     "start_s": 116.0,
+     "end_s": 152.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s5"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver wraps a white strap around the seated patient's waist and threads the metal buckle."
+      ],
+      "fail_criteria": [
+       "The belt is applied over bare skin or too high under the ribs or breasts.",
+       "The belt is left too loose or fastened incorrectly so it slips.",
+       "Excess belt strap is left dangling where it could trip someone."
+      ],
+      "pass_criteria": [
+       "The caregiver places the belt around the patient's waist over clothing.",
+       "The caregiver threads the buckle properly and tucks in excess strap.",
+       "The caregiver checks the fit so two fingers fit snugly under the belt."
+      ],
+      "unverified_when": [
+       "The caregiver's hands block the buckle while fastening or checking tightness."
+      ]
+     }
+    },
+    {
+     "step_id": "s7",
+     "ord": 7,
+     "title": "Instruct patient and align stance",
+     "description": "The caregiver explains the standing cue and aligns feet toe-to-toe and knee-to-knee with the patient to stabilize the stand.",
+     "start_s": 153.0,
+     "end_s": 166.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s3",
+      "s4",
+      "s6"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver crouches slightly in front of the patient, aligning toes and knees together."
+      ],
+      "fail_criteria": [
+       "The caregiver attempts to lift without giving a clear verbal signal or instructions.",
+       "The caregiver stands too far back without bracing the patient's knees and feet."
+      ],
+      "pass_criteria": [
+       "The caregiver tells the patient where to place their hands and that they will stand on the count of three.",
+       "The caregiver positions their feet and knees directly against the patient's feet and knees."
+      ],
+      "unverified_when": [
+       "The audio is missing or too quiet to hear the verbal instructions.",
+       "The floor and lower legs are cut off at the bottom of the frame."
+      ]
+     }
+    },
+    {
+     "step_id": "s8",
+     "ord": 8,
+     "title": "Stand, pivot, and lower into wheelchair",
+     "description": "The caregiver counts to three, assists the patient to stand using the belt, pivots until legs touch the wheelchair, and lowers the patient gently.",
+     "start_s": 166.0,
+     "end_s": 185.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s3",
+      "s4",
+      "s5",
+      "s6",
+      "s7"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver and patient rise together, turn toward the wheelchair, and sit down smoothly."
+      ],
+      "fail_criteria": [
+       "The caregiver lifts under the patient's arms instead of holding the transfer belt.",
+       "The caregiver twists their back instead of pivoting their feet.",
+       "The patient drops suddenly into the chair before feeling it behind their legs."
+      ],
+      "pass_criteria": [
+       "The caregiver counts to three and grasps the transfer belt firmly on both sides.",
+       "The caregiver assists the patient to stand and pivot until the back of the patient's legs touch the wheelchair.",
+       "The caregiver bends at the knees and lowers the patient smoothly into the wheelchair seat."
+      ],
+      "unverified_when": [
+       "The caregiver's back blocks the view of the belt grip or the patient's legs touching the chair."
+      ]
+     }
+    },
+    {
+     "step_id": "s9",
+     "ord": 9,
+     "title": "Position feet and remove belt",
+     "description": "The caregiver places the patient's feet onto the wheelchair footrests and unbuckles and removes the transfer belt.",
+     "start_s": 186.0,
+     "end_s": 218.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s8"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver kneels to adjust the footrests under the patient's shoes and then unfastens the waist belt."
+      ],
+      "fail_criteria": [
+       "The patient's feet are left hanging off the footrests.",
+       "The transfer belt is left buckled on the patient after the transfer is finished."
+      ],
+      "pass_criteria": [
+       "The caregiver swings the footrests into place and rests both of the patient's feet on them.",
+       "The caregiver unbuckles and gently removes the transfer belt from around the patient's waist."
+      ],
+      "unverified_when": [
+       "The footrests and feet are out of the bottom of the frame."
+      ]
+     }
+    },
+    {
+     "step_id": "s10",
+     "ord": 10,
+     "title": "Complete routine finishing actions",
+     "description": "The caregiver places the call light within reach, washes hands, and opens the privacy curtain to leave the patient safe and comfortable.",
+     "start_s": 219.0,
+     "end_s": 229.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s9"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver hands the call cord to the seated patient, washes hands at the sink, and pulls back the curtain."
+      ],
+      "fail_criteria": [
+       "The call light is left out of the patient's reach.",
+       "The caregiver leaves without washing hands."
+      ],
+      "pass_criteria": [
+       "The caregiver hands the call light to the patient or places it within easy reach.",
+       "The caregiver washes hands at the sink and opens the privacy curtain."
+      ],
+      "unverified_when": [
+       "The sink or call light placement is outside the camera frame."
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "slug": "sit_to_stand",
+   "name": "Sit to stand",
+   "category": "transfer",
+   "summary": "A caregiver positions a seated person at the front of a chair with feet tucked back, then supports her shoulder and lower back while rocking forward to help her stand up.",
+   "order_matters": true,
+   "safety_criteria": [
+    "The caregiver maintains a wide base of support, bends their knees, and keeps a straight back without twisting throughout the transfer.",
+    "The caregiver never pulls on the patient's arms or lifts under the patient's armpits.",
+    "The patient's center of gravity stays over their feet as they rock forward and stand.",
+    "The chair remains stable and does not slide backward during the transfer.",
+    "The caregiver monitors the patient for balance, dizziness, or signs of pain or distress before releasing support."
+   ],
+   "people": [
+    {
+     "role": "caregiver",
+     "label": "P1",
+     "description": "Woman with short dark hair wearing a dark blue polo shirt and dark jeans, standing beside the chair and assisting the seated woman to stand."
+    },
+    {
+     "role": "patient",
+     "label": "P2",
+     "description": "Older woman with short white hair wearing a black cardigan, pink top, white trousers, and black shoes, seated in an armchair and rising to a standing position."
+    }
+   ],
+   "classification": {
+    "people": [
+     {
+      "role": "caregiver",
+      "label": "P1",
+      "description": "Woman with short dark hair wearing a dark blue polo shirt and dark jeans, standing beside the chair and assisting the seated woman to stand."
+     },
+     {
+      "role": "patient",
+      "label": "P2",
+      "description": "Older woman with short white hair wearing a black cardigan, pink top, white trousers, and black shoes, seated in an armchair and rising to a standing position."
+     }
+    ],
+    "summary": "A caregiver positions a seated person at the front of a chair with feet tucked back, then supports her shoulder and lower back while rocking forward to help her stand up.",
+    "category": "transfer",
+    "confidence": 0.99,
+    "skill_name": "Sit to stand",
+    "skill_slug": "sit_to_stand",
+    "alternatives": [],
+    "order_matters": true
+   },
+   "notes": "Excluded the introductory title card (0-5s) and the repeated rear-angle demonstration of the final standing sequence (50-61s), using the complete front-side demonstration (5-49s) for all steps.",
+   "guide": {},
+   "video": {
+    "original_name": "sittostand_primary.mp4",
+    "duration_s": 62.32,
+    "width": 480,
+    "height": 360,
+    "fps": 30.0
+   },
+   "steps": [
+    {
+     "step_id": "s1",
+     "ord": 1,
+     "title": "Greet patient and explain transfer",
+     "description": "The caregiver approaches the seated patient, greets them, and explains that they will be helping them stand up to prepare them for the movement.",
+     "start_s": 5.0,
+     "end_s": 8.5,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "The caregiver walks up next to the chair and leans slightly toward the patient.",
+       "The patient looks up toward the caregiver while remaining seated."
+      ],
+      "fail_criteria": [
+       "The caregiver begins touching or moving the patient without speaking to them first.",
+       "The caregiver fails to explain the purpose of the interaction."
+      ],
+      "pass_criteria": [
+       "The caregiver stands beside the seated patient and faces them.",
+       "The caregiver greets the patient by name or politely.",
+       "The caregiver clearly states that they are going to help the patient stand up."
+      ],
+      "unverified_when": [
+       "The recording has no audio or the caregiver's speech is inaudible.",
+       "The caregiver is out of frame when greeting the patient."
+      ]
+     }
+    },
+    {
+     "step_id": "s2",
+     "ord": 2,
+     "title": "Instruct patient to hold armrests",
+     "description": "The caregiver asks the patient to place both hands on the chair armrests so they have stable support for scooting and pushing up.",
+     "start_s": 8.5,
+     "end_s": 13.0,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "The patient lifts their hands from their lap and places them onto the chair armrests.",
+       "The caregiver looks down at the patient's hands to confirm placement."
+      ],
+      "fail_criteria": [
+       "The patient leaves their hands in their lap or reaches for the caregiver's body instead of the armrests.",
+       "The caregiver pulls on the patient's arms instead of having them use the armrests."
+      ],
+      "pass_criteria": [
+       "The caregiver instructs the patient to place their hands on the armrests.",
+       "The patient places both hands firmly on the left and right armrests of the chair."
+      ],
+      "unverified_when": [
+       "The chair armrests or the patient's hands are blocked from view.",
+       "The audio is missing or unclear so the instruction cannot be heard."
+      ]
+     }
+    },
+    {
+     "step_id": "s3",
+     "ord": 3,
+     "title": "Move patient to front of chair",
+     "description": "The caregiver instructs the patient to wriggle their bottom forward to the front edge of the chair to bring their center of gravity closer to their feet.",
+     "start_s": 13.0,
+     "end_s": 19.5,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s2"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The patient shifts weight side to side while sliding forward on the seat.",
+       "Space opens up between the patient's back and the chair backrest."
+      ],
+      "fail_criteria": [
+       "The patient remains seated deep against the backrest before attempting to stand.",
+       "The patient scoots too far off the edge of the seat, risking a forward slide or fall."
+      ],
+      "pass_criteria": [
+       "The caregiver instructs the patient to move their hips to the front edge of the chair.",
+       "The patient scoots forward until their buttocks are near the front edge of the seat."
+      ],
+      "unverified_when": [
+       "The seat of the chair and the patient's hips are obscured from view.",
+       "The audio is unavailable to verify the verbal instruction."
+      ]
+     }
+    },
+    {
+     "step_id": "s4",
+     "ord": 4,
+     "title": "Position feet back hip-width apart",
+     "description": "The caregiver instructs and gently guides the patient to tuck their feet back toward the chair and place their legs hip-width apart for a stable base of support.",
+     "start_s": 19.5,
+     "end_s": 27.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s3"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver bends slightly and touches the side of the patient's lower leg.",
+       "The patient's feet shift backward and separate on the floor."
+      ],
+      "fail_criteria": [
+       "The patient's feet are positioned too far forward in front of the knees.",
+       "The patient's knees and feet are pressed tightly together or crossed.",
+       "One or both heels are lifted off the floor without weight-bearing contact."
+      ],
+      "pass_criteria": [
+       "The caregiver asks the patient to tuck their feet back and separate their legs hip-width apart.",
+       "The caregiver gently guides the patient's lower legs if needed without forcing them.",
+       "The patient's feet are flat on the floor, tucked slightly behind the knees, and spaced hip-width apart."
+      ],
+      "unverified_when": [
+       "The patient's feet and lower legs are out of frame below the recording view.",
+       "The caregiver's body blocks the view of the patient's feet."
+      ]
+     }
+    },
+    {
+     "step_id": "s5",
+     "ord": 5,
+     "title": "Support patient's shoulder and lower back",
+     "description": "The caregiver stands beside the patient and places one hand in front of the patient's near shoulder and the other hand around their lower back to provide controlled support.",
+     "start_s": 27.0,
+     "end_s": 31.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s3",
+      "s4"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver steps closer to the side of the chair and bends their knees slightly.",
+       "The caregiver's arms wrap gently in front of the patient's shoulder and behind the lower back."
+      ],
+      "fail_criteria": [
+       "The caregiver hooks their hands under the patient's armpits or pulls on the patient's arms.",
+       "The caregiver stands too far away, forcing them to reach and twist their own back.",
+       "The caregiver fails to place a supporting hand on the patient's back or shoulder."
+      ],
+      "pass_criteria": [
+       "The caregiver stands close to the patient's side in a stable stance.",
+       "The caregiver places one hand at the front of the patient's shoulder.",
+       "The caregiver reaches their other arm around to support the patient's lower back."
+      ],
+      "unverified_when": [
+       "The caregiver's hands and the patient's torso are blocked from view.",
+       "The caregiver stands between the patient and the recording device, hiding hand placement."
+      ]
+     }
+    },
+    {
+     "step_id": "s6",
+     "ord": 6,
+     "title": "Instruct patient to look forward and rock",
+     "description": "The caregiver instructs the patient to keep their head up, look forward, and rock forward on 'ready' and 'steady' before standing on 'stand'.",
+     "start_s": 31.0,
+     "end_s": 39.0,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "The caregiver holds the supporting position while speaking to the patient.",
+       "The patient lifts their head and gazes straight ahead."
+      ],
+      "fail_criteria": [
+       "The caregiver initiates the stand abruptly without explaining the cue.",
+       "The patient keeps their head bowed down toward the floor while preparing to stand."
+      ],
+      "pass_criteria": [
+       "The caregiver tells the patient to lift their head and look forward in the direction of movement.",
+       "The caregiver explains the verbal counting sequence ('ready, steady, stand') before initiating the lift."
+      ],
+      "unverified_when": [
+       "The recording has no audio or the caregiver's speech is too quiet to hear.",
+       "The patient's head and face are obscured."
+      ]
+     }
+    },
+    {
+     "step_id": "s7",
+     "ord": 7,
+     "title": "Cue and assist patient to stand",
+     "description": "The caregiver counts 'ready, steady, stand' as they rock forward together, assisting the patient smoothly into an upright standing position.",
+     "start_s": 39.0,
+     "end_s": 48.5,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s2",
+      "s3",
+      "s4",
+      "s5"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Both the caregiver and patient rock forward together twice before rising.",
+       "The patient's hips leave the chair and straighten fully into a standing posture."
+      ],
+      "fail_criteria": [
+       "The caregiver lifts the patient straight up without rocking forward first.",
+       "The caregiver bends at the waist with a rounded back instead of bending their knees.",
+       "The caregiver releases support before the patient is stable in standing.",
+       "The patient's knees buckle or they lose balance upon standing."
+      ],
+      "pass_criteria": [
+       "The caregiver clearly counts 'ready, steady, stand' in rhythm with the patient's rocking.",
+       "The patient pushes off the armrests and leans forward over their feet before rising.",
+       "The caregiver keeps a straight back, bends their knees, and guides the patient smoothly to full standing.",
+       "The caregiver maintains steady support until the patient is balanced upright."
+      ],
+      "unverified_when": [
+       "The audio is missing so the 'ready, steady, stand' cue cannot be verified.",
+       "The caregiver or patient moves out of frame during the rise to standing."
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "slug": "vehicle_transfer",
+   "name": "Vehicle transfer",
+   "category": "transfer",
+   "summary": "A caregiver assists a patient in transferring safely into and out of a car using a walker, and then from a wheelchair using a gait belt.",
+   "order_matters": true,
+   "safety_criteria": [
+    "Caregiver keeps a wide base of support and bends at the knees rather than the waist.",
+    "Patient never pulls on the caregiver's neck or the unstable car door for support.",
+    "Patient stays centered over their base of support during standing and pivoting.",
+    "Caregiver watches for signs of dizziness, pain, or leg buckling throughout the transfer.",
+    "Patient never attempts to step up into the vehicle on one leg while standing."
+   ],
+   "people": [
+    {
+     "role": "other",
+     "label": "P1",
+     "description": "Woman with blonde hair wearing a coral sleeveless dress, standing in the clinic lobby introducing the topic and the two therapists."
+    },
+    {
+     "role": "caregiver",
+     "label": "P2",
+     "description": "Woman with brown hair in a ponytail wearing a blue-grey short-sleeve shirt and black pants, who demonstrates car preparation and assists the patient with walker and wheelchair transfers."
+    },
+    {
+     "role": "patient",
+     "label": "P3",
+     "description": "Woman with blonde hair wearing a black short-sleeve shirt and grey pants, who plays the patient transferring into and out of the car."
+    }
+   ],
+   "classification": {
+    "people": [
+     {
+      "role": "other",
+      "label": "P1",
+      "description": "Woman with blonde hair wearing a coral sleeveless dress, standing in the clinic lobby introducing the topic and the two therapists."
+     },
+     {
+      "role": "caregiver",
+      "label": "P2",
+      "description": "Woman with brown hair in a ponytail wearing a blue-grey short-sleeve shirt and black pants, who demonstrates car preparation and assists the patient with walker and wheelchair transfers."
+     },
+     {
+      "role": "patient",
+      "label": "P3",
+      "description": "Woman with blonde hair wearing a black short-sleeve shirt and grey pants, who plays the patient transferring into and out of the car."
+     }
+    ],
+    "summary": "A caregiver assists a patient in transferring safely into and out of a car using a walker, and then from a wheelchair using a gait belt.",
+    "category": "transfer",
+    "confidence": 0.99,
+    "skill_name": "Vehicle transfer",
+    "skill_slug": "vehicle_transfer",
+    "alternatives": [
+     "wheelchair_transfer"
+    ],
+    "order_matters": true
+   },
+   "notes": "Left out the clinic introduction and outro, the walker-based car entry and exit demonstrations, the wheelchair exit demonstration, and the wrong-way demonstration (whose errors, such as pulling on the car door and stepping in on one leg, were incorporated into fail_criteria).",
+   "guide": {},
+   "video": {
+    "original_name": "Vehicle Transfer Primary (1).mp4",
+    "duration_s": 418.03,
+    "width": 640,
+    "height": 360,
+    "fps": 29.97
+   },
+   "steps": [
+    {
+     "step_id": "s1",
+     "ord": 1,
+     "title": "Open car door and slide seat back",
+     "description": "The caregiver opens the car door all the way and slides the seat back to maximize space for the transfer.",
+     "start_s": 47.0,
+     "end_s": 58.5,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "Caregiver pulls the car door handle and swings the door wide open.",
+       "Caregiver reaches down to the side of the seat to slide it backward."
+      ],
+      "fail_criteria": [
+       "Caregiver leaves the door only partially open.",
+       "Caregiver fails to slide the seat back, leaving cramped legroom."
+      ],
+      "pass_criteria": [
+       "Caregiver opens the passenger car door fully.",
+       "Caregiver adjusts the car seat as far back as possible.",
+       "Adequate space is visible between the door frame and seat for the patient's legs."
+      ],
+      "unverified_when": [
+       "The car door or seat adjustment controls are out of frame.",
+       "The camera angle blocks the view of the seat position."
+      ]
+     }
+    },
+    {
+     "step_id": "s2",
+     "ord": 2,
+     "title": "Position wheelchair close to car seat",
+     "description": "The caregiver wheels the patient close to the open car door and angles the wheelchair toward the seat to shorten the pivot distance.",
+     "start_s": 154.0,
+     "end_s": 162.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s1"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver pushes the wheelchair forward into the space between the car body and the open door."
+      ],
+      "fail_criteria": [
+       "Wheelchair is positioned too far from the car seat, requiring a long walk.",
+       "Wheelchair is angled away from the car or blocks the door from staying open."
+      ],
+      "pass_criteria": [
+       "Caregiver pushes the wheelchair right up next to the open car door.",
+       "Wheelchair is angled slightly toward the car seat."
+      ],
+      "unverified_when": [
+       "The distance between the wheelchair and the car seat is obscured by the caregiver's body or out of frame."
+      ]
+     }
+    },
+    {
+     "step_id": "s3",
+     "ord": 3,
+     "title": "Lock the wheelchair brakes",
+     "description": "The caregiver engages the brakes on both sides of the wheelchair so it cannot roll during the transfer.",
+     "start_s": 162.0,
+     "end_s": 167.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s2"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver bends down on both sides of the wheelchair rear wheels to engage the locks."
+      ],
+      "fail_criteria": [
+       "Caregiver forgets to lock one or both wheelchair brakes.",
+       "The wheelchair rolls or shifts during the transfer."
+      ],
+      "pass_criteria": [
+       "Caregiver pushes down or pulls the brake levers on both rear wheels.",
+       "Wheelchair remains stationary when the patient prepares to stand."
+      ],
+      "unverified_when": [
+       "The wheelchair wheels and brake levers are out of frame or blocked by the caregiver."
+      ]
+     }
+    },
+    {
+     "step_id": "s4",
+     "ord": 4,
+     "title": "Swing away or remove footrests",
+     "description": "The caregiver moves the wheelchair footrests out of the way so the patient can place their feet flat on the ground without tripping.",
+     "start_s": 171.0,
+     "end_s": 188.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s3"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver kneels or bends in front of the wheelchair and detaches or swings the leg rests outward."
+      ],
+      "fail_criteria": [
+       "Caregiver leaves the footrests directly in front of the patient's legs.",
+       "Patient attempts to stand while their feet are still on the footplates."
+      ],
+      "pass_criteria": [
+       "Caregiver lifts the patient's feet off the footplates.",
+       "Caregiver swings both footrests to the side or removes them completely."
+      ],
+      "unverified_when": [
+       "The lower front section of the wheelchair is out of frame or blocked."
+      ]
+     }
+    },
+    {
+     "step_id": "s5",
+     "ord": 5,
+     "title": "Have patient scoot to chair edge",
+     "description": "The caregiver instructs the patient to scoot forward to the edge of the wheelchair so their center of gravity is over their feet before standing.",
+     "start_s": 190.0,
+     "end_s": 195.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s3",
+      "s4"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Patient leans slightly and shifts their hips forward toward the front edge of the wheelchair cushion."
+      ],
+      "fail_criteria": [
+       "Caregiver attempts to lift the patient while they are still sitting all the way back in the chair.",
+       "Patient's feet are not planted on the ground before standing."
+      ],
+      "pass_criteria": [
+       "Caregiver instructs the patient to scoot forward to the edge of the seat.",
+       "Patient shifts hips forward with feet planted flat on the ground."
+      ],
+      "unverified_when": [
+       "The patient's hips and feet are blocked from view.",
+       "Audio is missing so the verbal instruction cannot be heard."
+      ]
+     }
+    },
+    {
+     "step_id": "s6",
+     "ord": 6,
+     "title": "Assist patient to stand using gait belt",
+     "description": "The caregiver grasps the gait belt, counts to three, and assists the patient to a standing position while keeping their back straight.",
+     "start_s": 231.0,
+     "end_s": 242.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s3",
+      "s5"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver stands in front of the patient holding the gait belt at the waist, then both rise smoothly together."
+      ],
+      "fail_criteria": [
+       "Caregiver pulls the patient up by their arms or clothing instead of the gait belt or waist.",
+       "Patient wraps their arms around the caregiver's neck to pull themselves up.",
+       "Caregiver lifts without counting or signaling the patient."
+      ],
+      "pass_criteria": [
+       "Caregiver grasps the gait belt securely on both sides of the patient's waist.",
+       "Caregiver counts to three out loud to coordinate the stand.",
+       "Patient pushes up from the wheelchair armrests rather than pulling on the caregiver's neck."
+      ],
+      "unverified_when": [
+       "The caregiver's hands on the gait belt are blocked by the patient's back.",
+       "No audio is available to verify the count to three."
+      ]
+     }
+    },
+    {
+     "step_id": "s7",
+     "ord": 7,
+     "title": "Pivot patient until legs touch car",
+     "description": "The caregiver guides the patient in small steps to pivot toward the car until the back of the patient's legs touch the car seat.",
+     "start_s": 250.0,
+     "end_s": 262.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s6"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver and patient turn together in small shuffling steps until the patient's back faces the car seat."
+      ],
+      "fail_criteria": [
+       "Patient twists their spine without moving their feet.",
+       "Patient attempts to step into the car on one leg before sitting.",
+       "Caregiver releases support before the patient is aligned with the seat."
+      ],
+      "pass_criteria": [
+       "Caregiver maintains a secure hold on the gait belt while supporting the patient's upper body.",
+       "Patient pivots with small steps until the back of their legs touch the car seat or frame.",
+       "Caregiver confirms the patient feels the car behind their legs."
+      ],
+      "unverified_when": [
+       "The patient's feet and lower legs are out of frame during the pivot."
+      ]
+     }
+    },
+    {
+     "step_id": "s8",
+     "ord": 8,
+     "title": "Lower patient onto car seat",
+     "description": "The caregiver guides the patient to reach back for a stable surface on the car and slowly sit down onto the seat.",
+     "start_s": 263.5,
+     "end_s": 272.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s7"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Patient places a hand on the car pillar or dashboard and bends knees to sit down."
+      ],
+      "fail_criteria": [
+       "Patient holds onto or pulls on the open car door for support.",
+       "Patient drops onto the seat uncontrolled.",
+       "Caregiver lets go of the gait belt before the patient is seated."
+      ],
+      "pass_criteria": [
+       "Patient reaches back onto a stable surface such as the car frame or dashboard.",
+       "Patient slowly lowers their hips onto the car seat with caregiver support.",
+       "Patient does not grab or pull on the car door."
+      ],
+      "unverified_when": [
+       "The patient's hands and the car seat are blocked from the camera angle."
+      ]
+     }
+    },
+    {
+     "step_id": "s9",
+     "ord": 9,
+     "title": "Lift patient's legs into the car",
+     "description": "The caregiver helps the patient scoot back into the seat and lifts their legs into the car so they face forward.",
+     "start_s": 273.0,
+     "end_s": 288.5,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s8"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver bends down to support under the patient's calves or knees and swings both legs inside the car."
+      ],
+      "fail_criteria": [
+       "Caregiver forces or twists the patient's legs awkwardly.",
+       "Patient's head strikes the top of the door frame while turning."
+      ],
+      "pass_criteria": [
+       "Caregiver assists the patient in scooting their hips back onto the seat.",
+       "Caregiver supports and lifts the patient's legs into the car footwell.",
+       "Patient is seated facing forward comfortably inside the vehicle."
+      ],
+      "unverified_when": [
+       "The car interior and footwell are too dark or blocked to see the legs entering."
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "slug": "bed_repositioning",
+   "name": "Bed repositioning",
+   "category": "positioning",
+   "summary": "A caregiver turns a patient onto his side in bed and supports his back, legs, and arm with pillows.",
+   "order_matters": true,
+   "safety_criteria": [
+    "Keep the resident positioned at a safe distance from the edge of the bed at all times.",
+    "Use proper body mechanics with a wide base of support and straight back when turning the resident.",
+    "Avoid pulling on the resident's limbs; support legs and arms from underneath when placing pillows.",
+    "Ensure bony prominences (knees, ankles) and the bottom shoulder/arm are cushioned and not compressed.",
+    "Leave the bed in its lowest position and the call light within the resident's reach at the end of the skill."
+   ],
+   "people": [
+    {
+     "role": "patient",
+     "label": "P1",
+     "description": "Adult male with short hair, wearing a dark grey shirt, dark pants, and black socks, lying in a hospital bed."
+    },
+    {
+     "role": "caregiver",
+     "label": "P2",
+     "description": "Adult female with blonde hair, wearing black scrubs, standing beside the bed and performing the repositioning."
+    }
+   ],
+   "classification": {
+    "people": [
+     {
+      "role": "patient",
+      "label": "P1",
+      "description": "Adult male with short hair, wearing a dark grey shirt, dark pants, and black socks, lying in a hospital bed."
+     },
+     {
+      "role": "caregiver",
+      "label": "P2",
+      "description": "Adult female with blonde hair, wearing black scrubs, standing beside the bed and performing the repositioning."
+     }
+    ],
+    "summary": "A caregiver turns a patient onto his side in bed and supports his back, legs, and arm with pillows.",
+    "category": "positioning",
+    "confidence": 0.98,
+    "skill_name": "Bed repositioning",
+    "skill_slug": "bed_repositioning",
+    "alternatives": [],
+    "order_matters": true
+   },
+   "notes": "Excluded the introductory title cards, care plan and supplies graphics, principles overview, and outro promotional and credit slides. Routine preparation and closing tasks were grouped into steps 1 and 10 to keep the rubric focused on the 10 observable actions.",
+   "guide": {},
+   "video": {
+    "original_name": "bedrepositioning primary.mp4",
+    "duration_s": 460.06,
+    "width": 640,
+    "height": 360,
+    "fps": 29.97
+   },
+   "steps": [
+    {
+     "step_id": "s1",
+     "ord": 1,
+     "title": "Greet resident, wash hands, gather supplies",
+     "description": "The caregiver knocks, greets the resident by name, explains the turning procedure, closes the privacy curtain, washes hands, and gathers a barrier, privacy blanket, and three pillows on an overbed table.",
+     "start_s": 44.0,
+     "end_s": 113.0,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "Caregiver enters the room, speaks to the resident, and pulls the curtain.",
+       "Caregiver washes hands at the sink and places a blue barrier and pillows on the rolling table."
+      ],
+      "fail_criteria": [
+       "Caregiver touches the resident or clean supplies before washing hands.",
+       "Caregiver fails to explain the procedure to the resident.",
+       "Caregiver holds clean pillows or linens tightly against their uniform."
+      ],
+      "pass_criteria": [
+       "Caregiver knocks, greets the resident by name, introduces self, and explains the procedure.",
+       "Caregiver closes the privacy curtain and washes hands with soap and water before touching supplies or the resident.",
+       "Caregiver places a barrier on the overbed table before setting down three pillows and a privacy blanket, without hugging the pillows against clothing."
+      ],
+      "unverified_when": [
+       "The sink or supply area is out of frame.",
+       "Audio is missing or inaudible when greeting and explaining."
+      ]
+     }
+    },
+    {
+     "step_id": "s2",
+     "ord": 2,
+     "title": "Cover resident and lower top sheet",
+     "description": "The caregiver unfolds a privacy blanket over the resident to maintain warmth and dignity, then pulls the top sheet down to the foot of the bed.",
+     "start_s": 114.0,
+     "end_s": 147.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s1"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver unfolds a light blanket over the resident's chest and legs.",
+       "Caregiver pulls the white top sheet down toward the footboard."
+      ],
+      "fail_criteria": [
+       "Caregiver snaps or shakes the privacy blanket in the air.",
+       "Caregiver exposes the resident's body while removing the top sheet."
+      ],
+      "pass_criteria": [
+       "Caregiver unfolds the privacy blanket gently over the resident without snapping or shaking it.",
+       "Caregiver pulls the top sheet down to the foot of the bed while keeping the resident covered by the privacy blanket."
+      ],
+      "unverified_when": [
+       "The resident's torso or the foot of the bed is blocked from view."
+      ]
+     }
+    },
+    {
+     "step_id": "s3",
+     "ord": 3,
+     "title": "Position resident and limbs for turning",
+     "description": "The caregiver has the resident scoot toward the caregiver, places the farthest arm above the head, crosses the closest arm over the chest, bends the closest knee with the foot flat, and angles the farthest knee out.",
+     "start_s": 147.5,
+     "end_s": 183.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s2"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Resident shifts toward the caregiver's side of the bed.",
+       "Caregiver raises the resident's far arm overhead, folds the near arm across the chest, and bends the near knee."
+      ],
+      "fail_criteria": [
+       "Caregiver attempts to roll the resident without positioning them away from the far edge first.",
+       "Caregiver leaves the resident's arms or legs unpositioned, risking injury during the turn."
+      ],
+      "pass_criteria": [
+       "Caregiver asks the resident to scoot toward the side of the bed near the caregiver.",
+       "Caregiver places the resident's farthest arm up above their head and crosses the closest arm over their chest.",
+       "Caregiver bends the closest knee with the foot flat on the bed and angles the farthest knee outward."
+      ],
+      "unverified_when": [
+       "The privacy blanket completely obscures the position of the resident's knees and feet."
+      ]
+     }
+    },
+    {
+     "step_id": "s4",
+     "ord": 4,
+     "title": "Roll resident onto their side",
+     "description": "The caregiver counts to three and smoothly rolls the resident onto their left side while maintaining a wide base of support.",
+     "start_s": 184.0,
+     "end_s": 197.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s3"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver places hands on the resident's hip and shoulder.",
+       "Resident turns from supine onto their left side facing away from the caregiver."
+      ],
+      "fail_criteria": [
+       "Caregiver rolls the resident abruptly without warning or counting.",
+       "Caregiver twists their own back instead of using a wide stance.",
+       "Resident is rolled too close to the edge of the bed."
+      ],
+      "pass_criteria": [
+       "Caregiver announces the turn and counts to three before rolling the resident.",
+       "Caregiver stands with a wide base of support and rolls the resident gently onto their left side.",
+       "Resident remains positioned at a safe distance from the edge of the bed."
+      ],
+      "unverified_when": [
+       "Audio is unavailable to confirm the caregiver announced the count.",
+       "The caregiver's feet and stance are out of frame."
+      ]
+     }
+    },
+    {
+     "step_id": "s5",
+     "ord": 5,
+     "title": "Support resident's back with a pillow",
+     "description": "The caregiver tucks and rolls a pillow lengthwise behind and slightly under the resident's back to keep them from rolling backward.",
+     "start_s": 198.0,
+     "end_s": 234.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s4"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver takes a pillow from the table and places it along the resident's back.",
+       "Caregiver pushes the edge of the pillow under the resident and rolls the rest of the pillow firmly against the back."
+      ],
+      "fail_criteria": [
+       "Caregiver places the pillow loosely behind the back without tucking or rolling it to provide support.",
+       "Caregiver traps the privacy blanket underneath the back pillow."
+      ],
+      "pass_criteria": [
+       "Caregiver moves the privacy blanket aside so it is not tucked under the pillow.",
+       "Caregiver places a pillow lengthwise behind the resident's back and tucks the inner edge down and under the back.",
+       "Caregiver rolls the outer edge of the pillow up and snugly against the resident's back."
+      ],
+      "unverified_when": [
+       "The caregiver's body blocks the view of the pillow being tucked behind the resident's back."
+      ]
+     }
+    },
+    {
+     "step_id": "s6",
+     "ord": 6,
+     "title": "Place pillow between knees and ankles",
+     "description": "The caregiver moves to the opposite side of the bed, brings the resident's upper knee slightly forward, and places a pillow lengthwise between the legs so the knees and ankles do not touch.",
+     "start_s": 234.5,
+     "end_s": 271.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s4"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver walks around the foot of the bed to the side the resident is facing.",
+       "Caregiver lifts the resident's top leg and slides a pillow underneath it from knee to ankle."
+      ],
+      "fail_criteria": [
+       "Caregiver leaves the resident's knees or ankles resting directly on top of one another.",
+       "Caregiver pulls on the resident's leg roughly without supporting it from below."
+      ],
+      "pass_criteria": [
+       "Caregiver positions the resident's upper knee bent slightly in front of the lower leg.",
+       "Caregiver lifts the top leg from underneath and places a pillow lengthwise between both legs.",
+       "Both the knees and the ankles are separated by the pillow so bony prominences do not press together."
+      ],
+      "unverified_when": [
+       "The privacy blanket covers the lower legs so the ankle separation cannot be seen."
+      ]
+     }
+    },
+    {
+     "step_id": "s7",
+     "ord": 7,
+     "title": "Support upper arm with a pillow",
+     "description": "The caregiver lifts the resident's upper arm from below and places a pillow underneath to support both the shoulder and arm in a neutral position.",
+     "start_s": 272.0,
+     "end_s": 296.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s4"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver takes the third pillow and stands near the resident's head and chest.",
+       "Caregiver lifts the resident's right arm and slides the pillow underneath the elbow and forearm."
+      ],
+      "fail_criteria": [
+       "Resident's upper arm is left hanging down without support, pulling on the shoulder.",
+       "Caregiver pulls on the resident's wrist or hand instead of supporting the arm from below."
+      ],
+      "pass_criteria": [
+       "Caregiver lifts the resident's upper arm gently from underneath.",
+       "Caregiver places a pillow under the upper arm so the shoulder, elbow, and arm are supported without drooping."
+      ],
+      "unverified_when": [
+       "The resident's upper arm and the pillow placement are blocked by the caregiver."
+      ]
+     }
+    },
+    {
+     "step_id": "s8",
+     "ord": 8,
+     "title": "Adjust head pillow and bottom arm",
+     "description": "The caregiver adjusts the pillow under the resident's head to support the head and neck and ensures the bottom arm is positioned out from under the body.",
+     "start_s": 297.0,
+     "end_s": 313.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s4"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver reaches near the head of the bed to adjust the head pillow.",
+       "Caregiver gently pulls the resident's bottom arm forward onto the mattress."
+      ],
+      "fail_criteria": [
+       "Resident is left lying directly on their bottom shoulder or arm.",
+       "Head pillow is left bunched under the shoulder instead of supporting the head and neck."
+      ],
+      "pass_criteria": [
+       "Caregiver lifts the resident's head slightly and adjusts the pillow so it supports the head, neck, and chin.",
+       "Caregiver positions the resident's bottom shoulder and arm so the resident is not lying on top of their own arm or shoulder."
+      ],
+      "unverified_when": [
+       "The resident's head and bottom arm are obscured by the caregiver or pillows."
+      ]
+     }
+    },
+    {
+     "step_id": "s9",
+     "ord": 9,
+     "title": "Place call light and cover with sheet",
+     "description": "The caregiver places the call light in the resident's bottom hand, pulls the top sheet up over the resident while removing the privacy blanket, and opens the privacy curtain.",
+     "start_s": 314.0,
+     "end_s": 362.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s5",
+      "s6",
+      "s7",
+      "s8"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver places the call light cord and button into the resident's hand.",
+       "Caregiver pulls the white sheet up, slides the privacy blanket out, and pushes back the curtain."
+      ],
+      "fail_criteria": [
+       "Caregiver forgets to place the call light within the resident's reach.",
+       "Caregiver exposes the resident while removing the privacy blanket or lets the blanket drag on the floor."
+      ],
+      "pass_criteria": [
+       "Caregiver places the call light within reach in or near the resident's bottom hand.",
+       "Caregiver pulls the top sheet up over the resident and removes the privacy blanket from underneath without exposing the resident.",
+       "Caregiver rolls the removed privacy blanket inward without letting it touch the floor or uniform, and opens the privacy curtain."
+      ],
+      "unverified_when": [
+       "The resident's bottom hand and call light are hidden behind the pillow.",
+       "The privacy curtain is out of frame."
+      ]
+     }
+    },
+    {
+     "step_id": "s10",
+     "ord": 10,
+     "title": "Check comfort, tidy up, and wash hands",
+     "description": "The caregiver asks the resident about comfort and preferences, disposes of soiled linens and the barrier, confirms the bed is in its lowest position, and washes hands.",
+     "start_s": 362.5,
+     "end_s": 420.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s9"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver places the rolled blanket into the linen hamper and the blue barrier into the trash.",
+       "Caregiver checks the bed height, speaks to the resident, and washes hands at the sink."
+      ],
+      "fail_criteria": [
+       "Caregiver leaves the bed raised above its lowest position.",
+       "Caregiver leaves used linens or the barrier on the table or floor.",
+       "Caregiver fails to wash hands after completing care."
+      ],
+      "pass_criteria": [
+       "Caregiver asks the resident if they are comfortable and if the head of the bed or anything else needs adjustment.",
+       "Caregiver places the used privacy blanket in the dirty linen hamper, discards the barrier in the trash, and moves the overbed table away.",
+       "Caregiver ensures the bed is in its lowest position and washes hands at the end of care."
+      ],
+      "unverified_when": [
+       "Audio is missing to confirm the caregiver asked about comfort.",
+       "The hamper, trash bin, or sink is out of frame."
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "slug": "assisted_walking",
+   "name": "Assisted walking",
+   "category": "mobility",
+   "summary": "A caregiver helps a patient sit up on the edge of a bed, puts on non-skid slippers and a gait belt, assists them to stand, and walks alongside them across the room to sit in a wheelchair.",
+   "order_matters": true,
+   "safety_criteria": [
+    "Both the bed brakes and the wheelchair brakes remain locked during transfers.",
+    "The caregiver uses proper body mechanics with a wide stance and bent knees rather than bending at the waist.",
+    "The patient wears non-skid footwear and has feet flat on the floor before standing.",
+    "The caregiver maintains a secure hold on the gait belt rather than pulling on the patient's arms or shoulders.",
+    "The patient is monitored for dizziness or distress before standing and throughout the walk."
+   ],
+   "people": [
+    {
+     "role": "caregiver",
+     "label": "P1",
+     "description": "Woman wearing light blue scrubs and fuzzy pink slippers, with dark hair tied back in a bun; she stands beside the bed and walks alongside the patient to assist with ambulation."
+    },
+    {
+     "role": "patient",
+     "label": "P2",
+     "description": "Young person with short light brown hair wearing black scrubs and black socks, with tattoos on their arms; they lie in the hospital bed, sit up, and walk with assistance to the wheelchair."
+    }
+   ],
+   "classification": {
+    "people": [
+     {
+      "role": "caregiver",
+      "label": "P1",
+      "description": "Woman wearing light blue scrubs and fuzzy pink slippers, with dark hair tied back in a bun; she stands beside the bed and walks alongside the patient to assist with ambulation."
+     },
+     {
+      "role": "patient",
+      "label": "P2",
+      "description": "Young person with short light brown hair wearing black scrubs and black socks, with tattoos on their arms; they lie in the hospital bed, sit up, and walk with assistance to the wheelchair."
+     }
+    ],
+    "summary": "A caregiver helps a patient sit up on the edge of a bed, puts on non-skid slippers and a gait belt, assists them to stand, and walks alongside them across the room to sit in a wheelchair.",
+    "category": "mobility",
+    "confidence": 0.96,
+    "skill_name": "Assisted walking",
+    "skill_slug": "assisted_walking",
+    "alternatives": [
+     "wheelchair_transfer",
+     "sit_to_stand"
+    ],
+    "order_matters": true
+   },
+   "notes": "Excluded the opening title card, organization logo, and closing credits with contact information.",
+   "guide": {},
+   "video": {
+    "original_name": "Assisted Walking Primary.mp4",
+    "duration_s": 216.8,
+    "width": 358,
+    "height": 640,
+    "fps": 29.97
+   },
+   "steps": [
+    {
+     "step_id": "s1",
+     "ord": 1,
+     "title": "Greet, sanitize hands, and explain procedure",
+     "description": "The caregiver knocks, sanitizes their hands, greets the patient, and explains the plan to walk to the chair to establish consent and hygiene.",
+     "start_s": 11.0,
+     "end_s": 27.0,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "Caregiver knocks near the doorway and walks toward the bed.",
+       "Caregiver rubs hands together while speaking to the patient in bed."
+      ],
+      "fail_criteria": [
+       "Caregiver enters without knocking or greeting the patient.",
+       "Caregiver skips hand hygiene before touching the patient or equipment.",
+       "Caregiver begins moving the patient without explaining the procedure."
+      ],
+      "pass_criteria": [
+       "Caregiver knocks on the door or wall before entering.",
+       "Caregiver rubs hand sanitizer over their hands.",
+       "Caregiver greets the patient and explains they will ambulate to the chair.",
+       "Patient agrees to the procedure."
+      ],
+      "unverified_when": [
+       "Audio is missing or inaudible so the greeting and explanation cannot be heard.",
+       "Caregiver's hands are out of frame during hand sanitization."
+      ]
+     }
+    },
+    {
+     "step_id": "s2",
+     "ord": 2,
+     "title": "Lock the bed brakes",
+     "description": "The caregiver checks and locks the brakes on the bed so it cannot roll when the patient stands up.",
+     "start_s": 27.5,
+     "end_s": 36.0,
+     "critical": true,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "Caregiver walks around the foot of the bed to the sides.",
+       "Caregiver bends slightly near the bed frame to check the locks."
+      ],
+      "fail_criteria": [
+       "Caregiver leaves the bed brakes unlocked before moving the patient.",
+       "Caregiver only checks one side without ensuring the bed is stationary."
+      ],
+      "pass_criteria": [
+       "Caregiver states they are locking the bed and checks the bed wheels or brake pedals.",
+       "Caregiver presses down or verifies the brakes are engaged on the bed."
+      ],
+      "unverified_when": [
+       "The bed wheels and brake pedals are below the bottom edge of the frame.",
+       "The bed obstructs the view of the caregiver's hands or feet engaging the brakes."
+      ]
+     }
+    },
+    {
+     "step_id": "s3",
+     "ord": 3,
+     "title": "Lock the wheelchair brakes",
+     "description": "The caregiver engages the brakes on the wheelchair so it stays stationary when the patient sits down.",
+     "start_s": 36.5,
+     "end_s": 40.0,
+     "critical": true,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "Caregiver bends over the wheelchair near the wall.",
+       "Caregiver reaches down toward both sides of the wheelchair wheels."
+      ],
+      "fail_criteria": [
+       "Caregiver forgets to lock the wheelchair brakes before ambulating the patient.",
+       "Caregiver locks only one wheel instead of both wheels."
+      ],
+      "pass_criteria": [
+       "Caregiver walks to the wheelchair and pushes both wheel locks into the locked position.",
+       "Wheelchair remains stationary when touched."
+      ],
+      "unverified_when": [
+       "The wheelchair wheels and brake levers are out of frame or blocked by the caregiver's body."
+      ]
+     }
+    },
+    {
+     "step_id": "s4",
+     "ord": 4,
+     "title": "Put non-skid slippers on patient",
+     "description": "The caregiver uncovers the patient's feet and puts on non-skid slippers to prevent slipping during standing and walking.",
+     "start_s": 46.0,
+     "end_s": 60.0,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "Caregiver pulls the blanket back toward the knees.",
+       "Caregiver picks up two gray slippers and slides them onto the patient's feet."
+      ],
+      "fail_criteria": [
+       "Caregiver attempts to stand or walk the patient in bare feet or regular socks without non-skid soles.",
+       "Slippers are left partially on or loose on the patient's heels."
+      ],
+      "pass_criteria": [
+       "Caregiver folds back the bed linens from the patient's feet.",
+       "Caregiver places a non-skid slipper securely on each of the patient's feet."
+      ],
+      "unverified_when": [
+       "The patient's feet are out of frame or blocked by the caregiver's torso."
+      ]
+     }
+    },
+    {
+     "step_id": "s5",
+     "ord": 5,
+     "title": "Sit patient up and check dizziness",
+     "description": "The caregiver helps the patient roll and sit on the bed edge, lowers the bed until feet are flat, and asks about dizziness to ensure stability before standing.",
+     "start_s": 62.0,
+     "end_s": 104.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s2"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver places hands on the patient's shoulder and hip to roll and sit them up.",
+       "Caregiver holds the wired bed pendant while watching the patient's feet reach the floor."
+      ],
+      "fail_criteria": [
+       "Caregiver pulls the patient straight up from supine without turning them to their side first.",
+       "Caregiver leaves the bed too high so the patient's feet dangle above the floor.",
+       "Caregiver skips asking about dizziness before standing the patient."
+      ],
+      "pass_criteria": [
+       "Caregiver assists the patient to roll onto their side and swing their legs over the edge of the bed.",
+       "Caregiver uses the bed control to lower the bed until both of the patient's feet rest flat on the floor.",
+       "Caregiver asks the patient if they feel lightheaded, dizzy, or have a headache."
+      ],
+      "unverified_when": [
+       "The patient's feet and floor contact are out of frame.",
+       "Audio is missing or inaudible so the dizziness check cannot be heard."
+      ]
+     }
+    },
+    {
+     "step_id": "s6",
+     "ord": 6,
+     "title": "Apply and secure the gait belt",
+     "description": "The caregiver wraps the gait belt around the patient's waist, threads the buckle, checks snugness, and tucks the excess strap to provide a safe handhold.",
+     "start_s": 105.0,
+     "end_s": 131.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s5"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver reaches around the seated patient's waist with the beige belt.",
+       "Caregiver fastens the metal buckle and tucks the loose end under the belt."
+      ],
+      "fail_criteria": [
+       "Gait belt is placed directly on bare skin, over the chest, or twisted.",
+       "Belt is too loose to support the patient or so tight it restricts breathing.",
+       "Excess strap is left dangling freely where it could trip the patient or caregiver."
+      ],
+      "pass_criteria": [
+       "Caregiver wraps the gait belt around the patient's waist over clothing with the buckle in front.",
+       "Caregiver threads the strap through the teeth of the buckle and pulls it snug.",
+       "Caregiver checks that two fingers or hands fit comfortably between the belt and the patient and tucks the excess strap."
+      ],
+      "unverified_when": [
+       "Caregiver's body blocks the view of threading the buckle and checking snugness."
+      ]
+     }
+    },
+    {
+     "step_id": "s7",
+     "ord": 7,
+     "title": "Assist the patient to stand",
+     "description": "The caregiver instructs the patient to place hands on the caregiver's shoulders, grips both sides of the gait belt, and lifts on a count of three.",
+     "start_s": 132.0,
+     "end_s": 147.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s2",
+      "s4",
+      "s5",
+      "s6"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Patient places both hands on the caregiver's shoulders.",
+       "Caregiver bends knees slightly, holds the belt at the patient's waist, and rises with the patient."
+      ],
+      "fail_criteria": [
+       "Caregiver pulls the patient up by their arms or underarms instead of the gait belt.",
+       "Caregiver allows the patient to wrap their arms around the caregiver's neck.",
+       "Caregiver lifts without counting or signaling the patient."
+      ],
+      "pass_criteria": [
+       "Caregiver has the patient place their hands on the caregiver's shoulders.",
+       "Caregiver grips the gait belt firmly on both sides with palms facing upward or inward.",
+       "Caregiver counts to three and assists the patient smoothly to a standing position."
+      ],
+      "unverified_when": [
+       "Caregiver's hands on the gait belt are blocked from the camera's view.",
+       "Audio is missing so the verbal count cannot be verified."
+      ]
+     }
+    },
+    {
+     "step_id": "s8",
+     "ord": 8,
+     "title": "Walk alongside patient to wheelchair",
+     "description": "The caregiver walks slightly behind and beside the patient while holding the gait belt to steady them across the room.",
+     "start_s": 148.0,
+     "end_s": 155.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s3",
+      "s7"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver holds the back of the gait belt with one hand and the patient's forearm with the other.",
+       "Both walk across the room toward the wheelchair near the door."
+      ],
+      "fail_criteria": [
+       "Caregiver lets go of the gait belt while the patient is walking.",
+       "Caregiver walks too far ahead or behind to catch the patient if they stumble."
+      ],
+      "pass_criteria": [
+       "Caregiver stays close beside and slightly behind the patient.",
+       "Caregiver maintains a firm hold on the gait belt throughout the walk.",
+       "Caregiver supports the patient's arm or steadies their pace toward the wheelchair."
+      ],
+      "unverified_when": [
+       "The patient and caregiver walk out of the camera frame before reaching the wheelchair.",
+       "The caregiver's hand on the gait belt is blocked by the patient's body."
+      ]
+     }
+    },
+    {
+     "step_id": "s9",
+     "ord": 9,
+     "title": "Seat patient safely in wheelchair",
+     "description": "The caregiver turns the patient in front of the wheelchair, confirms their knees touch the seat and hands grip the armrests, and lowers them to sit.",
+     "start_s": 156.0,
+     "end_s": 167.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s3",
+      "s8"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Patient pivots in front of the wheelchair and reaches back for the armrests.",
+       "Caregiver bends at the knees and guides the patient down into the seat."
+      ],
+      "fail_criteria": [
+       "Caregiver lowers the patient before their legs are against the wheelchair.",
+       "Patient drops abruptly into the chair without holding the armrests or caregiver support."
+      ],
+      "pass_criteria": [
+       "Caregiver turns the patient so their back faces the wheelchair seat.",
+       "Caregiver asks the patient to grip the armrests and checks that the backs of their legs touch the chair.",
+       "Caregiver counts to three and lowers the patient gently into the seat while holding the gait belt."
+      ],
+      "unverified_when": [
+       "The caregiver's back blocks the view of the patient's legs touching the chair and sitting down."
+      ]
+     }
+    },
+    {
+     "step_id": "s10",
+     "ord": 10,
+     "title": "Remove belt, give call light, sanitize",
+     "description": "The caregiver unbuckles and removes the gait belt, hands the call light to the patient, puts the belt away, and sanitizes their hands.",
+     "start_s": 168.0,
+     "end_s": 202.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s9"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver unfastens the buckle in front of the seated patient and coils the belt.",
+       "Caregiver hands the white call light cord to the patient and then rubs hands with sanitizer."
+      ],
+      "fail_criteria": [
+       "Caregiver leaves the gait belt fastened on the patient after seating them.",
+       "Caregiver leaves the room without placing the call light within the patient's reach.",
+       "Caregiver skips hand hygiene after completing the transfer."
+      ],
+      "pass_criteria": [
+       "Caregiver unbuckles and removes the gait belt from the seated patient.",
+       "Caregiver places the call light within the patient's reach or in their hand.",
+       "Caregiver puts the gait belt away and rubs hand sanitizer over their hands until dry."
+      ],
+      "unverified_when": [
+       "Caregiver's hands are out of frame while removing the belt, handing the call light, or sanitizing."
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "slug": "stair_assistance",
+   "name": "Stair assistance",
+   "category": "mobility",
+   "summary": "An instructor demonstrates ascending and descending stairs with various crutches and walkers, then assists and guards a patient going up and down the stairs using crutches.",
+   "order_matters": true,
+   "safety_criteria": [
+    "The patient wears a secured gait belt and the caregiver maintains a hold on it during all stair transitions.",
+    "The caregiver stays below the patient (behind when ascending, in front when descending) and on the involved side.",
+    "The caregiver positions themselves between the patient and the stairwell when turning at the top landing.",
+    "The patient keeps their hips forward when descending to avoid hopping on the stairs.",
+    "The caregiver maintains a wide, stable stance and braces against the railing when needed."
+   ],
+   "people": [
+    {
+     "role": "caregiver",
+     "label": "P1",
+     "description": "Middle-aged woman with short light-brown hair, wearing a light blue button-up shirt and dark jeans; she stands on and near the stairs demonstrating assistive devices and guarding the patient."
+    },
+    {
+     "role": "patient",
+     "label": "P2",
+     "description": "Younger woman with dark hair in a braid, wearing a white long-sleeved shirt and dark jeans; she uses crutches to climb and descend the stairs with assistance."
+    }
+   ],
+   "classification": {
+    "people": [
+     {
+      "role": "caregiver",
+      "label": "P1",
+      "description": "Middle-aged woman with short light-brown hair, wearing a light blue button-up shirt and dark jeans; she stands on and near the stairs demonstrating assistive devices and guarding the patient."
+     },
+     {
+      "role": "patient",
+      "label": "P2",
+      "description": "Younger woman with dark hair in a braid, wearing a white long-sleeved shirt and dark jeans; she uses crutches to climb and descend the stairs with assistance."
+     }
+    ],
+    "summary": "An instructor demonstrates ascending and descending stairs with various crutches and walkers, then assists and guards a patient going up and down the stairs using crutches.",
+    "category": "mobility",
+    "confidence": 0.98,
+    "skill_name": "Stair assistance",
+    "skill_slug": "stair_assistance",
+    "alternatives": [],
+    "order_matters": true
+   },
+   "notes": "Left out the first 11 minutes of the video where the instructor demonstrates ascending and descending stairs alone with various crutches and walkers, as well as the brief wrong-way hopping example shown during solo demonstration (used to inform fail criteria).",
+   "guide": {},
+   "video": {
+    "original_name": "Stair Assistance Primary (1).mp4",
+    "duration_s": 875.55,
+    "width": 320,
+    "height": 240,
+    "fps": 28.88
+   },
+   "steps": [
+    {
+     "step_id": "s1",
+     "ord": 1,
+     "title": "Ask about home stair railing",
+     "description": "The caregiver asks the patient whether they have a stair railing at home and which side it is on to plan safe stair navigation.",
+     "start_s": 698.0,
+     "end_s": 711.0,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "The caregiver stands facing the patient near the base of the stairs and gestures toward the stair railing while speaking."
+      ],
+      "fail_criteria": [
+       "The caregiver begins moving the patient toward the stairs without asking about home railing setup.",
+       "The caregiver ignores the patient's response about which side the railing is on."
+      ],
+      "pass_criteria": [
+       "The caregiver asks the patient if they have a railing on their stairs at home.",
+       "The caregiver asks which side the railing is on when going up the stairs.",
+       "The caregiver waits for the patient to answer before starting the stair climb."
+      ],
+      "unverified_when": [
+       "The recording has no audio or the caregiver's questions are inaudible."
+      ]
+     }
+    },
+    {
+     "step_id": "s2",
+     "ord": 2,
+     "title": "Position behind patient on involved side",
+     "description": "The caregiver stands behind and to the patient's involved side while holding the gait belt as the patient approaches the stairs.",
+     "start_s": 717.0,
+     "end_s": 732.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s1"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver steps behind the patient's right side, grasps the gait belt, and follows the patient to the bottom of the stairs."
+      ],
+      "fail_criteria": [
+       "The caregiver stands in front of the patient or on the uninvolved side while approaching the stairs.",
+       "The caregiver fails to hold the gait belt as the patient approaches the stairs."
+      ],
+      "pass_criteria": [
+       "The caregiver positions themselves behind and slightly to the patient's involved side.",
+       "The caregiver holds onto the patient's gait belt.",
+       "The caregiver walks closely with the patient up to the bottom step."
+      ],
+      "unverified_when": [
+       "The caregiver's hand placement on the gait belt is blocked from view by the patient's body.",
+       "The patient and caregiver are out of frame at the base of the stairs."
+      ]
+     }
+    },
+    {
+     "step_id": "s3",
+     "ord": 3,
+     "title": "Guard patient ascending the stairs",
+     "description": "The caregiver guards the patient from behind on the involved side and cues them to step up with the strong leg first followed by the crutches.",
+     "start_s": 732.0,
+     "end_s": 776.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s2"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The patient steps up one stair at a time with the strong leg leading and crutches following while the caregiver follows closely behind holding the gait belt."
+      ],
+      "fail_criteria": [
+       "The caregiver lets go of the gait belt while the patient is stepping up.",
+       "The patient leads with the involved leg or brings the crutches up before the strong leg without correction.",
+       "The caregiver stands above the patient instead of behind and below them during the ascent."
+      ],
+      "pass_criteria": [
+       "The caregiver stays behind and to the involved side of the patient throughout the ascent.",
+       "The caregiver keeps at least one hand on the gait belt while ascending.",
+       "The caregiver cues the patient to step up with the strong leg first, then bring the crutches up.",
+       "The caregiver pauses the patient if needed to adjust their own footing for stability."
+      ],
+      "unverified_when": [
+       "The patient's feet or crutches are obscured by the stair railing.",
+       "The caregiver's hand on the gait belt is blocked from view."
+      ]
+     }
+    },
+    {
+     "step_id": "s4",
+     "ord": 4,
+     "title": "Guard patient turning at top landing",
+     "description": "The caregiver stays between the patient and the stairs while holding the gait belt as the patient turns in a wide arc at the top landing.",
+     "start_s": 776.0,
+     "end_s": 805.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s3"
+     ],
+     "evals": {
+      "visual_cues": [
+       "At the top of the stairs, the caregiver remains on the stair side of the patient and pivots around them while keeping a hand on the gait belt."
+      ],
+      "fail_criteria": [
+       "The caregiver moves to the far side of the landing, leaving the patient next to the open stairs.",
+       "The caregiver releases the gait belt while the patient is pivoting."
+      ],
+      "pass_criteria": [
+       "The caregiver positions themselves between the patient and the stairwell drop-off.",
+       "The caregiver keeps at least one hand on the gait belt throughout the turn.",
+       "The caregiver guides the patient to turn in a wide circle toward their strong side."
+      ],
+      "unverified_when": [
+       "The top landing is partially out of frame so the patient's footwork during the turn cannot be seen.",
+       "The caregiver's hand on the gait belt is hidden behind the patient."
+      ]
+     }
+    },
+    {
+     "step_id": "s5",
+     "ord": 5,
+     "title": "Position below patient on involved side",
+     "description": "The caregiver steps down onto the stairs below the patient on the involved side and holds the gait belt to prepare for descent.",
+     "start_s": 805.0,
+     "end_s": 820.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s4"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver steps down one or two stairs in front of the patient on the involved side while holding the gait belt."
+      ],
+      "fail_criteria": [
+       "The caregiver remains behind or above the patient at the top of the stairs during descent.",
+       "The caregiver fails to hold the gait belt before the patient begins stepping down."
+      ],
+      "pass_criteria": [
+       "The caregiver steps down so they are positioned lower than the patient on the stairs.",
+       "The caregiver stands on the patient's involved side.",
+       "The caregiver holds the gait belt securely and braces against the railing if needed for stability."
+      ],
+      "unverified_when": [
+       "The caregiver's lower body or feet on the steps are blocked by the stair railing.",
+       "The caregiver's hand on the gait belt is obscured."
+      ]
+     }
+    },
+    {
+     "step_id": "s6",
+     "ord": 6,
+     "title": "Guard patient descending the stairs",
+     "description": "The caregiver guards the patient from below on the involved side and cues them to place the crutches down first, bring hips forward, and step down.",
+     "start_s": 820.0,
+     "end_s": 853.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s5"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver steps down backward or sideways ahead of the patient, bracing near the railing and holding the gait belt until both reach the bottom floor."
+      ],
+      "fail_criteria": [
+       "The patient hops down the stairs without bringing their hips forward.",
+       "The patient steps down with the strong leg before placing the crutches on the lower step.",
+       "The caregiver lets go of the gait belt or steps ahead out of arm's reach."
+      ],
+      "pass_criteria": [
+       "The caregiver remains below and to the involved side of the patient for the entire descent.",
+       "The caregiver keeps a firm hold on the gait belt while stepping down ahead of the patient.",
+       "The caregiver cues the patient to place the crutches down first, move their hips forward, and then step down."
+      ],
+      "unverified_when": [
+       "The stair railing blocks the view of the patient's feet and crutches on the steps.",
+       "The audio is missing so verbal cues cannot be heard."
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "slug": "fall_response",
+   "name": "Fall response",
+   "category": "emergency",
+   "summary": "A caregiver supports an unsteady patient from behind and gently lowers him down her leg to the floor during a fall, then stays with him and calls for help.",
+   "order_matters": true,
+   "safety_criteria": [
+    "Caregiver maintains a wide stance, bent knees, and a straight back while lowering the patient to prevent caregiver back injury.",
+    "Patient's head and torso are supported and controlled throughout the descent so they do not strike the floor or nearby furniture.",
+    "Caregiver never tries to catch and lift a falling patient back to standing, nor lifts a fallen patient from the floor alone.",
+    "Patient is not left unattended on the floor after the fall."
+   ],
+   "people": [
+    {
+     "role": "patient",
+     "label": "P1",
+     "description": "Middle-aged man with short brown hair and a grey beard, wearing a white patterned hospital gown and white compression stockings, who stands from the bed and is lowered to the floor."
+    },
+    {
+     "role": "caregiver",
+     "label": "P2",
+     "description": "Woman with blonde hair in a ponytail wearing dark blue scrubs and an ID badge, who supports the patient from behind, lowers him to the floor, and presses the call bell."
+    }
+   ],
+   "classification": {
+    "people": [
+     {
+      "role": "patient",
+      "label": "P1",
+      "description": "Middle-aged man with short brown hair and a grey beard, wearing a white patterned hospital gown and white compression stockings, who stands from the bed and is lowered to the floor."
+     },
+     {
+      "role": "caregiver",
+      "label": "P2",
+      "description": "Woman with blonde hair in a ponytail wearing dark blue scrubs and an ID badge, who supports the patient from behind, lowers him to the floor, and presses the call bell."
+     }
+    ],
+    "summary": "A caregiver supports an unsteady patient from behind and gently lowers him down her leg to the floor during a fall, then stays with him and calls for help.",
+    "category": "emergency",
+    "confidence": 0.98,
+    "skill_name": "Fall response",
+    "skill_slug": "fall_response",
+    "alternatives": [],
+    "order_matters": true
+   },
+   "notes": "Excluded the initial period before the caregiver approaches, the repeated lowering angle (00:46-00:49), narration-only instructions at the end (such as nurse assessment and incident report completion), and the closing app advertisement.",
+   "guide": {},
+   "video": {
+    "original_name": "Fall Response Primary.mp4",
+    "duration_s": 89.61,
+    "width": 640,
+    "height": 360,
+    "fps": 30.0
+   },
+   "steps": [
+    {
+     "step_id": "s1",
+     "ord": 1,
+     "title": "Support patient and ask how they feel",
+     "description": "The caregiver approaches the unsteady patient, places hands on their upper arms for support, and asks if they are okay to assess their condition.",
+     "start_s": 14.0,
+     "end_s": 25.0,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "Caregiver walks over to the patient standing beside the bed.",
+       "Caregiver places both hands on the patient's upper arms."
+      ],
+      "fail_criteria": [
+       "Caregiver ignores the patient's unsteadiness or delays approaching.",
+       "Caregiver pulls forcefully on the patient's arms instead of offering steady support.",
+       "Caregiver does not ask the patient how they feel."
+      ],
+      "pass_criteria": [
+       "Caregiver moves promptly to the unsteady patient and places hands on their upper arms or shoulders.",
+       "Caregiver verbally asks the patient if they are feeling okay."
+      ],
+      "unverified_when": [
+       "The patient or caregiver is out of frame during initial contact.",
+       "The recording has no audio or the caregiver's speech is inaudible."
+      ]
+     }
+    },
+    {
+     "step_id": "s2",
+     "ord": 2,
+     "title": "Position yourself closely behind the patient",
+     "description": "The caregiver stands directly behind the unsteady patient and steps in as close as possible to prepare to support their weight.",
+     "start_s": 26.0,
+     "end_s": 31.0,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "Caregiver stands upright directly behind the leaning patient.",
+       "Minimal space remains between the caregiver's chest and the patient's back."
+      ],
+      "fail_criteria": [
+       "Caregiver stands to the side or too far behind the patient to support their weight.",
+       "Caregiver stands in front of the patient, blocking their path or risking being pulled down."
+      ],
+      "pass_criteria": [
+       "Caregiver moves directly behind the patient.",
+       "Caregiver stands close enough that their torso is near the patient's back."
+      ],
+      "unverified_when": [
+       "The caregiver's position relative to the patient's back is blocked from view.",
+       "Either person moves out of the frame."
+      ]
+     }
+    },
+    {
+     "step_id": "s3",
+     "ord": 3,
+     "title": "Support torso under arms or at waist",
+     "description": "The caregiver places their arms under the patient's arms or around their waist to maintain a secure hold on the torso.",
+     "start_s": 31.0,
+     "end_s": 37.5,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s2"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver's hands are positioned under the patient's armpits or around the waist.",
+       "Patient's torso is supported against the caregiver."
+      ],
+      "fail_criteria": [
+       "Caregiver holds only the patient's hands, wrists, or loose clothing.",
+       "Caregiver lets go of the patient's torso while they are still standing unsteadily."
+      ],
+      "pass_criteria": [
+       "Caregiver reaches under the patient's arms, around their waist, or grasps a gait belt if worn.",
+       "Caregiver maintains a firm, balanced grip on the patient's torso."
+      ],
+      "unverified_when": [
+       "The caregiver's arms and hands are obscured by the patient's body.",
+       "The upper bodies of both people are out of frame."
+      ]
+     }
+    },
+    {
+     "step_id": "s4",
+     "ord": 4,
+     "title": "Place one leg under patient's buttocks",
+     "description": "The caregiver steps one leg forward so the thigh sits under the patient's buttocks to form a stable support surface.",
+     "start_s": 37.5,
+     "end_s": 41.5,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s2",
+      "s3"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver steps one foot forward between or beside the patient's feet.",
+       "Caregiver's forward thigh makes contact beneath the patient's buttocks."
+      ],
+      "fail_criteria": [
+       "Caregiver keeps both feet together or behind the patient without placing a leg under the buttocks.",
+       "Caregiver locks their knees or bends sharply at the waist instead of using a wide, bent-knee stance."
+      ],
+      "pass_criteria": [
+       "Caregiver extends one leg forward beneath the patient's buttocks.",
+       "Caregiver widens their stance for stability while keeping their back relatively straight."
+      ],
+      "unverified_when": [
+       "The lower bodies and legs of the caregiver and patient are cut off at the bottom of the frame.",
+       "Bed linens or furniture block the view of the caregiver's legs."
+      ]
+     }
+    },
+    {
+     "step_id": "s5",
+     "ord": 5,
+     "title": "Lower patient gently down your leg",
+     "description": "The caregiver bends their knees and guides the patient slowly down their leg until the patient is seated safely on the floor.",
+     "start_s": 41.5,
+     "end_s": 46.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s3",
+      "s4"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Both caregiver and patient descend smoothly toward the floor.",
+       "Patient ends up seated with legs extended on the floor in front of the kneeling caregiver."
+      ],
+      "fail_criteria": [
+       "Caregiver drops the patient or allows them to fall uncontrolled to the floor.",
+       "Caregiver attempts to pull the patient back up to a standing position instead of lowering them.",
+       "Caregiver bends forward at the waist with straight legs, straining their back."
+      ],
+      "pass_criteria": [
+       "Caregiver bends their knees and lowers their body alongside the patient.",
+       "Patient slides slowly down the caregiver's leg to a seated position on the floor without hitting their head or hips."
+      ],
+      "unverified_when": [
+       "The floor area where the patient lands is out of frame.",
+       "Furniture blocks the view of the descent to the floor."
+      ]
+     }
+    },
+    {
+     "step_id": "s6",
+     "ord": 6,
+     "title": "Stay with patient and check condition",
+     "description": "The caregiver remains next to the patient on the floor without attempting to move them and asks how they are doing.",
+     "start_s": 50.0,
+     "end_s": 57.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s5"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver kneels beside the seated patient with a reassuring hand on their shoulder.",
+       "Caregiver looks at the patient's face while speaking."
+      ],
+      "fail_criteria": [
+       "Caregiver leaves the patient alone on the floor.",
+       "Caregiver tries to lift or drag the patient back into bed alone.",
+       "Caregiver fails to check on the patient's condition."
+      ],
+      "pass_criteria": [
+       "Caregiver stays kneeling or seated beside the patient on the floor.",
+       "Caregiver does not attempt to lift or move the patient.",
+       "Caregiver verbally asks the patient how they are doing."
+      ],
+      "unverified_when": [
+       "The caregiver or patient moves out of frame on the floor.",
+       "The recording has no audio or the caregiver's questions are inaudible."
+      ]
+     }
+    },
+    {
+     "step_id": "s7",
+     "ord": 7,
+     "title": "Use call bell to summon help",
+     "description": "While remaining beside the patient, the caregiver reaches for and activates the call bell or notification device to request assistance.",
+     "start_s": 57.0,
+     "end_s": 67.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s6"
+     ],
+     "evals": {
+      "visual_cues": [
+       "Caregiver keeps one hand near the patient's back while reaching up toward the bed rail or wall.",
+       "Caregiver presses the call button."
+      ],
+      "fail_criteria": [
+       "Caregiver walks away from the patient to get help.",
+       "Caregiver fails to call for assistance before attempting any transfer."
+      ],
+      "pass_criteria": [
+       "Caregiver informs the patient they are calling for help.",
+       "Caregiver reaches out and presses the call bell or notification device without leaving the patient's side."
+      ],
+      "unverified_when": [
+       "The call bell or the caregiver's reaching hand is out of frame.",
+       "The recording has no audio so the caregiver's statement about calling for help cannot be heard."
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "slug": "shower_assistance",
+   "name": "Shower assistance",
+   "category": "hygiene",
+   "summary": "A caregiver assists a person in transferring safely into and out of a bathtub using a transfer bench, a walker, and a transfer belt.",
+   "order_matters": true,
+   "safety_criteria": [
+    "The bathroom floor is kept dry and free of tripping hazards before and after the tub transfer.",
+    "The caregiver uses proper body mechanics by staying close, keeping feet shoulder-width apart, keeping their back straight, and lifting with their legs.",
+    "A transfer belt is worn and securely fastened during both the seated transfer into the tub and the standing transfer out of the tub.",
+    "The person wears non-skid footwear when standing on the bathroom floor.",
+    "The caregiver encourages the person to do as much as possible while providing steady support and pausing to check balance after standing."
+   ],
+   "people": [
+    {
+     "role": "caregiver",
+     "label": "P1",
+     "description": "A woman with curly dark hair and glasses, wearing a light blue button-down shirt, dark pants, and white sneakers, who assists the patient throughout the bathroom transfer."
+    },
+    {
+     "role": "patient",
+     "label": "P2",
+     "description": "An older Black man with glasses, wearing a dark blue t-shirt, dark blue pants, yellow non-skid socks, and a white transfer belt, who transfers into and out of the tub."
+    }
+   ],
+   "classification": {
+    "people": [
+     {
+      "role": "caregiver",
+      "label": "P1",
+      "description": "A woman with curly dark hair and glasses, wearing a light blue button-down shirt, dark pants, and white sneakers, who assists the patient throughout the bathroom transfer."
+     },
+     {
+      "role": "patient",
+      "label": "P2",
+      "description": "An older Black man with glasses, wearing a dark blue t-shirt, dark blue pants, yellow non-skid socks, and a white transfer belt, who transfers into and out of the tub."
+     }
+    ],
+    "summary": "A caregiver assists a person in transferring safely into and out of a bathtub using a transfer bench, a walker, and a transfer belt.",
+    "category": "hygiene",
+    "confidence": 0.98,
+    "skill_name": "Shower assistance",
+    "skill_slug": "shower_assistance",
+    "alternatives": [
+     "sit_to_stand"
+    ],
+    "order_matters": true
+   },
+   "notes": "Introductory disclaimer cards, still images of the walker and transfer belt, and outro resource cards were excluded.",
+   "guide": {},
+   "video": {
+    "original_name": "Shower Assistance Primary.mp4",
+    "duration_s": 225.51,
+    "width": 640,
+    "height": 360,
+    "fps": 29.97
+   },
+   "steps": [
+    {
+     "step_id": "s1",
+     "ord": 1,
+     "title": "Clear and dry the bathroom floor",
+     "description": "The caregiver removes items from the floor and wipes up any water with a towel to prevent slipping hazards before the transfer.",
+     "start_s": 29.0,
+     "end_s": 34.5,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "The caregiver kneels on the bathroom floor holding a towel.",
+       "The caregiver wipes the tile floor next to the tub bench."
+      ],
+      "fail_criteria": [
+       "The caregiver leaves water, puddles, or tripping hazards on the floor.",
+       "The caregiver skips checking or drying the floor before starting the transfer."
+      ],
+      "pass_criteria": [
+       "The floor area around the tub bench and toilet is free of clutter or loose items.",
+       "The caregiver wipes the floor dry using a towel before bringing the person to the bench."
+      ],
+      "unverified_when": [
+       "The bathroom floor around the tub bench is out of frame or blocked by furniture."
+      ]
+     }
+    },
+    {
+     "step_id": "s2",
+     "ord": 2,
+     "title": "Back person up to tub bench",
+     "description": "The caregiver guides the person to turn away from the tub bench using the walker and back up until both legs touch the bench edge.",
+     "start_s": 47.0,
+     "end_s": 60.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s1"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The person turns around while holding the walker handles.",
+       "The person steps backward until their calves contact the tub bench."
+      ],
+      "fail_criteria": [
+       "The person attempts to sit before the backs of their legs touch the bench.",
+       "The caregiver lets the person pivot without holding the walker or providing support."
+      ],
+      "pass_criteria": [
+       "The person uses the walker to turn away from the tub bench.",
+       "The caregiver stays close beside or behind the person to steady them.",
+       "The person backs up until the backs of both legs touch the edge of the tub bench."
+      ],
+      "unverified_when": [
+       "The person's legs and the edge of the tub bench are blocked from view by the walker or caregiver."
+      ]
+     }
+    },
+    {
+     "step_id": "s3",
+     "ord": 3,
+     "title": "Lower person onto the tub bench",
+     "description": "The caregiver helps the person reach back for the bench seat with one hand, slowly lowers them to a seated position, and moves the walker aside.",
+     "start_s": 60.0,
+     "end_s": 75.5,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s2"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The person reaches one hand behind them toward the bench while the other grips the walker.",
+       "The caregiver pulls the walker away after the person sits."
+      ],
+      "fail_criteria": [
+       "The person drops or falls onto the bench without controlled support.",
+       "The person lets go of the walker with both hands before reaching the seat.",
+       "The walker is left blocking the person's legs after they sit down."
+      ],
+      "pass_criteria": [
+       "The person reaches back to grasp the tub bench seat with one hand while keeping the other hand on the walker.",
+       "The caregiver supports the person as they lower slowly onto the bench.",
+       "The caregiver moves the walker out of the way once the person is seated."
+      ],
+      "unverified_when": [
+       "The person's hands or the bench seat are obscured by the caregiver's body."
+      ]
+     }
+    },
+    {
+     "step_id": "s4",
+     "ord": 4,
+     "title": "Move person's legs into the tub",
+     "description": "The caregiver instructs the person to turn toward the tub, hold the bench handle, lift each leg over the tub rim, and scoot toward the center.",
+     "start_s": 76.0,
+     "end_s": 92.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s3"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The person grips the metal handle on the tub bench.",
+       "The person swings each leg over the edge of the bathtub and scoots inward."
+      ],
+      "fail_criteria": [
+       "The person lifts their legs into the tub without holding onto the bench handle or caregiver.",
+       "The person remains perched on the outer edge of the bench instead of moving toward the center."
+      ],
+      "pass_criteria": [
+       "The person turns toward the tub and grasps the bench handle for stability.",
+       "The person lifts one leg at a time over the tub rim into the tub.",
+       "The person slides toward the center of the tub bench while the caregiver steadies them."
+      ],
+      "unverified_when": [
+       "The tub rim and the person's feet are out of frame."
+      ]
+     }
+    },
+    {
+     "step_id": "s5",
+     "ord": 5,
+     "title": "Remove the transfer belt",
+     "description": "The caregiver unbuckles and removes the transfer belt once the person is safely centered on the tub bench.",
+     "start_s": 94.0,
+     "end_s": 100.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s4"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver reaches around the person's waist to unfasten the belt buckle.",
+       "The caregiver pulls the white belt away from the person."
+      ],
+      "fail_criteria": [
+       "The caregiver removes the transfer belt before the person is safely seated and centered inside the tub.",
+       "The caregiver pulls the belt roughly, causing the person to lose balance."
+      ],
+      "pass_criteria": [
+       "The caregiver unbuckles the transfer belt smoothly around the person's waist.",
+       "The transfer belt is completely removed after the person is positioned inside the tub."
+      ],
+      "unverified_when": [
+       "The caregiver's hands and the buckle of the transfer belt are blocked from view."
+      ]
+     }
+    },
+    {
+     "step_id": "s6",
+     "ord": 6,
+     "title": "Move person's legs out of tub",
+     "description": "To exit the tub, the caregiver helps the person scoot to the bench edge, lift each leg over the rim onto the floor, and turn outward.",
+     "start_s": 106.0,
+     "end_s": 119.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s5"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver places a hand on the person's shoulder and back as they scoot.",
+       "The person swings each leg over the tub edge onto the bathroom tile."
+      ],
+      "fail_criteria": [
+       "The person attempts to stand up directly from inside the tub without swinging their legs out first.",
+       "The caregiver fails to stay close and steady the person while their legs cross the tub rim."
+      ],
+      "pass_criteria": [
+       "The person scoots toward the outer edge of the tub bench.",
+       "The person lifts each leg over the tub rim and places both feet on the floor.",
+       "The person turns their body to face away from the tub while staying seated."
+      ],
+      "unverified_when": [
+       "The person's legs crossing the tub rim are obscured from the camera."
+      ]
+     }
+    },
+    {
+     "step_id": "s7",
+     "ord": 7,
+     "title": "Dry floor and check non-skid footwear",
+     "description": "The caregiver dries the person and the floor with a towel and ensures non-skid socks or shoes are on before standing.",
+     "start_s": 120.0,
+     "end_s": 127.5,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s6"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver kneels with a white towel to wipe the floor near the person's feet.",
+       "The caregiver points to or checks the person's non-skid socks."
+      ],
+      "fail_criteria": [
+       "The caregiver leaves the floor wet where the person will place their feet to stand.",
+       "The person attempts to stand barefoot or in slippery socks on a wet floor."
+      ],
+      "pass_criteria": [
+       "The caregiver wipes any water off the floor around the person's feet.",
+       "The person wears non-skid socks or shoes before attempting to stand."
+      ],
+      "unverified_when": [
+       "The person's feet and the floor beneath them are out of frame."
+      ]
+     }
+    },
+    {
+     "step_id": "s8",
+     "ord": 8,
+     "title": "Secure the transfer belt",
+     "description": "The caregiver places the transfer belt around the person's waist and fastens the buckle securely before standing.",
+     "start_s": 128.0,
+     "end_s": 139.5,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s7"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver fastens the buckle of the transfer belt across the person's abdomen.",
+       "The caregiver tucks in the excess strap of the belt."
+      ],
+      "fail_criteria": [
+       "The transfer belt is left too loose or unbuckled.",
+       "The caregiver attempts to stand the person without putting the transfer belt back on."
+      ],
+      "pass_criteria": [
+       "The caregiver wraps the transfer belt snugly around the person's waist.",
+       "The caregiver threads and locks the metal buckle securely."
+      ],
+      "unverified_when": [
+       "The front of the person's waist and the belt buckle are blocked from view."
+      ]
+     }
+    },
+    {
+     "step_id": "s9",
+     "ord": 9,
+     "title": "Position walker and prepare to stand",
+     "description": "The caregiver places the walker in front of the person, assumes a wide stance with a straight back, and instructs the person on hand placement.",
+     "start_s": 140.0,
+     "end_s": 167.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s8"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver brings the walker in front of the person.",
+       "The caregiver widens their stance and bends their knees while the person grips the bench edge."
+      ],
+      "fail_criteria": [
+       "The caregiver bends at the waist with a rounded back or keeps their feet too close together.",
+       "The person pulls up on the walker with both hands instead of pushing off the bench with one hand."
+      ],
+      "pass_criteria": [
+       "The caregiver places the walker directly in front of the seated person.",
+       "The caregiver stands close with feet shoulder-width apart, knees bent, and back straight.",
+       "The person leans forward with one hand on the walker and the other hand pushing off the tub bench."
+      ],
+      "unverified_when": [
+       "The caregiver's feet or the person's hand on the bench are out of frame."
+      ]
+     }
+    },
+    {
+     "step_id": "s10",
+     "ord": 10,
+     "title": "Count and assist person to stand",
+     "description": "The caregiver announces the count to three, assists the person to a standing position using the transfer belt, and pauses to ensure steadiness.",
+     "start_s": 167.0,
+     "end_s": 192.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s8",
+      "s9"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver speaks to the person while holding the transfer belt.",
+       "The person rises to a standing position with both hands on the walker and pauses."
+      ],
+      "fail_criteria": [
+       "The caregiver pulls the person up without giving a verbal cue or count.",
+       "The caregiver rushes the person into walking immediately without pausing to check balance."
+      ],
+      "pass_criteria": [
+       "The caregiver tells the person it is time to stand and counts to three aloud.",
+       "The caregiver lifts with their legs while holding the transfer belt to help the person stand.",
+       "Once standing, the caregiver pauses for a few seconds to confirm the person is steady before moving."
+      ],
+      "unverified_when": [
+       "The recording has no audio or the caregiver's count to three is inaudible.",
+       "The caregiver's hands on the transfer belt are blocked from view."
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "slug": "glove_removal",
+   "name": "Glove removal",
+   "category": "infection_control",
+   "summary": "A person washes their hands, puts on disposable gloves over a gown, and then removes the gloves one at a time by turning them inside-out without touching the contaminated outside surfaces with bare hands, followed by washing their hands again.",
+   "order_matters": true,
+   "safety_criteria": [
+    "Never touch the contaminated outer surface of either glove with bare skin during removal.",
+    "Always keep the hands away from the face, hair, and clothing while wearing or removing contaminated gloves.",
+    "Avoid snapping, flinging, or pulling gloves forcefully in a way that could tear them or scatter contaminants.",
+    "Always perform hand hygiene immediately before donning gloves and immediately after doffing and disposing of them."
+   ],
+   "people": [
+    {
+     "role": "caregiver",
+     "label": "P1",
+     "description": "A woman with dark hair pulled back, wearing purple scrubs and a small clip-on microphone, standing in front of a grey background; she speaks to the camera and also appears in a blue isolation gown and blue gloves demonstrating hand washing, donning, and doffing gloves."
+    }
+   ],
+   "classification": {
+    "people": [
+     {
+      "role": "caregiver",
+      "label": "P1",
+      "description": "A woman with dark hair pulled back, wearing purple scrubs and a small clip-on microphone, standing in front of a grey background; she speaks to the camera and also appears in a blue isolation gown and blue gloves demonstrating hand washing, donning, and doffing gloves."
+     }
+    ],
+    "summary": "A person washes their hands, puts on disposable gloves over a gown, and then removes the gloves one at a time by turning them inside-out without touching the contaminated outside surfaces with bare hands, followed by washing their hands again.",
+    "category": "infection_control",
+    "confidence": 0.95,
+    "skill_name": "Glove removal",
+    "skill_slug": "glove_removal",
+    "alternatives": [
+     "hand_hygiene"
+    ],
+    "order_matters": true
+   },
+   "notes": "Excluded the opening introduction, title card, and disclaimer (0 to 8 seconds), the warning demonstration about not touching the outside of gloves (18 to 25 seconds), and the closing outro with social media links (62 to 70 seconds).",
+   "guide": {},
+   "video": {
+    "original_name": "Glove Removal Primary.mp4",
+    "duration_s": 69.68,
+    "width": 640,
+    "height": 360,
+    "fps": 23.98
+   },
+   "steps": [
+    {
+     "step_id": "s1",
+     "ord": 1,
+     "title": "Perform hand hygiene before donning gloves",
+     "description": "The caregiver washes their hands thoroughly with soap and water to remove microorganisms before putting on gloves.",
+     "start_s": 8.0,
+     "end_s": 10.0,
+     "critical": false,
+     "order_dependent": false,
+     "must_follow": [],
+     "evals": {
+      "visual_cues": [
+       "The caregiver stands at a sink rubbing soapy hands under running water."
+      ],
+      "fail_criteria": [
+       "The caregiver skips hand hygiene and puts gloves directly onto unwashed hands.",
+       "The caregiver only splashes water on their hands without using soap or friction."
+      ],
+      "pass_criteria": [
+       "The caregiver lathers both hands with soap under running water.",
+       "The caregiver rubs all surfaces of the hands and fingers together.",
+       "The caregiver rinses and dries their hands before touching clean gloves."
+      ],
+      "unverified_when": [
+       "The sink or hand-washing area is outside the camera frame.",
+       "The caregiver's hands are blocked from view while washing."
+      ]
+     }
+    },
+    {
+     "step_id": "s2",
+     "ord": 2,
+     "title": "Don disposable gloves over gown cuffs",
+     "description": "The caregiver pulls a clean disposable glove onto each hand and extends the glove cuffs over the gown sleeves to create a complete barrier.",
+     "start_s": 10.0,
+     "end_s": 18.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s1"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver pulls blue gloves onto each hand and adjusts the cuffs over the sleeves."
+      ],
+      "fail_criteria": [
+       "The caregiver leaves bare skin or gown cuffs exposed between the glove and sleeve.",
+       "The caregiver tears or punctures a glove while putting it on and continues using it."
+      ],
+      "pass_criteria": [
+       "The caregiver pulls one glove completely onto each hand with fingers seated properly.",
+       "The caregiver pulls the cuff of each glove up and over the sleeve cuff of the gown."
+      ],
+      "unverified_when": [
+       "The caregiver's wrists and hands are below or outside the camera frame while pulling on the gloves."
+      ]
+     }
+    },
+    {
+     "step_id": "s3",
+     "ord": 3,
+     "title": "Pinch the first glove's outer cuff",
+     "description": "The caregiver uses their non-dominant gloved hand to pinch the outside of the opposite glove near the wrist cuff to begin removal without touching bare skin.",
+     "start_s": 26.0,
+     "end_s": 36.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s2"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver brings one gloved hand to the wrist area of the other and pinches the glove material."
+      ],
+      "fail_criteria": [
+       "The caregiver's fingers touch bare skin on the wrist while grabbing the cuff.",
+       "The caregiver pulls the glove from the fingertips instead of pinching near the cuff."
+      ],
+      "pass_criteria": [
+       "The caregiver uses a gloved hand to pinch the outer surface of the opposite glove near the wrist cuff.",
+       "The caregiver's fingers stay on the outside of the glove and do not slip under the cuff onto bare skin or the gown."
+      ],
+      "unverified_when": [
+       "The hands are turned away from the camera or blocked so the pinch point at the wrist cannot be seen."
+      ]
+     }
+    },
+    {
+     "step_id": "s4",
+     "ord": 4,
+     "title": "Peel first glove inside-out and hold",
+     "description": "The caregiver peels the pinched glove off inside-out and wads it into the palm of the remaining gloved hand to contain contamination.",
+     "start_s": 36.0,
+     "end_s": 44.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s3"
+     ],
+     "evals": {
+      "visual_cues": [
+       "One hand becomes bare while the other gloved hand closes into a fist around the removed glove."
+      ],
+      "fail_criteria": [
+       "The caregiver snaps or flings the glove off, risking splatter.",
+       "The caregiver drops the removed glove or sets it on a clean surface instead of holding it.",
+       "The caregiver touches the outer surface of the remaining glove with the newly bare hand."
+      ],
+      "pass_criteria": [
+       "The caregiver pulls the glove smoothly away from the hand, turning it completely inside-out.",
+       "The caregiver balls up the removed glove and holds it securely in the palm of the remaining gloved hand."
+      ],
+      "unverified_when": [
+       "The caregiver's hands move out of frame while peeling or wadding the glove."
+      ]
+     }
+    },
+    {
+     "step_id": "s5",
+     "ord": 5,
+     "title": "Remove second glove inside-out from inside",
+     "description": "The caregiver slides a bare finger under the cuff of the remaining glove and pushes it off inside-out over the first glove so bare skin never touches the contaminated outside.",
+     "start_s": 45.0,
+     "end_s": 58.0,
+     "critical": true,
+     "order_dependent": true,
+     "must_follow": [
+      "s4"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The bare index finger hooks under the wrist cuff of the remaining glove and pulls it down and off over the wadded glove."
+      ],
+      "fail_criteria": [
+       "The caregiver touches the contaminated outer surface of the second glove with the bare hand or fingers.",
+       "The caregiver pulls the second glove off right-side-out, leaving the contaminated surface exposed."
+      ],
+      "pass_criteria": [
+       "The caregiver slides the index finger of the ungloved hand carefully underneath the inside of the remaining glove's cuff.",
+       "The caregiver pushes the finger forward to peel the second glove off inside-out, enclosing the first glove inside it.",
+       "The ungloved hand touches only the clean inner surface of the glove throughout removal."
+      ],
+      "unverified_when": [
+       "The caregiver's hands are blocked or out of frame when sliding the finger under the cuff."
+      ]
+     }
+    },
+    {
+     "step_id": "s6",
+     "ord": 6,
+     "title": "Dispose of the removed gloves",
+     "description": "The caregiver places the bundled inside-out gloves into an appropriate waste receptacle without contaminating surrounding surfaces.",
+     "start_s": 58.0,
+     "end_s": 60.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s5"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver holds the rolled-up gloves by the inside surface and discards them."
+      ],
+      "fail_criteria": [
+       "The caregiver leaves the used gloves on a counter, bed, or table.",
+       "The caregiver reaches into or touches the inside of the waste bin with bare hands."
+      ],
+      "pass_criteria": [
+       "The caregiver holds only the clean inner surface of the bundled gloves.",
+       "The caregiver drops the gloves directly into a waste or biohazard receptacle."
+      ],
+      "unverified_when": [
+       "The waste receptacle is outside the camera frame when the caregiver discards the gloves."
+      ]
+     }
+    },
+    {
+     "step_id": "s7",
+     "ord": 7,
+     "title": "Perform hand hygiene after glove removal",
+     "description": "The caregiver washes their hands with soap and water immediately after removing and discarding the gloves to eliminate any residual contamination.",
+     "start_s": 60.0,
+     "end_s": 62.0,
+     "critical": false,
+     "order_dependent": true,
+     "must_follow": [
+      "s6"
+     ],
+     "evals": {
+      "visual_cues": [
+       "The caregiver returns to the sink and washes bare hands with soap under running water."
+      ],
+      "fail_criteria": [
+       "The caregiver skips hand hygiene after removing and disposing of the gloves.",
+       "The caregiver touches personal items, their face, or clean surfaces before performing hand hygiene."
+      ],
+      "pass_criteria": [
+       "The caregiver washes all surfaces of both hands and wrists with soap and running water.",
+       "The caregiver rinses and dries their hands completely after glove removal."
+      ],
+      "unverified_when": [
+       "The sink or hand-washing station is outside the camera frame."
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

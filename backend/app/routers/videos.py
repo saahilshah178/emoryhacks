@@ -1,5 +1,6 @@
 """Upload, playback and thumbnails. Owned by branch feat/recording.
 
+GET  /api/videos/upload-target   {url, token, max_bytes}: where to POST a video (see upload_target)
 POST /api/videos            multipart: file, kind=reference|attempt, skill_id (attempt),
                             caregiver_name, expected_slug, expected_name
                             -> {video_id, job_id, attempt_id}
@@ -10,6 +11,12 @@ GET  /api/videos/{id}/thumb?t=12.5   JPEG frame at t seconds (cached on disk)
 Upload errors come back as {"detail": "<sentence for the user>"}: 400 for a bad
 request or empty file, 413 for a file over the size limit, 422 for a file that
 is not a readable video.
+
+A caregiver's attempt is checked before the file is read: 403 when the skill is not
+assigned to them, 409 when they have used every attempt the nurse allows ("You have used
+all 3 attempts for this skill. Ask your nurse for more."). Rules in app/progress.py. The
+attempt is graded but not sent to a nurse: the caregiver sends it with
+POST /api/attempts/{id}/submit. An attempt a nurse uploads counts as sent straight away.
 """
 from __future__ import annotations
 
@@ -21,7 +28,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
-from .. import auth, config, db, jobs, media, repo
+from .. import auth, config, db, jobs, media, progress, repo
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 log = logging.getLogger(__name__)
@@ -37,7 +44,7 @@ async def upload_video(
     caregiver_name: str = Form(""),
     expected_slug: str | None = Form(None),
     expected_name: str | None = Form(None),
-    user: dict = Depends(auth.current_user),
+    user: dict = Depends(auth.uploader),
 ):
     """A reference video (nurses only) starts the rubric pipeline; an attempt starts grading.
     A caregiver's attempt is recorded under their own account, whatever name is sent."""
@@ -45,8 +52,12 @@ async def upload_video(
         raise HTTPException(400, "kind must be 'reference' or 'attempt'")
     if kind == "reference" and user["role"] != "nurse":
         raise HTTPException(403, "Only a nurse can add a reference video.")
-    if kind == "attempt" and not _skill_exists(skill_id, user):
-        raise HTTPException(400, "An attempt needs the skill_id of an existing skill")
+    if kind == "attempt":
+        skill = _skill_or_none(skill_id, user)
+        if not skill:
+            raise HTTPException(400, "An attempt needs the skill_id of an existing skill")
+        if user["role"] == "caregiver":
+            _check_can_record(skill, user)  # before the file is read: a refusal costs no upload
 
     tmp = await _save_upload(file)
     try:
@@ -69,6 +80,23 @@ async def upload_video(
         attempt_id = repo.create_attempt(skill_id, video["id"], caregiver_name.strip()[:MAX_NAME_CHARS])
     job_id = jobs.submit_attempt(attempt_id, video["id"], skill_id)
     return {"video_id": video["id"], "job_id": job_id, "attempt_id": attempt_id}
+
+
+@router.get("/upload-target")
+def upload_target(user: dict = Depends(auth.current_user)):
+    """Where the browser should send a video, and how large it may be.
+
+    When the API has a public address of its own (config.PUBLIC_API_URL) the answer is that
+    address with an upload ticket to send as "Authorization: Bearer <token>", so the file does
+    not pass through the web app's proxy and its size cap. Otherwise url and token are null and
+    the browser posts to the web app's own /api/videos."""
+    limit = config.MAX_UPLOAD_MB * (1 << 20)
+    if config.PUBLIC_API_URL:
+        return {"url": f"{config.PUBLIC_API_URL}/api/videos", "token": auth.create_upload_ticket(user["id"]),
+                "max_bytes": limit}
+    if config.PROXY_MAX_UPLOAD_MB > 0:
+        limit = min(limit, int(config.PROXY_MAX_UPLOAD_MB * 1_000_000))
+    return {"url": None, "token": None, "max_bytes": limit}
 
 
 async def _save_upload(file: UploadFile) -> Path:
@@ -94,12 +122,21 @@ async def _save_upload(file: UploadFile) -> Path:
     return tmp
 
 
-def _skill_exists(skill_id: str | None, user: dict) -> bool:
+def _skill_or_none(skill_id: str | None, user: dict) -> dict | None:
     try:
         skill = repo.get_skill(uuid.UUID(skill_id)) if skill_id else None
     except ValueError:
-        return False
-    return bool(skill) and skill["org_id"] == user["org_id"]
+        return None
+    return skill if skill and skill["org_id"] == user["org_id"] else None
+
+
+def _check_can_record(skill: dict, user: dict) -> None:
+    """A caregiver records only skills assigned to them, and only while they have attempts left."""
+    if skill["slug"] not in repo.assigned_slugs(user["org_id"], user["id"]):
+        raise HTTPException(403, "This skill is not assigned to you. Ask your nurse if you think it should be.")
+    allowance = repo.allowance(user["org_id"], skill["slug"], user["id"])
+    if allowance["left"] == 0:
+        raise HTTPException(409, progress.no_attempts_left(allowance["allowed"]))
 
 
 def can_see_video(video: dict | None, user: dict) -> bool:

@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Camera, Info, Pencil, RefreshCw } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { referenceChapters } from "@/components/media/chapters";
 import { JobProgress } from "@/components/media/JobProgress";
+import { StepChapters, useCurrentChapter, useRevealInList } from "@/components/media/StepChapters";
 import { VideoFrame } from "@/components/media/VideoFrame";
 import { Button, Card, CardBody, EmptyState, ErrorNote, Loadable, Skeleton } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import { formatClock, plural } from "@/lib/format";
 import { useApi, useJob, useTitle } from "@/lib/hooks";
 import { useVideoSegments } from "@/lib/segment";
@@ -15,6 +18,7 @@ import type { Job, Skill } from "@/lib/types";
 import { BackLink } from "@/shared/layout/BackLink";
 import { PageHeading } from "@/shared/layout/PageHeading";
 import { ConfirmDialog } from "@/nurse/components/skills/ConfirmDialog";
+import { AttemptsSection } from "@/nurse/components/skills/AttemptsSection";
 import { ActionsCard, PeopleCard, SafetyCard, SkillFacts, VersionList } from "@/nurse/components/skills/SkillAside";
 import { CaregiverCopyForm, SkillDetailsForm } from "@/nurse/components/skills/SkillForms";
 import { StepCard } from "@/nurse/components/skills/StepCard";
@@ -95,7 +99,10 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
   const canRebuild = Boolean(video?.available);
   const rebuilding = jobId !== null && !failed;
   const allOpen = steps.length > 0 && steps.every((step) => open[step.step_id]);
-  const playhead = player.playing || player.time > 0 ? player.time : null;
+  const chapters = useMemo(() => referenceChapters(steps), [steps]);
+  const currentStep = useCurrentChapter(chapters, player.playhead, player.play);
+  const listRef = useRef<HTMLDivElement>(null);
+  useRevealInList(listRef, editing ? null : currentStep.id);
 
   async function startRebuild() {
     setRebuildStarting(true);
@@ -146,7 +153,7 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
         <div className="flex flex-wrap items-start gap-3 rounded-[12px] border border-info/20 bg-info-bg px-4 py-3 text-sm">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
           <p className="min-w-0 flex-1 text-ink">
-            This is an older version of the skill, kept because attempts were graded against it. New attempts are
+            This is an older version of the skill, kept because recordings were graded against it. New recordings are
             graded against the newest version.{" "}
             <Link href={`/dashboard/skills/${skill.latest_id}`} className="font-medium text-teal hover:underline">
               Go to the newest version{newest ? ` (version ${newest.version})` : ""}
@@ -160,10 +167,12 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
           <Pencil className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
           <p>
             You are editing version {skill.version}. Each save applies to this version straight away and changes
-            how future attempts against it are graded. Attempts already graded keep their results.
+            how future recordings against it are graded. Recordings already graded keep their results.
           </p>
         </div>
       ) : null}
+
+      <AttemptsSection skill={skill} />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
         <div className="min-w-0 space-y-5">
@@ -187,6 +196,20 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
               from here.
             </EmptyState>
           )}
+
+          {video && anyTimed ? (
+            <Card className="p-4">
+              <StepChapters
+                chapters={chapters}
+                duration={video.duration_s}
+                time={player.playhead}
+                activeId={currentStep.id}
+                onSelect={video.available ? currentStep.select : undefined}
+                label="Steps in the reference video"
+                missingText="No time in the video"
+              />
+            </Card>
+          ) : null}
 
           {jobId ? (
             <Card>
@@ -262,30 +285,45 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
                   : "Record a reference video and the steps are written from it."}
               </EmptyState>
             ) : (
-              steps.map((step) =>
-                editing ? (
-                  <StepEditor
-                    key={step.step_id}
-                    skillId={skill.id}
-                    step={step}
-                    steps={steps}
-                    video={video}
-                    onSaved={setSkill}
-                    onPlay={player.play}
-                  />
-                ) : (
-                  <StepCard
-                    key={step.step_id}
-                    step={step}
-                    steps={steps}
-                    video={video}
-                    active={playhead !== null && isTimed(step) && playhead >= step.start_s && playhead < step.end_s}
-                    open={Boolean(open[step.step_id])}
-                    onToggle={() => setOpen((current) => ({ ...current, [step.step_id]: !current[step.step_id] }))}
-                    onPlay={player.play}
-                  />
-                ),
-              )
+              // On a wide screen the steps scroll in their own box, so the step playing can be
+              // brought to the top of the box without moving the page. The space after the last
+              // step lets the last steps reach the top too.
+              <div
+                ref={listRef}
+                className={cn(
+                  "space-y-3",
+                  !editing &&
+                    "xl:-m-1 xl:max-h-[min(calc(100dvh-7rem),34rem)] xl:overflow-y-auto xl:overscroll-contain xl:p-1",
+                )}
+              >
+                {steps.map((step) =>
+                  editing ? (
+                    <StepEditor
+                      key={step.step_id}
+                      skillId={skill.id}
+                      step={step}
+                      steps={steps}
+                      video={video}
+                      onSaved={setSkill}
+                      onPlay={player.play}
+                    />
+                  ) : (
+                    <StepCard
+                      key={step.step_id}
+                      step={step}
+                      steps={steps}
+                      video={video}
+                      active={currentStep.id === step.step_id}
+                      open={Boolean(open[step.step_id])}
+                      onToggle={() => setOpen((current) => ({ ...current, [step.step_id]: !current[step.step_id] }))}
+                      onPlay={player.play}
+                    />
+                  ),
+                )}
+                {!editing && anyTimed ? (
+                  <div aria-hidden className="hidden h-[calc(min(100dvh-7rem,34rem)-11rem)] xl:block" />
+                ) : null}
+              </div>
             )}
           </section>
         </div>
@@ -318,9 +356,9 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
       >
         <p>
           The steps and criteria are written again from the video and saved as a new version of {skill.name}. New
-          attempts are graded against that version.
+          recordings are graded against that version.
         </p>
-        <p>This version, your edits to it and the attempts graded against it are kept.</p>
+        <p>This version, your edits to it and the recordings graded against it are kept.</p>
       </ConfirmDialog>
 
       <ConfirmDialog
@@ -339,7 +377,7 @@ function SkillDetail({ skill, setSkill }: { skill: Skill; setSkill: (skill: Skil
         <p>
           This also deletes{" "}
           <strong className="font-semibold text-ink">
-            {plural(thisVersion?.attempt_count ?? 0, "attempt")} graded against this version
+            {plural(thisVersion?.attempt_count ?? 0, "caregiver recording")} graded against this version
           </strong>
           , with their results and reviews. This can&apos;t be undone.
         </p>

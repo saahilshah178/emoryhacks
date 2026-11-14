@@ -1,45 +1,6 @@
-"""Prompt text for the timeline stage. Kept apart from the logic so it can be tuned alone."""
+"""Prompt text for the timeline stage's refine pass. Kept apart from the logic so it can be
+tuned alone. Where each step happens is asked in the whole-video prompt (assess_prompts.py)."""
 from __future__ import annotations
-
-from ..models import Rubric
-
-
-def steps_block(rubric: Rubric) -> str:
-    """The rubric steps as the model sees them: what to look for, never the reference timing."""
-    lines = []
-    for s in rubric.steps:
-        cues = "; ".join(s.evals.visual_cues) or "none listed"
-        lines.append(f"- {s.step_id}: {s.title}. {s.description} Look for: {cues}")
-    return "\n".join(lines)
-
-
-def locate(rubric: Rubric, duration: float) -> str:
-    return f"""You are reviewing a recording of a caregiver practising a physical care skill, so that a nurse can
-jump straight to each step. The recording is {duration:.1f} seconds long. Timestamps are seconds from the
-start of the recording, as plain numbers (for example 12.5), between 0 and {duration:.1f}.
-
-The skill has these steps (the order listed is the correct order; the caregiver may not follow it):
-{steps_block(rubric)}
-
-Work in two passes.
-1. In "observed", describe in order what actually happens in the recording, one short entry per distinct
-   action, with its start and end time. Use what you see and what you hear people say.
-2. In "steps", give one entry for every step id above. performed is true only if that action clearly happens
-   in this recording. start_s is when the caregiver begins doing the action (its first movement, or for a
-   spoken step the moment they say it) and end_s is when it is complete. Announcing a plan in advance ("I'll
-   lock the brakes, then help you up") is not the start of those steps. Use the timing you observed in this
-   recording only.
-
-Rules:
-- The people, room and camera angle may differ from any example of this skill. Judge the actions.
-- Steps can be done in any order, skipped, or repeated. Report each step where it really happens, even if
-  that is out of the listed order. If a step happens more than once, report its first complete performance
-  and mention the repeat in note.
-- Do not stretch a step to fill a gap, and do not mark a step performed because a related step was.
-- If the recording does not show this skill at all, mark every step not performed.
-- confidence is 0 to 1: how sure you are that the step happened at the time you gave.
-- note: a few words for the nurse when useful (what you saw, why it was not found, or a repeat). Refer to
-  other steps by their title, never by their id."""
 
 
 def refine(title: str, description: str, cues: list[str], start_s: float, end_s: float,

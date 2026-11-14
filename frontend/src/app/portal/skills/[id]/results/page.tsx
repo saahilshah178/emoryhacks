@@ -35,7 +35,7 @@ function Results() {
         <h1 className="mt-4 text-xl font-semibold text-navy">Record this skill first</h1>
         <p className="mt-2 max-w-sm text-sm leading-relaxed text-ink-secondary">
           {skill
-            ? `Once you send a recording of ${skill.name.toLowerCase()}, your step-by-step results will appear here. A nurse still makes the final decision.`
+            ? `Once you record ${skill.name.toLowerCase()} and it has been checked, your step-by-step results will appear here. You choose whether to send it to your nurse.`
             : "We couldn't find this skill in your list. Pick one from My skills to get started."}
         </p>
       </Card>

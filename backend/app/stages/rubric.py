@@ -1,12 +1,15 @@
 """Stage: rubric. Split a reference video into timestamped steps and write evals.
 
 Two Gemini passes, because one pass at 1 frame per second drifts on long videos:
-  1. outline: the whole video at 1 fps. Returns the steps in order with rough times,
-     evals, criticality and prerequisites, plus skill-level safety criteria.
+  1. outline: the whole video at 1 fps (at most OUTLINE_MAX_FRAMES frames, so fewer per
+     second on a long video). Returns the steps in order with rough times, evals,
+     criticality and prerequisites, plus skill-level safety criteria. Required.
   2. bounds: consecutive steps are grouped into clips of up to 150 seconds around
-     their rough times, and each clip is re-read at 2 fps to pin every step's start
-     and end. Clips are refined in parallel; a step whose refinement fails or looks
-     wrong keeps its rough times.
+     their rough times, and each clip is re-read at 2 fps (fewer when the clips add up
+     to more than BOUNDS_MAX_FRAMES frames) to pin every step's start and end. This pass
+     is optional spending: clips are refined in time order for as long as they fit in the
+     job's allowance. A step whose refinement is skipped, fails or looks wrong keeps its
+     rough times.
 build_rubric() then validates and repairs the result in plain code, so the stored
 rubric always satisfies the contract in models.py whatever the model returned.
 """
@@ -20,13 +23,19 @@ from pydantic import BaseModel, Field
 
 from .. import config, gemini
 from ..models import Classification, Rubric, RubricStep, StepEval
-from . import _fake
+from . import _budget, _fake
 from .rubric_prompts import bounds_prompt, outline_prompt
 
 MAX_CRITERIA = 4
 MIN_STEP_S = 1.0
 WINDOW_MAX_S = 150.0  # longest clip refined in one pass-2 call
 REFINE_FPS = 2
+MIN_REFINE_FPS = 0.5
+OUTLINE_MAX_FRAMES = 300
+BOUNDS_MAX_FRAMES = 360  # over all pass-2 clips together
+OUTLINE_MAX_TOKENS = 10000
+OUTLINE_EXPECTED_TOKENS = 5000
+BOUNDS_MAX_TOKENS = 3000
 
 
 # --- Gemini output schemas ---------------------------------------------------
@@ -89,17 +98,40 @@ def run(ctx, classification: Classification) -> Rubric:
     duration = ctx.duration
     draft = ctx.generate_json(
         "rubric_outline",
-        [ctx.video_part(resolution="medium"), gemini.text_part(outline_prompt(classification, duration))],
-        DraftRubric, model="main", thinking="medium",
+        [ctx.video_part(resolution="medium", fps=outline_fps(duration)),
+         gemini.text_part(outline_prompt(classification, duration))],
+        DraftRubric, model="main", thinking="medium", max_output_tokens=OUTLINE_MAX_TOKENS,
     )
     ctx.log(f"rubric outline: {len(draft.steps)} steps")
     draft = with_unique_numbers(draft)
     steps = sorted(draft.steps, key=lambda s: (s.start_s, s.number))
+    windows = plan_windows(steps, duration)
+    fps = bounds_fps(windows)
+    fit = _budget.how_many_fit(ctx, [_budget.clip_estimate(ctx, w.start_s, w.end_s, fps, "medium", 2500, 1000)
+                                     for w in windows])
+    if fit < len(windows):
+        ctx.log(f"rubric bounds: {len(windows) - fit} of {len(windows)} clips keep rough times, "
+                "the job's allowance is used up")
     bounds: dict[int, tuple[float, float]] = {}
     with ThreadPoolExecutor(max_workers=3) as pool:
-        for found in pool.map(lambda w: _refine(ctx, steps, w, duration), plan_windows(steps, duration)):
+        for found in pool.map(lambda w: _refine(ctx, steps, w, duration, fps), windows[:fit]):
             bounds.update(found)
     return build_rubric(draft, duration, bounds)
+
+
+def outline_fps(duration: float) -> float | None:
+    """Frames per second for the outline: the default 1, or fewer so at most OUTLINE_MAX_FRAMES are sent."""
+    if duration <= OUTLINE_MAX_FRAMES:
+        return None
+    return round(OUTLINE_MAX_FRAMES / duration, 3)
+
+
+def bounds_fps(windows: list[Window]) -> float:
+    """REFINE_FPS, or fewer (not below MIN_REFINE_FPS) when the clips together are long."""
+    total = sum(w.end_s - w.start_s for w in windows)
+    if total <= 0:
+        return REFINE_FPS
+    return round(max(MIN_REFINE_FPS, min(REFINE_FPS, BOUNDS_MAX_FRAMES / total)), 2)
 
 
 def with_unique_numbers(draft: DraftRubric) -> DraftRubric:
@@ -138,8 +170,9 @@ def plan_windows(steps: list[DraftStep], duration: float, max_len: float = WINDO
     return windows
 
 
-def _refine(ctx, steps: list[DraftStep], window: Window, duration: float) -> dict[int, tuple[float, float]]:
-    """Pin the boundaries of the window's steps on a 2 fps clip. Returns {draft number:
+def _refine(ctx, steps: list[DraftStep], window: Window, duration: float,
+            fps: float = REFINE_FPS) -> dict[int, tuple[float, float]]:
+    """Pin the boundaries of the window's steps on a clip at fps (2 by default). Returns {draft number:
     (start, end)} for the answers that pass sanity checks; the rest keep rough times."""
     members = [steps[i] for i in window.members]
     first, last = window.members[0], window.members[-1]
@@ -150,9 +183,10 @@ def _refine(ctx, steps: list[DraftStep], window: Window, duration: float) -> dic
     try:
         answer = ctx.generate_json(
             "rubric_bounds",
-            [ctx.video_part(resolution="medium", start_s=window.start_s, end_s=window.end_s, fps=REFINE_FPS),
+            [ctx.video_part(resolution="medium", start_s=window.start_s, end_s=window.end_s, fps=fps),
              gemini.text_part(prompt)],
-            WindowBounds, model="main", thinking="low",
+            WindowBounds, model="main", thinking="low", max_output_tokens=BOUNDS_MAX_TOKENS,
+            optional=True, expect_output_tokens=1000,
         )
     except gemini.GeminiError as exc:
         ctx.log(f"rubric bounds for {window.start_s:.0f}-{window.end_s:.0f}s failed, keeping rough times: {exc}")

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Circle, FileVideo, Square, VideoOff } from "lucide-react";
+import { Circle, FileVideo, RotateCcw, Square, VideoOff } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
 import { CoachingCue } from "@/caregiver/components/recording/CoachingCue";
 import { StepChecklist } from "@/caregiver/components/recording/StepChecklist";
+import { RecordingCountdown, recordingLimitNote } from "@/components/media/RecordingCountdown";
 import { formatClock } from "@/lib/format";
 import { useRecorder, type Recording } from "@/lib/recorder";
 import type { Skill } from "@/lib/types";
@@ -15,7 +16,7 @@ const MIN_SECONDS = 2;
 
 /**
  * The camera preview and the record button. Nothing is analysed here: the video is
- * checked after it is sent. Hands the finished take (or a chosen file) to onRecorded.
+ * checked after it is uploaded. Hands the finished take (or a chosen file) to onRecorded.
  * The camera is released when this component unmounts.
  */
 export function CameraStage({
@@ -28,9 +29,20 @@ export function CameraStage({
   onBack: () => void;
 }) {
   // Destructured once: the result holds the preview ref, so its other fields are read as plain values.
-  const { previewRef, phase, problem, seconds, recording, start, stop, useFile: chooseFile } = useRecorder({
-    facingMode: "user",
-  });
+  const {
+    previewRef,
+    phase,
+    problem,
+    fileProblem,
+    seconds,
+    remaining,
+    warning,
+    recording,
+    start,
+    stop,
+    reset,
+    useFile: chooseFile,
+  } = useRecorder({ facingMode: "user" });
   const fileInput = useRef<HTMLInputElement>(null);
 
   // A finished take (or a chosen file) moves the wizard on to the review step.
@@ -47,7 +59,7 @@ export function CameraStage({
       <PortalHeading
         eyebrow="Your turn"
         title={`Record ${skill.name.toLowerCase()}`}
-        description="Set up the camera so your whole body and the space around you are in view. Your movement is checked after you send the video."
+        description="Set up the camera so your whole body and the space around you are in view. You'll watch it back before it is checked."
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
@@ -93,6 +105,7 @@ export function CameraStage({
                   <p className="font-mono text-lg font-semibold tabular-nums text-white" aria-live="off">
                     {formatClock(seconds)}
                   </p>
+                  <RecordingCountdown remaining={remaining} warning={warning} className="ml-auto mr-2" />
                   {phase === "recording" ? (
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-navy">
                       <span className="relative flex h-2 w-2" aria-hidden>
@@ -114,6 +127,11 @@ export function CameraStage({
           {problem ? (
             <p role="alert" className="rounded-[12px] bg-warning-bg px-4 py-3 text-sm text-warning">
               {problem}
+            </p>
+          ) : null}
+          {fileProblem ? (
+            <p role="alert" className="rounded-[12px] bg-danger-bg px-4 py-3 text-sm text-danger">
+              {fileProblem}
             </p>
           ) : null}
 
@@ -164,9 +182,19 @@ export function CameraStage({
                 <FileVideo className="h-4 w-4" aria-hidden />
                 {phase === "unavailable" ? "Choose a video file" : "Choose a video file instead"}
               </Button>
+              {phase === "unavailable" ? (
+                // After allowing the camera in the browser there is no need to reload the page.
+                <Button variant="secondary" size="lg" onClick={reset} className="w-full">
+                  <RotateCcw className="h-4 w-4" aria-hidden />
+                  Try the camera again
+                </Button>
+              ) : null}
               <Button variant="ghost" size="lg" onClick={onBack} className="w-full">
                 Back
               </Button>
+              {phase !== "unavailable" ? (
+                <p className="text-center text-xs text-ink-secondary">{recordingLimitNote()}</p>
+              ) : null}
             </div>
           )}
 

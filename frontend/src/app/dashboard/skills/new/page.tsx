@@ -17,7 +17,7 @@ import {
   ProgressBar,
   Skeleton,
 } from "@/components/ui";
-import { errorMessage, uploadVideo } from "@/lib/api";
+import { api, errorMessage, uploadVideo } from "@/lib/api";
 import { useApi, useJob, useTitle } from "@/lib/hooks";
 import { useRecorder } from "@/lib/recorder";
 import type { Job, Skill } from "@/lib/types";
@@ -49,7 +49,7 @@ function NewSkill() {
   useTitle(target ? `New reference for ${target.name}` : "New skill");
 
   const router = useRouter();
-  const { reloadOverview } = useDashboard();
+  const { reloadOverview, showFlash } = useDashboard();
   const recorder = useRecorder({ facingMode: "user" });
   const [name, setName] = useState("");
   const [stage, setStage] = useState<"capture" | "uploading" | "processing">("capture");
@@ -62,11 +62,27 @@ function NewSkill() {
   useEffect(() => () => abortRef.current?.(), []);
 
   const onDone = useCallback(
-    (job: Job) => {
+    async (job: Job) => {
       reloadOverview();
+      if (job.skill_id) {
+        // Say which skill the video became: the AI may recognise it as one that already exists,
+        // in which case it is saved as that skill's next version rather than as a new skill.
+        try {
+          const made = await api<Skill>(`/skills/${job.skill_id}`);
+          showFlash({
+            tone: "success",
+            message:
+              made.version > 1
+                ? `Recognised as ${made.name}, which you already have. Saved as version ${made.version} of it; earlier versions are kept.`
+                : `Saved as a new skill: ${made.name}.`,
+          });
+        } catch {
+          // The skill still opens below; the note is only a courtesy.
+        }
+      }
       router.replace(job.skill_id ? `/dashboard/skills/${job.skill_id}` : "/dashboard/skills");
     },
-    [reloadOverview, router],
+    [reloadOverview, router, showFlash],
   );
   const { job, failed } = useJob(jobId, onDone);
 

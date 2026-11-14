@@ -1,4 +1,4 @@
-.PHONY: run dev web db migrate test seed sample logins e2e repose fake-demo cost
+.PHONY: run dev web db migrate test skills seed logins reset-data e2e repose cost
 
 # Start everything: the API and the web app. Open the address the web app prints
 # (http://localhost:3000, or the next free port). The API takes any free local port and is
@@ -29,19 +29,33 @@ migrate:
 test:
 	uv run pytest -q
 
-# Run the primary reference videos through the nurse pipeline (real Gemini calls)
+# Add any of the nine standard skills this database does not have yet (no Gemini calls; the
+# API does the same when it starts). `make skills ARGS=check` checks the file they come from,
+# `make skills ARGS=export` rewrites it from this database.
+skills:
+	cd backend && uv run python -m scripts.builtin_skills $(ARGS)
+
+# Build the nine rubrics again from the primary reference videos (real Gemini calls). Only
+# needed to replace the standard ones; `make skills ARGS=export` then saves the result.
 seed:
 	cd backend && uv run python -m scripts.seed_reference
 
-# Load (or reset) the sample agency, Harbor Home Care: a full roster, skills, attempts and
-# reviews to look around in. No Gemini calls. Its people can log in once `make logins` has run.
-sample:
-	cd backend && uv run python -m scripts.seed_sample
-
-# Give every login a new random password and write the usernames and passwords to LOGINS.md
-# (gitignored). These are the only accounts that can sign in; see backend/scripts/logins.py.
+# The six logins (nurse, nurse2, caregiver ... caregiver4; see backend/scripts/logins.py).
+# A login that exists keeps its password; a missing one gets a new random password; anyone
+# else loses their username. The passwords made in a run are written to LOGINS.md (gitignored).
+#   make logins ARGS="--reset nurse,caregiver2"   new password for only those logins
+#   make logins ARGS="--reset-all"                new password for every login
 logins:
-	cd backend && uv run python -m scripts.logins
+	cd backend && uv run python -m scripts.logins $(ARGS)
+
+# Start the data from scratch: delete every attempt, every agency but the default one, and
+# leftover accounts without a login. Keeps the logins, skills and reference videos. Prints
+# what it would delete and stops, unless ARGS has --yes; --files also deletes video files
+# nothing refers to any more.
+#   make reset-data                      look
+#   make reset-data ARGS="--yes --files" do it
+reset-data:
+	cd backend && uv run python -m scripts.reset_data $(ARGS)
 
 # Run stand-in caregiver attempts against the seeded skills (real Gemini calls).
 # Narrow it with: make e2e ARGS="--skills sit_to_stand --cases self,missing"
@@ -51,10 +65,6 @@ e2e:
 # Measure pose again for every skill's reference video (after changing how pose is measured)
 repose:
 	cd backend && uv run python -m scripts.repose $(ARGS)
-
-# Create one fake skill and one fake attempt without calling Gemini
-fake-demo:
-	cd backend && FIRSTSHIFT_FAKE_AI=1 uv run python -m scripts.fake_demo
 
 # Recorded Gemini spend for the current database
 cost:

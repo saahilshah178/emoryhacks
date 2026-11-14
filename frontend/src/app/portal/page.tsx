@@ -32,8 +32,8 @@ export default function HomePage() {
       <MySkillsLoadable
         skeleton={
           <div className="space-y-6 lg:space-y-5">
-            <div className="hidden gap-4 lg:grid lg:grid-cols-2 xl:grid-cols-4">
-              {[0, 1, 2, 3].map((key) => (
+            <div className="hidden gap-4 lg:grid lg:grid-cols-3 xl:grid-cols-5">
+              {[0, 1, 2, 3, 4].map((key) => (
                 <Skeleton key={key} className="h-28" />
               ))}
             </div>
@@ -47,12 +47,15 @@ export default function HomePage() {
       >
         {(skills, counts) => {
           const next = recommendedSkill(skills);
+          const ready = skills.filter((skill) => skill.ready_attempt_id).length;
+          // The tile counts practicing skills, so its note counts only theirs.
+          const readyPracticing = skills.filter((skill) => skill.ready_attempt_id && skill.state === "practicing").length;
           return (
             <div className="space-y-6 lg:space-y-5">
-              <ProgressTiles counts={counts} className="hidden lg:grid" />
+              <ProgressTiles counts={counts} ready={readyPracticing} className="hidden lg:grid" />
               <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-5">
                 <div className="space-y-6 lg:space-y-5">
-                  <ProgressOverview counts={counts} className="lg:hidden" />
+                  <ProgressOverview counts={counts} ready={ready} className="lg:hidden" />
                   {next ? <StartSkillCta skill={next} /> : <CaughtUpCard inReview={counts.in_review} />}
                   <SkillsAtAGlance skills={skills} className="hidden lg:block" />
                 </div>

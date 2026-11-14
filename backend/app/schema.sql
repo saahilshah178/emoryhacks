@@ -154,6 +154,24 @@ CREATE TABLE IF NOT EXISTS gemini_calls (
   created_at      timestamptz NOT NULL DEFAULT now()
 );
 -- @@
+-- First 8 hex digits of the SHA-256 of the API key that made the call (never the key), so
+-- GEMINI_BUDGET_USD applies to the key in use. NULL: logged before this existed (an older key).
+ALTER TABLE gemini_calls ADD COLUMN IF NOT EXISTS key_id text;
+-- @@
+CREATE INDEX IF NOT EXISTS gemini_calls_key_idx ON gemini_calls (key_id);
+-- @@
+-- A job's own spend, and the replies a resumed job reuses instead of paying for them again.
+CREATE INDEX IF NOT EXISTS gemini_calls_job_idx ON gemini_calls (job_id, purpose);
+-- @@
+-- Which key uploaded the cached Gemini file: a file uploaded with another key is not visible.
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS gemini_file_key text;
+-- @@
+-- How many times a job was resumed after a server restart, and what a resumed job needs that
+-- is not stored elsewhere (the pose summary, a reference job's classification and rubric).
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS resumes integer NOT NULL DEFAULT 0;
+-- @@
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS checkpoint jsonb NOT NULL DEFAULT '{}';
+-- @@
 -- One row per tracked person per video. person_idx is unique within a video
 -- (a new track after a camera cut gets a new person_idx).
 CREATE TABLE IF NOT EXISTS pose_tracks (
@@ -329,3 +347,47 @@ ALTER TABLE safety_flags ADD COLUMN IF NOT EXISTS title text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS username text;
 -- @@
 CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users (lower(username));
+-- @@
+-- What a nurse decides per skill, keyed by slug so it carries over to new versions of the
+-- skill. No row means the defaults: unlimited attempts, send at 80%, send anyway with a note
+-- from 50%, assigned to every caregiver of the agency.
+CREATE TABLE IF NOT EXISTS skill_policies (
+  org_id        uuid NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  slug          text NOT NULL,
+  max_attempts  integer CHECK (max_attempts IS NULL OR max_attempts BETWEEN 1 AND 50),  -- NULL = unlimited
+  submit_pct    real NOT NULL DEFAULT 80,
+  force_pct     real NOT NULL DEFAULT 50,
+  assign_all    boolean NOT NULL DEFAULT true,
+  updated_by    uuid REFERENCES users(id) ON DELETE SET NULL,
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (org_id, slug),
+  CHECK (0 <= force_pct AND force_pct <= submit_pct AND submit_pct <= 100)
+);
+-- @@
+-- One caregiver's assignment to a skill (read only when the policy's assign_all is false) and
+-- their own attempt limit: 'inherit' takes the policy's, 'limited' uses max_attempts here.
+CREATE TABLE IF NOT EXISTS skill_assignments (
+  org_id        uuid NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  slug          text NOT NULL,
+  caregiver_id  uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  assigned      boolean NOT NULL DEFAULT true,
+  limit_mode    text NOT NULL DEFAULT 'inherit' CHECK (limit_mode IN ('inherit', 'limited', 'unlimited')),
+  max_attempts  integer,
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (org_id, slug, caregiver_id)
+);
+-- @@
+-- When an attempt was sent to a nurse, and how. A caregiver's recording is stored with these
+-- NULL and stays with them until they send it (repo.create_attempt); anything else, such as an
+-- upload by a nurse or a row a script inserts, counts as sent when it is created.
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS submitted_at timestamptz DEFAULT now();
+-- @@
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS submit_kind text DEFAULT 'standard'
+  CHECK (submit_kind IN ('standard', 'forced'));
+-- @@
+-- The caregiver's reason for sending a recording the automatic check scored under the bar.
+ALTER TABLE attempts ADD COLUMN IF NOT EXISTS submit_note text NOT NULL DEFAULT '';
+-- @@
+-- NULL for an ordinary login. 'upload' marks a short-lived ticket that may only send videos
+-- (auth.create_upload_ticket), used when the browser uploads straight to the API's address.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS scope text;

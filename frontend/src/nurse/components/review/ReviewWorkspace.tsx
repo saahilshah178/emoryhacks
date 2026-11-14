@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AlertTriangle, Info } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, EyeOff, History, Info } from "lucide-react";
+import { attemptReferenceChapters } from "@/components/media/chapters";
+import { StepChapters } from "@/components/media/StepChapters";
 import { formatRange, hasSpan } from "@/lib/format";
 import { useVideoSegments } from "@/lib/segment";
 import type { Attempt, AttemptStep } from "@/lib/types";
 import { MovementPanel } from "./MovementPanel";
 import { PeoplePanel } from "./PeoplePanel";
+import { newestSubmission, PracticeRunNotice, SentAnywayBanner, SupersededNotice } from "./RecordingNotices";
+import { RecordingHistory } from "./RecordingHistory";
 import { ReviewActions } from "./ReviewActions";
 import { SafetyPanel } from "./SafetyPanel";
 import { StepList } from "./StepList";
@@ -22,11 +27,17 @@ export function ReviewWorkspace({ attempt }: { attempt: Attempt }) {
   const [reopened, setReopened] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [comparing, setComparing] = useState<string | null>(null);
+  // A replaced recording can still be decided on, but only after the nurse says so.
+  const [decideReplaced, setDecideReplaced] = useState(false);
 
   const available = attempt.video.available;
   const referenceAvailable = Boolean(attempt.reference_video?.available);
-  const editing = attempt.review_state === "pending" || reopened;
+  const practice = attempt.review_state === "unsubmitted";
+  const replaced = attempt.review_state === "superseded";
+  const editing = attempt.review_state === "pending" || reopened || (replaced && decideReplaced);
+  const newest = replaced ? newestSubmission(attempt) : null;
   const located = locatedSteps(attempt.steps);
+  const referenceChapters = useMemo(() => attemptReferenceChapters(attempt.steps), [attempt.steps]);
   const duration =
     attempt.video.duration_s || attempt.duration_s || Math.max(1, ...located.map(({ span }) => span.end));
 
@@ -100,12 +111,24 @@ export function ReviewWorkspace({ attempt }: { attempt: Attempt }) {
 
   return (
     <div className="space-y-5">
+      <PracticeRunNotice attempt={attempt} />
+      <SupersededNotice attempt={attempt} />
+      <SentAnywayBanner attempt={attempt} />
+
       <div className="flex items-start gap-3 rounded-[12px] border border-info/20 bg-info-bg px-4 py-3">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink">AI recommendation — not a certification</p>
+          {/* The summary is written to the caregiver ("You..."), so say whose words these are. */}
           <p className="mt-1 text-sm text-ink-secondary">
-            {attempt.overall_feedback || "The AI did not write a summary for this attempt."}
+            {attempt.overall_feedback ? (
+              <>
+                <span className="font-medium text-ink">What the caregiver was told: </span>
+                {attempt.overall_feedback}
+              </>
+            ) : (
+              "The AI did not write a summary for this attempt."
+            )}
           </p>
           {attempt.reasons.length ? (
             <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-ink-secondary">
@@ -137,6 +160,23 @@ export function ReviewWorkspace({ attempt }: { attempt: Attempt }) {
         reference={attempt.reference_video}
         referenceRef={reference.ref}
         referenceCaption={comparing}
+        referenceTimeline={
+          attempt.reference_video ? (
+            <StepChapters
+              chapters={referenceChapters}
+              duration={attempt.reference_video.duration_s}
+              time={reference.playhead}
+              onSelect={(chapter) => {
+                // The caption names a step chosen with "Compare"; the bar names its own.
+                setComparing(null);
+                reference.play(Number(chapter.start), chapter.end);
+              }}
+              label="Steps in the approved reference"
+              emptyText="The steps have no times in the reference video."
+              missingText="No time in the reference"
+            />
+          ) : null
+        }
         timeline={
           <>
             <StepTimeline
@@ -195,25 +235,64 @@ export function ReviewWorkspace({ attempt }: { attempt: Attempt }) {
           </section>
         </div>
 
-        <aside className="xl:sticky xl:top-20">
+        {/* Sticks beside the steps on a wide screen, scrolling on its own if it is taller than the window. */}
+        <aside className="space-y-5 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:overflow-y-auto xl:overscroll-contain">
           <div className="rounded-[12px] border border-border bg-white p-4 shadow-[var(--shadow-card)]">
             <h3 className="text-base font-semibold text-navy">Nurse decision</h3>
-            <p className="mt-1 text-sm text-ink-secondary">
-              Only a registered nurse can approve this skill for independent work.
-            </p>
-            <div className="mt-4">
-              <ReviewActions
-                attempt={attempt}
-                editing={editing}
-                onEdit={() => setReopened(true)}
-                onCancel={() => {
-                  setReopened(false);
-                  setOverrides(initialOverrides(attempt.steps));
-                }}
-                changedSteps={changed}
-              />
-            </div>
+            {practice ? (
+              <div className="mt-3 flex items-start gap-2 text-sm text-ink-secondary">
+                <EyeOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <p>
+                  Not sent to you, so there is nothing to decide. If the caregiver sends it, it appears in pending
+                  reviews.
+                </p>
+              </div>
+            ) : replaced && !decideReplaced ? (
+              <div className="mt-3 space-y-3 text-sm">
+                <div className="flex items-start gap-2 text-ink-secondary">
+                  <History className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                  <p>Replaced by a newer recording. Decide on the newest one, unless you mean to decide on this one.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {newest ? (
+                    <Link
+                      href={`/dashboard/reviews/${newest.id}`}
+                      className="inline-flex h-10 items-center rounded-[12px] bg-teal px-4 text-sm font-semibold text-white hover:bg-teal-hover"
+                    >
+                      Open the newest
+                    </Link>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setDecideReplaced(true)}
+                    className="h-10 rounded-[12px] px-3 text-sm font-medium text-ink-secondary hover:bg-secondary hover:text-ink"
+                  >
+                    Decide on this one anyway
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="mt-1 text-sm text-ink-secondary">
+                  Only a registered nurse can approve this skill for independent work.
+                </p>
+                <div className="mt-4">
+                  <ReviewActions
+                    attempt={attempt}
+                    editing={editing}
+                    onEdit={() => setReopened(true)}
+                    onCancel={() => {
+                      setReopened(false);
+                      setDecideReplaced(false);
+                      setOverrides(initialOverrides(attempt.steps));
+                    }}
+                    changedSteps={changed}
+                  />
+                </div>
+              </>
+            )}
           </div>
+          <RecordingHistory attempt={attempt} />
         </aside>
       </div>
 

@@ -58,6 +58,8 @@ def graded(migrated, sample_video):
         import time
         time.sleep(0.2)
     assert job["status"] == "done", job
+    # the caregiver sends it to the nurse (the canned score is under the bar; see test_submissions.py)
+    db.execute("UPDATE attempts SET submitted_at=now() WHERE id=%s", (body["attempt_id"],))
     return {"skill_id": str(skill_id), "attempt_id": body["attempt_id"], "video_id": body["video_id"],
             "caregiver": caregiver, "caregiver_client": caregiver_client}
 
@@ -105,44 +107,6 @@ def test_the_logins_are_a_fixed_set(migrated):
                                                "password": "long-enough"}).status_code == 401
     assert fresh.post("/api/auth/login", json={"email": "no.login@example.test",
                                                "password": "long-enough"}).status_code == 422
-
-
-def test_generated_logins(migrated, tmp_path):
-    """make logins: each run gives every login a new password, in the file and nowhere else."""
-    from scripts import logins, seed_sample
-
-    def log_in(username: str, password: str):
-        client = _anonymous()
-        return client, client.post("/api/auth/login", json={"username": username, "password": password})
-
-    assert seed_sample.main() == 0
-    path = tmp_path / "LOGINS.md"
-    first = {m["username"]: m["password"] for m in logins.generate(path)}
-    assert set(first) == {login.username for login in logins.LOGINS}
-    text = path.read_text()
-    assert all(f"`{username}` | `{password}`" in text for username, password in first.items())
-
-    nurse, res = log_in("nurse", first["nurse"])
-    user = res.json()
-    assert (user["role"], user["username"], user["org"]["id"]) == ("nurse", "nurse", str(auth.DEFAULT_ORG))
-    harbor = log_in("harbor.caregiver", first["harbor.caregiver"])[1].json()
-    assert (harbor["role"], harbor["name"], harbor["org"]["id"]) == ("caregiver", "Sarah Chen", str(auth.SAMPLE_ORG))
-
-    # loading the sample agency again keeps its logins
-    assert seed_sample.main() == 0
-    assert log_in("harbor.caregiver", first["harbor.caregiver"])[1].status_code == 200
-
-    # a second run replaces every password and signs those people out
-    second = {m["username"]: m["password"] for m in logins.generate(path)}
-    assert all(second[username] != first[username] for username in first)
-    assert first["nurse"] not in path.read_text() and second["nurse"] in path.read_text()
-    assert nurse.get("/api/auth/me").status_code == 401
-    assert log_in("nurse", first["nurse"])[1].status_code == 401
-    assert log_in("nurse", second["nurse"])[1].status_code == 200
-    # only the scrypt hash is stored, and the same person keeps the login
-    rows = db.fetch_all("SELECT id, password_hash FROM users WHERE username='nurse'")
-    assert len(rows) == 1 and str(rows[0]["id"]) == user["id"]
-    assert rows[0]["password_hash"].startswith("scrypt$") and second["nurse"] not in rows[0]["password_hash"]
 
 
 def test_everything_needs_a_session(migrated):
@@ -296,7 +260,8 @@ def test_caregiver_guide_falls_back_to_the_rubric_and_can_be_overridden(graded):
 # --- derived states (app/progress.py) ---------------------------------------------------------
 def _attempt(n: int, *, status="passed", nurse=None, reviewed=False, job="done", flags=0) -> dict:
     created = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc) + dt.timedelta(days=n)
-    row = {"id": f"a{n}", "created_at": created, "status": status, "nurse_status": nurse, "job_status": job,
+    row = {"id": f"a{n}", "created_at": created, "submitted_at": created, "status": status, "nurse_status": nurse,
+           "job_status": job,
            "reviewed_at": created + dt.timedelta(hours=1) if reviewed else None, "flag_count": flags}
     return progress.describe(row)
 
@@ -306,7 +271,7 @@ def _attempt(n: int, *, status="passed", nurse=None, reviewed=False, job="done",
     ({"status": None, "job": "error"}, ("error", None)),
     ({"status": None, "job": None}, ("error", None)),
     ({"status": "passed"}, ("pending", "passed")),
-    ({"status": "passed", "job": None}, ("pending", "passed")),  # sample data has no job rows
+    ({"status": "passed", "job": None}, ("pending", "passed")),  # an attempt with no job row
     ({"status": "unverified", "flags": 1}, ("pending", "needs_review")),
     ({"status": "failed"}, ("pending", "not_passed")),
     ({"status": "failed", "flags": 2}, ("pending", "safety_concern")),
@@ -338,29 +303,8 @@ def test_skill_state_follows_the_nurses_last_decision():
     assert progress.skill_state([approved, _attempt(5, nurse="failed", reviewed=True)])["state"] == "needs_practice"
 
 
-def test_sample_agency_seed(migrated):
-    """The sample agency loads, passes its own checks, and its nurse sees it through the API."""
-    from scripts import logins, seed_sample
-
-    assert seed_sample.main() == 0
-    assert seed_sample.main() == 0  # a re-seed replaces it cleanly
-    made = {m["username"]: m["password"] for m in logins.generate(None)}
-    client = _anonymous()
-    user = client.post("/api/auth/login", json={"username": "harbor.nurse",
-                                                "password": made["harbor.nurse"]}).json()
-    assert user["org"] == {"id": str(auth.SAMPLE_ORG), "name": "Harbor Home Care", "is_sample": True}
-    overview = client.get("/api/overview").json()
-    assert overview["counts"]["caregivers"] == 13 and overview["counts"]["pending"] == 8
-    assert overview["missed_steps"][0]["count"] == 11
-    pending = client.get("/api/attempts?state=pending").json()
-    attempt = client.get(f"/api/attempts/{pending[0]['id']}").json()
-    assert attempt["video"]["available"] is False and attempt["steps"]
-    # the default agency does not see the sample data
-    assert not any(s["org_id"] == str(auth.SAMPLE_ORG) for s in TestClient(app).get("/api/skills").json())
-
-
 def test_a_step_without_times_can_still_be_edited(graded):
-    """Steps written by hand (the sample agency's) have start = end = 0."""
+    """Steps written by hand have start = end = 0."""
     nurse = TestClient(app)
     db.execute("UPDATE skill_steps SET start_s=0, end_s=0 WHERE skill_id=%s AND step_id='s1'", (graded["skill_id"],))
     edited = nurse.patch(f"/api/skills/{graded['skill_id']}/steps/s1", json={"title": "Untimed but edited"})

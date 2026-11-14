@@ -27,8 +27,9 @@ from . import db
 
 COOKIE = "sid"
 SESSION_DAYS = 7
+UPLOAD_SCOPE = "upload"
+UPLOAD_MINUTES = 30
 DEFAULT_ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
-SAMPLE_ORG = uuid.UUID("00000000-0000-0000-0000-0000000000a1")
 _SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
 
 # token hash -> (user, time read). Saves a database round trip on every request of a page
@@ -59,11 +60,22 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def create_session(user_id) -> str:
+def create_session(user_id, *, scope: str | None = None, minutes: float | None = None) -> str:
+    """A new session token for the user. scope None is an ordinary login; a scoped token is
+    only accepted where that scope is asked for (see uploader)."""
     token = secrets.token_urlsafe(32)
-    db.execute("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (%s,%s,%s)",
-               (_token_hash(token), user_id, dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=SESSION_DAYS)))
+    life = dt.timedelta(minutes=minutes) if minutes else dt.timedelta(days=SESSION_DAYS)
+    db.execute("INSERT INTO sessions (token_hash, user_id, expires_at, scope) VALUES (%s,%s,%s,%s)",
+               (_token_hash(token), user_id, dt.datetime.now(dt.timezone.utc) + life, scope))
     return token
+
+
+def create_upload_ticket(user_id) -> str:
+    """A token that lets its holder send videos as this user for UPLOAD_MINUTES and do nothing
+    else. The web app hands it to the browser when uploads go straight to the API's own address
+    (config.PUBLIC_API_URL), where the login cookie is not sent. Old tickets are cleared here."""
+    db.execute("DELETE FROM sessions WHERE scope=%s AND expires_at < now()", (UPLOAD_SCOPE,))
+    return create_session(user_id, scope=UPLOAD_SCOPE, minutes=UPLOAD_MINUTES)
 
 
 def end_session(token: str | None) -> None:
@@ -95,16 +107,23 @@ def get_user(user_id) -> dict | None:
     return db.fetch_one(f"{_USER_SQL} WHERE u.id=%s", (user_id,))
 
 
-def user_for_token(token: str | None) -> dict | None:
+def user_for_token(token: str | None, scope: str | None = None) -> dict | None:
+    """The user a token belongs to. An ordinary session matches only scope None, and a scoped
+    token only its own scope, so an upload ticket cannot be used as a login."""
     if not token:
         return None
     key = _token_hash(token)
+    if scope is not None:  # rare, short-lived: not worth caching
+        return db.fetch_one(
+            f"{_USER_SQL} JOIN sessions s ON s.user_id = u.id "
+            "WHERE s.token_hash=%s AND s.scope=%s AND s.expires_at > now()", (key, scope))
     with _cache_lock:
         hit = _cache.get(key)
         if hit and time.monotonic() - hit[1] < _CACHE_SECONDS:
             return hit[0]
     user = db.fetch_one(
-        f"{_USER_SQL} JOIN sessions s ON s.user_id = u.id WHERE s.token_hash=%s AND s.expires_at > now()", (key,))
+        f"{_USER_SQL} JOIN sessions s ON s.user_id = u.id "
+        "WHERE s.token_hash=%s AND s.scope IS NULL AND s.expires_at > now()", (key,))
     with _cache_lock:
         if user:
             _cache[key] = (user, time.monotonic())
@@ -130,6 +149,15 @@ def clear_cookie(response: Response) -> None:
 
 def current_user(request: Request) -> dict:
     user = user_for_token(token_from(request))
+    if not user:
+        raise HTTPException(401, "Log in to continue.")
+    return user
+
+
+def uploader(request: Request) -> dict:
+    """Who is sending a video: a signed-in user, or the holder of an upload ticket."""
+    token = token_from(request)
+    user = user_for_token(token) or user_for_token(token, scope=UPLOAD_SCOPE)
     if not user:
         raise HTTPException(401, "Log in to continue.")
     return user

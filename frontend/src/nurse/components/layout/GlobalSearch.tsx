@@ -97,7 +97,11 @@ function attemptOption(attempt: AttemptSummary): Option {
     key: `attempt-${attempt.id}`,
     href: `/dashboard/reviews/${attempt.id}`,
     title: attempt.skill_name,
-    detail: `${attempt.caregiver_name} · ${relativeTime(attempt.created_at)}`,
+    // The list holds what caregivers sent, so it is timed by when it was sent.
+    detail: `${attempt.caregiver_name} · sent ${relativeTime(attempt.submitted_at ?? attempt.created_at).replace(
+      /^(Just now|Yesterday)$/,
+      (m) => m.toLowerCase(),
+    )}${attempt.submit_kind === "forced" ? " · sent anyway" : ""}`,
     leading: <IconTile icon={Video} />,
     trailing: <StateBadge entry={reviewState[attempt.review_state]} />,
   };
@@ -259,7 +263,7 @@ export function GlobalSearch({ onOpen, className }: { onOpen?: () => void; class
         <div
           // Keeps the cursor in the box while a result is clicked, so the list does not close first.
           onMouseDown={(event) => event.preventDefault()}
-          className="absolute left-0 top-full z-40 mt-2 w-[28rem] min-w-full max-w-[calc(100vw-2rem)] overflow-hidden rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]"
+          className="fixed inset-x-3 top-[4.25rem] z-40 overflow-hidden sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-2 sm:w-[28rem] sm:min-w-full sm:max-w-[calc(100vw-2rem)] rounded-[12px] border border-border bg-white shadow-[var(--shadow-card)]"
         >
           <div id={listId} role="listbox" aria-label="Search results" className="max-h-[min(70vh,30rem)] overflow-y-auto p-1.5">
             {groups.map((item, at) => (

@@ -82,7 +82,7 @@ export default function MovementDetailPage() {
                 actions={
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone={sum.video.kind === "reference" ? "teal" : "neutral"}>
-                      {sum.video.kind === "reference" ? "Reference" : "Caregiver attempt"}
+                      {sum.video.kind === "reference" ? "Reference" : "Caregiver recording"}
                     </Badge>
                     {sum.attempt ? (
                       <Link
@@ -119,7 +119,7 @@ export default function MovementDetailPage() {
                           <>
                             <p className="text-sm font-medium text-white">This recording isn&apos;t stored on this server</p>
                             <p className="max-w-sm text-xs text-white/70">
-                              Sample data, or recorded on another machine. The measured readings below are still
+                              Recorded on another machine. The measured readings below are still
                               shown.
                             </p>
                           </>

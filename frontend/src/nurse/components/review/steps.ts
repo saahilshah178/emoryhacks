@@ -1,32 +1,37 @@
 // How the review screen reads an attempt's steps.
 import { attemptStepSpan, type AttemptSpan } from "@/components/media/chapters";
-import type { Attempt, AttemptStep, OrderViolation, Status } from "@/lib/types";
+import type { Attempt, AttemptStep, OrderViolation, StepReview, StepStatus } from "@/lib/types";
 
 export type Span = AttemptSpan;
 
 /** The nurse's per-step choice while the decision form is open. */
-export type Override = { status: Status | null; note: string };
+export type Override = { status: StepStatus | null; note: string };
 export type Overrides = Record<string, Override>;
 
 /**
  * Where a step is in the attempt video: the timeline's span, or else the stretch the grader
- * cited as evidence (the grader looks for steps the timeline missed). Null when neither.
+ * cited as evidence (the grader looks for steps the timeline missed). Null when neither, and
+ * null for a step that was not needed (counting the nurse's unsaved choice): it has no time.
  */
-export function stepSpan(step: AttemptStep): Span | null {
-  return attemptStepSpan(step);
+export function stepSpan(step: AttemptStep, override?: Override | null): Span | null {
+  return attemptStepSpan(step, effectiveStatus(step, override));
 }
 
 /** Steps that have a place in the video, in video order. */
-export function locatedSteps(steps: AttemptStep[]) {
+export function locatedSteps(steps: AttemptStep[], overrides: Overrides = {}) {
   return steps
-    .map((step) => ({ step, span: stepSpan(step) }))
+    .map((step) => ({ step, span: stepSpan(step, overrides[step.step_id]) }))
     .filter((item): item is { step: AttemptStep; span: Span } => item.span !== null)
     .sort((a, b) => a.span.start - b.span.start || a.step.ord - b.step.ord);
 }
 
-/** The status that stands for a step: the nurse's draft, then the nurse's saved status, then the AI's. */
-export function effectiveStatus(step: AttemptStep, override?: Override | null): Status | null {
-  return override?.status ?? step.nurse_status ?? step.status;
+/**
+ * The status that stands for a step: while the form is open, the nurse's draft (a cleared
+ * choice means the AI's again); otherwise the nurse's saved status, then the AI's.
+ */
+export function effectiveStatus(step: AttemptStep, override?: Override | null): StepStatus | null {
+  if (override) return override.status ?? step.status;
+  return step.nurse_status ?? step.status;
 }
 
 export function violationsFor(attempt: Pick<Attempt, "order_violations">, stepId: string): OrderViolation[] {
@@ -34,8 +39,8 @@ export function violationsFor(attempt: Pick<Attempt, "order_violations">, stepId
 }
 
 /** The step under the playhead: the latest-starting one when spans overlap. */
-export function stepAt(steps: AttemptStep[], seconds: number) {
-  const here = locatedSteps(steps).filter(({ span }) => span.start <= seconds && seconds < span.end);
+export function stepAt(steps: AttemptStep[], seconds: number, overrides: Overrides = {}) {
+  const here = locatedSteps(steps, overrides).filter(({ span }) => span.start <= seconds && seconds < span.end);
   return here.length ? here[here.length - 1].step : null;
 }
 
@@ -57,7 +62,7 @@ export function initialOverrides(steps: AttemptStep[]): Overrides {
 }
 
 /** The steps whose choice differs from what is saved: the only ones sent with the decision. */
-export function changedSteps(steps: AttemptStep[], overrides: Overrides) {
+export function changedSteps(steps: AttemptStep[], overrides: Overrides): StepReview[] {
   return steps
     .filter((s) => {
       const o = overrides[s.step_id];

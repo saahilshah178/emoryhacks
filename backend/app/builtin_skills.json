@@ -1763,7 +1763,7 @@
    ],
    "name": "Stair assistance",
    "category": "mobility",
-   "summary": "An instructor demonstrates ascending and descending stairs with various crutches and walkers, then assists and guards a patient going up and down the stairs using crutches.",
+   "summary": "A caregiver guards a patient on crutches going up and down stairs, staying behind them on their weaker side on the way up and below them on the way down.",
    "order_matters": true,
    "safety_criteria": [
     "The patient wears a secured gait belt and the caregiver maintains a hold on it during all stair transitions.",
@@ -1797,7 +1797,7 @@
       "description": "Younger woman with dark hair in a braid, wearing a white long-sleeved shirt and dark jeans; she uses crutches to climb and descend the stairs with assistance."
      }
     ],
-    "summary": "An instructor demonstrates ascending and descending stairs with various crutches and walkers, then assists and guards a patient going up and down the stairs using crutches.",
+    "summary": "A caregiver guards a patient on crutches going up and down stairs, staying behind them on their weaker side on the way up and below them on the way down.",
     "category": "mobility",
     "confidence": 0.98,
     "skill_name": "Stair assistance",
@@ -1985,7 +1985,7 @@
    ],
    "name": "Fall response",
    "category": "emergency",
-   "summary": "A caregiver supports an unsteady patient from behind and gently lowers him down her leg to the floor during a fall, then stays with him and uses the call bell to summon help.",
+   "summary": "A caregiver supports an unsteady patient from behind and gently lowers him down her leg to the floor during a fall, then stays with him, summoning help with the call bell if he is hurt or cannot get up.",
    "order_matters": true,
    "safety_criteria": [
     "Caregiver maintains a wide stance, bent knees, and a straight back while lowering the patient to prevent caregiver back injury.",

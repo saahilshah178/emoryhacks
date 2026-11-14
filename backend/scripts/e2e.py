@@ -90,7 +90,6 @@ def build_case(skill: dict, case: str) -> dict | None:
     """Return {src, expect...} for a case, writing a cut video when needed. None if not applicable."""
     slug = skill["slug"]
     ref_path = skill["video"]["path"]
-    duration = float(skill["video"]["duration_s"])
     tmp = config.TMP_DIR / f"e2e_{slug}_{case}.mp4"
     if case == "self":
         return {"src": ref_path}
@@ -134,6 +133,7 @@ def run_case(skill: dict, case: str) -> dict:
     row = {"skill": skill["slug"], "case": case}
     started = time.time()
     try:
+        skill["video"] = repo.ensure_video_file(skill["video"])  # a standard skill's file is made on first use
         spec = build_case(skill, case)
         if spec is None:
             return {**row, "skipped": True, "detail": "not applicable for this skill"}
@@ -161,6 +161,9 @@ def run_case(skill: dict, case: str) -> dict:
         flags=[f"{f['severity']}:{f['kind']}" for f in counted],
         double_checked=sum(1 for s in steps if s["double_checked"]),
         stages={s["name"]: s["status"] for s in job["stages"]}, seconds=round(time.time() - started, 1),
+        duration_s=round(float(attempt["video"]["duration_s"]), 1), usd=round(gemini.job_spent_usd(job_id), 4),
+        calls=db.fetch_one("SELECT count(*) AS n FROM gemini_calls WHERE job_id=%s AND error IS NULL",
+                           (job_id,))["n"],
     )
     # Expectations
     ok: bool | None = None
@@ -216,7 +219,8 @@ def main() -> int:
         bad += r["expected_ok"] is False
         print(f"{mark} {r['skill']:<20} {r['case']:<8} overall={r['overall']:<10} score={r['score']} steps={r['steps']} "
               f"match={r['skill_match']} not_found={r['not_found']} violations={r['violations']} flags={r['flags']} "
-              f"rechecked={r['double_checked']} {r['seconds']}s  {r['detail']}")
+              f"rechecked={r['double_checked']} {r['seconds']}s  {r['detail']}  "
+              f"[{r['duration_s']} s video, {r['calls']} calls, ${r['usd']:.3f}]")
     out = config.DATA_DIR / "e2e_report.json"
     out.write_text(json.dumps(rows, indent=2, default=str))
     print(f"\n{len(rows)} cases, {bad} not as expected. Gemini spend for this run: "

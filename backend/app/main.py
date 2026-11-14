@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import builtin, config, db, gemini, repo
+from . import jobs as pipeline
 from .routers import accounts, attempts, jobs, people, review, safety, skills, videos
 
 
@@ -21,7 +22,7 @@ async def lifespan(app: FastAPI):
     config.ensure_dirs()
     db.migrate()
     builtin.ensure()  # the nine standard skills, on any database, without a Gemini call
-    repo.fail_interrupted_jobs()
+    pipeline.resume_interrupted()  # grading cut short by the last shutdown carries on where it stopped
     yield
     db.close()
 
@@ -55,7 +56,12 @@ def health():
         "database": {"source": config.DB_SOURCE, "tiger_cloud": config.DB_IS_TIGER_CLOUD, **row},
         "gemini": {"key_set": bool(config.GEMINI_API_KEY), "model_main": config.GEMINI_MODEL_MAIN,
                    "model_strong": config.GEMINI_MODEL_STRONG, "fake_ai": config.FAKE_AI,
+                   # spend of the key now configured, which is what the budget applies to
                    "spent_usd": round(gemini.spent_usd(), 4), "budget_usd": config.GEMINI_BUDGET_USD,
+                   "key_id": gemini.key_id() if config.GEMINI_API_KEY else None,
+                   "spent_all_keys_usd": round(gemini.spent_all_usd(), 4),
+                   "job_budget_usd": config.GEMINI_JOB_BUDGET_USD,
+                   "reference_budget_usd": config.GEMINI_REFERENCE_BUDGET_USD,
                    # set when the last video failed because of the AI account (credit, budget, key)
                    "problem": repo.ai_problem()},
     }

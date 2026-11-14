@@ -2,18 +2,22 @@
 identify the people, flag patient-safety problems, and double-check unclear steps.
 
   run(ctx, rubric, timeline) -> Evaluation
-      One Gemini pass over the whole attempt, then a closer second look (model "strong",
-      higher frame rate and resolution, just the step's clip) at every step that came back
-      unverified, below MIN_CONFIDENCE, or failed while critical. A step the recording
-      stopped before is failed in code (see apply_recording_end) rather than re-examined.
+      The grading comes from the same whole-video Gemini call that located the steps
+      (assess.assess; the timeline stage made it, so no new call is needed here). Then a
+      closer second look (main model, a denser clip of just the step) at up to
+      MAX_DOUBLE_CHECKS steps that came back unverified, below MIN_CONFIDENCE, or failed while
+      critical, as optional spending: only as many as fit in the job's allowance, keeping
+      RESERVE_USD for the later stages. A step the recording stopped before is failed in code
+      (see apply_recording_end) rather than re-examined.
   confirm_pose_flags(ctx, rubric, flags) -> list[SafetyFlag]
       Pose readings are noisy, so a pose-derived flag only counts once Gemini sees the
-      same problem on the clip around it.
+      same problem on the clip around it (optional spending too).
 
 Owned by branch feat/evaluate.
 """
 from __future__ import annotations
 
+import math
 from collections.abc import Collection
 from concurrent.futures import ThreadPoolExecutor
 
@@ -23,19 +27,22 @@ from .. import config, gemini
 from ..models import (
     Evaluation, FlagKind, PersonObs, Rubric, RubricStep, SafetyFlag, Severity, Status, StepResult, Timeline,
 )
-from . import _fake
+from . import _budget, _fake, assess
 from . import evaluate_prompts as prompts
+from .assess import FlagObservation
 
 MIN_CONFIDENCE = 0.7          # below this a step gets a second look
-MAX_DOUBLE_CHECKS = 6         # per attempt, to bound cost and latency
+CONFIDENT_UNSEEN = 0.85       # an unverified step at least this sure it could not be seen gets none
+MAX_DOUBLE_CHECKS = 3         # per attempt, to bound cost and latency
 MAX_FLAG_CHECKS = 3           # pose candidates confirmed per attempt
 CLIP_PAD_S = 3.0              # seconds added either side of a step's time range
 MAX_CLIP_S = 60.0             # a step's clip takes in first-pass evidence only up to this length
 WHOLE_VIDEO_FPS = 1.0         # frame rate when a second look has to watch the whole video
 RECORDING_END_SLACK_S = 4.0   # located steps ending this close to the end mean the recording stopped there
 FLAG_PAD_S = 2.0              # seconds added either side of a pose flag
-HIGH_RES_MIN_HEIGHT = 600     # video at least this tall is double-checked at high resolution
-DOUBLE_CHECK_MAX_TOKENS = 6000  # thinking plus reply for one second look on the strong model
+DOUBLE_CHECK_MAX_TOKENS = 4000  # thinking plus reply for one second look
+DOUBLE_CHECK_EXPECTED_TOKENS = 1200
+RESERVE_USD = 0.02            # left in the allowance by the second looks, for roles and flag checks
 SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
 
 
@@ -54,15 +61,6 @@ class StepJudgement(BaseModel):
     status: Status
     confidence_pct: int = Field(description="0 to 100: how sure you are of the status")
     feedback: str = Field(description="one or two sentences to the caregiver")
-
-
-class FlagObservation(BaseModel):
-    kind: FlagKind
-    severity: Severity
-    start_s: int = Field(description="whole seconds from the start of the video")
-    end_s: int | None = Field(default=None, description="whole seconds from the start of the video")
-    person_label: str | None = None
-    description: str
 
 
 class GradeReply(BaseModel):
@@ -85,19 +83,29 @@ class FlagCheckReply(BaseModel):
 
 
 # --- stage entry points ------------------------------------------------------
+def grade_reply_from(reply: assess.AssessReply) -> GradeReply:
+    """The grading half of the whole-video reply. The span a step was located at, widened to
+    whole seconds, is its evidence span."""
+    def outward(s: assess.StepAssessment) -> tuple[int | None, int | None]:
+        if s.start_s is None:
+            return None, None
+        return math.floor(s.start_s), math.ceil(s.end_s) if s.end_s is not None else None
+
+    return GradeReply(
+        people=reply.people, skill_match=reply.skill_match, skill_match_note=reply.skill_match_note,
+        steps=[StepJudgement(step_id=s.step_id, evidence=s.evidence, evidence_start_s=outward(s)[0],
+                             evidence_end_s=outward(s)[1], status=s.status,
+                             confidence_pct=s.confidence_pct, feedback=s.feedback) for s in reply.steps],
+        safety_flags=reply.safety_flags, overall_feedback=reply.overall_feedback,
+    )
+
+
 def run(ctx, rubric: Rubric, timeline: Timeline) -> Evaluation:
     """Grade the attempt, then double-check unclear steps on their own clips
     (skipped when the video does not show the skill)."""
     if config.FAKE_AI:
         return _fake.evaluation(ctx, rubric, timeline)
-    skill = ctx.skill or {}
-    reply = ctx.generate_json(
-        "evaluate",
-        [ctx.video_part(resolution="medium"),
-         {"type": "text", "text": prompts.grade_prompt(skill, rubric, timeline, ctx.duration)}],
-        GradeReply, model="main", thinking="medium",
-    )
-    evaluation = build_evaluation(reply, rubric, ctx.duration)
+    evaluation = build_evaluation(grade_reply_from(assess.assess(ctx, rubric)), rubric, ctx.duration)
     if not evaluation.skill_match:  # steps of a different skill are not worth a closer look
         return evaluation
     not_reached = apply_recording_end(rubric, timeline, evaluation, ctx.duration)
@@ -111,14 +119,23 @@ def run(ctx, rubric: Rubric, timeline: Timeline) -> Evaluation:
 def confirm_pose_flags(ctx, rubric: Rubric, flags: list[SafetyFlag]) -> list[SafetyFlag]:
     """Ask Gemini to confirm the most severe pose candidates on their clips.
 
-    Up to MAX_FLAG_CHECKS candidates, most severe first, are checked. A confirmed flag comes
-    back with source "pose_confirmed", counts_toward_score True, Gemini's severity and a
-    description of what was seen. Every other flag is returned unchanged, in the same order."""
+    Up to MAX_FLAG_CHECKS candidates, most severe first, are checked, as many as fit in the
+    job's allowance. A confirmed flag comes back with source "pose_confirmed",
+    counts_toward_score True, Gemini's severity and a description of what was seen. Every
+    other flag is returned unchanged, in the same order."""
     if config.FAKE_AI or not flags:
         return list(flags)
     ranked = sorted(range(len(flags)), key=lambda i: (SEVERITY_RANK.get(flags[i].severity, 3), flags[i].start_s))
     to_check = [i for i in ranked if flags[i].source == "pose"][:MAX_FLAG_CHECKS]
+    estimates = [_budget.clip_estimate(ctx, *flag_clip(flags[i], ctx.duration), 2, "medium", 2500, 500)
+                 for i in to_check]
+    fit = _budget.how_many_fit(ctx, estimates)
+    if fit < len(to_check):
+        ctx.log(f"confirm flags: {len(to_check) - fit} of {len(to_check)} not checked, the job's allowance is used up")
+    to_check = to_check[:fit]
     result = list(flags)
+    if not to_check:
+        return result
     with ThreadPoolExecutor(max_workers=len(to_check) or 1, thread_name_prefix="confirm") as pool:
         futures = {i: pool.submit(_confirm_one, ctx, rubric, flags[i]) for i in to_check}
     for i, future in futures.items():
@@ -244,8 +261,11 @@ def settled_by_recording_end(rubric: Rubric, timeline: Timeline, evaluation: Eva
 
 # --- double-check ----------------------------------------------------------------
 def needs_double_check(result: StepResult, step: RubricStep) -> bool:
-    return (result.status == "unverified" or result.confidence < MIN_CONFIDENCE
-            or (result.status == "failed" and step.critical))
+    """Unclear steps: low confidence, unverified (unless the first look was sure it could not be
+    seen, as when it is out of frame), or failed while critical. A second look at a step the
+    first look was sure it could not see has been seen to invent a pass for it."""
+    return ((result.status == "unverified" and result.confidence < CONFIDENT_UNSEEN)
+            or result.confidence < MIN_CONFIDENCE or (result.status == "failed" and step.critical))
 
 
 def pick_double_checks(rubric: Rubric, evaluation: Evaluation, skip: Collection[str] = ()) -> list[str]:
@@ -311,29 +331,27 @@ def clip_sampling(length_s: float) -> float:
 
 
 def _double_check_one(ctx, step: RubricStep, start: float, end: float) -> StepResult:
-    """One second look. The whole video is watched at a low frame rate and medium resolution
-    to bound its cost; a step's own clip gets denser frames."""
+    """One second look on the main model at medium resolution. The whole video is watched at a
+    low frame rate to bound its cost; a step's own clip gets denser frames."""
     whole = is_whole_video(start, end, ctx.duration)
-    if whole:
-        video = ctx.video_part(resolution="medium", start_s=start, end_s=end, fps=WHOLE_VIDEO_FPS)
-    else:
-        video = ctx.video_part(resolution=_clip_resolution(ctx), start_s=start, end_s=end,
-                               fps=clip_sampling(end - start))
+    fps = WHOLE_VIDEO_FPS if whole else clip_sampling(end - start)
     j = ctx.generate_json(
         f"evaluate_double_check:{step.step_id}",
-        [video,
+        [ctx.video_part(resolution="medium", start_s=start, end_s=end, fps=fps),
          {"type": "text", "text": prompts.double_check_prompt(ctx.skill or {}, step, start, end, ctx.duration, whole)}],
         # thinking "medium" on an ambiguous clip has used 20k thought tokens (about $0.40 a step)
-        StepJudgement, model="strong", thinking="low", max_output_tokens=DOUBLE_CHECK_MAX_TOKENS,
+        StepJudgement, model="main", thinking="low", max_output_tokens=DOUBLE_CHECK_MAX_TOKENS,
+        optional=True, expect_output_tokens=DOUBLE_CHECK_EXPECTED_TOKENS,
     )
     j.step_id = step.step_id
     return to_step_result(j, ctx.duration, double_checked=True)
 
 
-def _clip_resolution(ctx) -> str:
-    """High resolution costs about four times as much and only helps when the source has the
-    pixels: use it for webcam-sized video, not for small reference clips."""
-    return "high" if int(ctx.video.get("height") or 0) >= HIGH_RES_MIN_HEIGHT else "medium"
+def double_check_estimate(ctx, start: float, end: float) -> float:
+    """Rough cost of one second look on the clip from start to end."""
+    whole = is_whole_video(start, end, ctx.duration)
+    return _budget.clip_estimate(ctx, start, end, WHOLE_VIDEO_FPS if whole else clip_sampling(end - start),
+                                 "medium", 4000, DOUBLE_CHECK_EXPECTED_TOKENS)
 
 
 def better_supported(before: StepResult, after: StepResult, whole_video: bool) -> StepResult:
@@ -362,6 +380,12 @@ def _double_check(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evaluatio
     steps = {s.step_id: s for s in rubric.steps}
     index = {r.step_id: i for i, r in enumerate(evaluation.steps)}
     windows = {i: step_window(i, rubric, timeline, evaluation.steps[index[i]], ctx.duration) for i in picked}
+    fit = _budget.how_many_fit(ctx, [double_check_estimate(ctx, *windows[i]) for i in picked], RESERVE_USD)
+    if fit < len(picked):
+        ctx.log(f"second looks: {len(picked) - fit} of {len(picked)} skipped, the job's allowance is used up")
+    picked = picked[:fit]
+    if not picked:
+        return False
     with ThreadPoolExecutor(max_workers=len(picked), thread_name_prefix="double_check") as pool:
         futures = {i: pool.submit(_double_check_one, ctx, steps[i], *windows[i]) for i in picked}
     for step_id, future in futures.items():
@@ -398,7 +422,7 @@ def _rewrite_feedback(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evalu
     )
     try:
         text = ctx.generate_text("evaluate_summary", [{"type": "text", "text": prompt}], thinking="low",
-                                 max_output_tokens=1500)
+                                 max_output_tokens=1500, optional=True, expect_output_tokens=600)
     except gemini.GeminiError as exc:
         ctx.log(f"could not rewrite the overall feedback: {exc}")
         return evaluation.overall_feedback
@@ -406,17 +430,23 @@ def _rewrite_feedback(ctx, rubric: Rubric, timeline: Timeline, evaluation: Evalu
 
 
 # --- pose flag confirmation ----------------------------------------------------
-def _confirm_one(ctx, rubric: Rubric, flag: SafetyFlag) -> SafetyFlag:
-    end_cap = ctx.duration if ctx.duration > 0 else float("inf")
+def flag_clip(flag: SafetyFlag, duration: float) -> tuple[float, float]:
+    """The clip a pose flag is checked on: its span with FLAG_PAD_S either side."""
+    end_cap = duration if duration > 0 else float("inf")
     start = max(0.0, flag.start_s - FLAG_PAD_S)
     end = min(end_cap, (flag.end_s if flag.end_s is not None else flag.start_s) + FLAG_PAD_S)
-    end = max(end, start + 1.0)
+    return start, max(end, start + 1.0)
+
+
+def _confirm_one(ctx, rubric: Rubric, flag: SafetyFlag) -> SafetyFlag:
+    start, end = flag_clip(flag, ctx.duration)
     reply = ctx.generate_json(
         "evaluate_confirm_flag",
         [ctx.video_part(resolution="medium", start_s=start, end_s=end, fps=2),
          {"type": "text", "text": prompts.confirm_flag_prompt(ctx.skill or {}, flag, start, end, ctx.duration,
                                                               rubric.safety_criteria)}],
-        FlagCheckReply, model="main", thinking="low",
+        FlagCheckReply, model="main", thinking="low", max_output_tokens=2000,
+        optional=True, expect_output_tokens=500,
     )
     if not reply.observed:
         return flag

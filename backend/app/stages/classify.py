@@ -76,8 +76,9 @@ ALIASES: dict[str, str] = {
     "hand_sanitizing": "hand_hygiene",
 }
 
-# Above this length the frame rate is lowered so a video costs at most this many frames.
-MAX_FRAMES = 150
+# Above this length the frame rate is lowered so a video costs at most this many frames. Naming
+# the skill needs far fewer frames than writing its steps; the audio track is billed in full.
+MAX_FRAMES = 60
 
 
 class _Person(BaseModel):
@@ -107,7 +108,7 @@ def run(ctx) -> Classification:
     duration = ctx.duration
     prompt = CLASSIFY_PROMPT.format(duration=duration, catalog=catalog.catalog_prompt())
     parts = [ctx.video_part(resolution="low", fps=sample_fps(duration)), gemini.text_part(prompt)]
-    reply = ctx.generate_json("classify", parts, _Reply, model="main", thinking="low")
+    reply = ctx.generate_json("classify", parts, _Reply, model="main", thinking="low", max_output_tokens=4000)
     result = postprocess(reply)
     if ctx.slug_hint and ctx.slug_hint != result.skill_slug:
         ctx.log(f"classify: expected {ctx.slug_hint}, model said {result.skill_slug} ({result.confidence:.2f})")

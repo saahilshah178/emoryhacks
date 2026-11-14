@@ -4,7 +4,8 @@ extract(ctx) reads the video once with OpenCV, runs MediaPipe Pose Landmarker on
 sampled frames, keeps person identities with a box tracker, and writes one pose_frames
 row per tracked person per sampled frame (formulas in app/pose_math.py).
 assign_roles(ctx, people) asks Gemini which track is the caregiver and which the
-patient, using one still frame per call.
+patient, in one call with up to MAX_ROLE_FRAMES still frames (none when the people list
+already settles it).
 """
 from __future__ import annotations
 
@@ -403,9 +404,10 @@ def relabel_flags(video_id, flags: list[SafetyFlag]) -> list[SafetyFlag]:
 
 
 # --- roles ----------------------------------------------------------------
-MAX_ROLE_CALLS = 4
-MIN_ROLE_SECONDS = 1.0  # tracks spanning less time than this are not worth a Gemini call
+MAX_ROLE_FRAMES = 3     # stills sent, in a single call
+MIN_ROLE_SECONDS = 1.0  # tracks spanning less time than this are not worth asking about
 MIN_ROLE_IOU = 0.2
+ROLE_IMAGE_WIDTH = 640
 
 
 class RoleBox(BaseModel):
@@ -414,17 +416,23 @@ class RoleBox(BaseModel):
     box_2d: list[int] = Field(description="[ymin, xmin, ymax, xmax] on a 0-1000 scale around the whole person")
 
 
-class RoleBoxes(BaseModel):
+class FrameRoles(BaseModel):
+    image: int = Field(description="the image number, from 1")
     people: list[RoleBox]
+
+
+class RoleFrames(BaseModel):
+    images: list[FrameRoles]
 
 
 def assign_roles(ctx, people: list[PersonObs]) -> None:
     """Label pose tracks as caregiver, patient or other and store them with repo.set_track_roles.
 
     One person and no patient: every track is that caregiver, with no Gemini call.
-    Otherwise up to MAX_ROLE_CALLS stills are sent to Gemini, each at a time when as many
-    unlabelled tracks as possible are visible, and the returned boxes are matched to the
-    track boxes by overlap. Tracks that cannot be matched stay 'unknown'."""
+    Otherwise up to MAX_ROLE_FRAMES stills are picked, each at a time when as many tracks not
+    yet covered as possible are visible, and sent to Gemini together in one call. The boxes it
+    returns for each still are matched to the track boxes by overlap. Tracks that cannot be
+    matched stay 'unknown'."""
     tracks = [t for t in repo.get_tracks(ctx.video_id) if t["last_t"] - t["first_t"] >= MIN_ROLE_SECONDS]
     if not tracks:
         return
@@ -439,28 +447,40 @@ def assign_roles(ctx, people: list[PersonObs]) -> None:
     by_time: dict[float, dict[int, dict]] = defaultdict(dict)
     for f in frames:
         by_time[f["t_offset"]][f["person_idx"]] = f
-    pending = {t["person_idx"]: t for t in tracks}
+    stills = pick_stills(by_time, tracks)
+    if not stills:
+        return
+    try:
+        found = _ask_roles(ctx, [t for t, _ in stills], people)
+    except gemini.GeminiError as exc:
+        ctx.log(f"roles: Gemini call failed: {exc}")
+        return
     roles: dict[int, str] = {}
-    for _ in range(MAX_ROLE_CALLS):
-        if not pending:
-            break
+    for k, (_, present) in enumerate(stills):
+        for idx, role in _match_roles(present, found.get(k + 1, [])).items():
+            roles.setdefault(idx, role)
+    if roles:
+        repo.set_track_roles(ctx.video_id, roles)
+
+
+def pick_stills(by_time: dict[float, dict[int, dict]], tracks: list[dict],
+                limit: int = MAX_ROLE_FRAMES) -> list[tuple[float, dict[int, dict]]]:
+    """Up to limit (time, {person_idx: frame}) stills that between them show every track that
+    can be shown: the largest track not yet covered anchors each still, at the time when most
+    uncovered tracks are in view."""
+    pending = {t["person_idx"]: t for t in tracks}
+    stills = []
+    while pending and len(stills) < limit:
         anchor = max(pending.values(), key=lambda t: t["n_frames"])
         t = _best_time(by_time, anchor, set(pending))
         if t is None:
             pending.pop(anchor["person_idx"])
             continue
         present = {k: v for k, v in by_time[t].items() if k in pending}
-        try:
-            found = _ask_roles(ctx, t, people)
-        except gemini.GeminiError as exc:
-            ctx.log(f"roles: Gemini call failed at {t:.1f}s: {exc}")
-            break
-        for idx, role in _match_roles(present, found).items():
-            roles[idx] = role
-            pending.pop(idx, None)
-        pending.pop(anchor["person_idx"], None)  # never ask about the same track twice
-    if roles:
-        repo.set_track_roles(ctx.video_id, roles)
+        stills.append((t, present))
+        for k in present:
+            pending.pop(k, None)
+    return stills
 
 
 def _overlap_in_time(tracks: list[dict]) -> bool:
@@ -483,19 +503,26 @@ def _best_time(by_time: dict[float, dict[int, dict]], anchor: dict, pending: set
     return best
 
 
-def _ask_roles(ctx, t: float, people: list[PersonObs]) -> list[RoleBox]:
+def _ask_roles(ctx, times: list[float], people: list[PersonObs]) -> dict[int, list[RoleBox]]:
+    """One Gemini call over the stills at times; returns the boxes for each image number (from 1)."""
     listed = "\n".join(f"- {p.label} ({p.role}): {p.description}" for p in people) or "- (no description available)"
-    prompt = (
-        "This is one still frame from a caregiving video. Earlier analysis of the video described these people:\n"
-        f"{listed}\n\n"
-        "Return one entry for every person visible in this frame, including people only partly in view. "
-        "For each give box_2d = [ymin, xmin, ymax, xmax] on a 0-1000 scale around the whole visible body, "
+    parts: list[dict] = []
+    for k, t in enumerate(times, start=1):
+        parts += [gemini.text_part(f"Image {k}, at {t:.1f} s:"), gemini.image_part(ctx.frame_jpeg(t, ROLE_IMAGE_WIDTH), resolution="medium")]
+    parts.append(gemini.text_part(
+        f"{'These are still frames' if len(times) > 1 else 'This is one still frame'} from a caregiving video. "
+        f"Earlier analysis of the video described these people:\n{listed}\n\n"
+        "For each image, return one entry for every person visible in it, including people only partly in view. "
+        "For each person give box_2d = [ymin, xmin, ymax, xmax] on a 0-1000 scale around the whole visible body, "
         "role = caregiver (the person giving help), patient (the person being helped) or other, "
         "and label = the matching label from the list above."
-    )
-    reply = ctx.generate_json("pose_roles", [gemini.image_part(ctx.frame_jpeg(t)), gemini.text_part(prompt)],
-                              RoleBoxes, model="main", thinking="low")
-    return [p for p in reply.people if len(p.box_2d) == 4]
+    ))
+    reply = ctx.generate_json("pose_roles", parts, RoleFrames, model="main", thinking="low", max_output_tokens=3000,
+                              expect_output_tokens=800)
+    out: dict[int, list[RoleBox]] = {}
+    for frame in reply.images:
+        out.setdefault(frame.image, [p for p in frame.people if len(p.box_2d) == 4])
+    return out
 
 
 def _match_roles(present: dict[int, dict], found: list[RoleBox]) -> dict[int, str]:

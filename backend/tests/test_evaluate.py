@@ -7,13 +7,27 @@ from app import config
 from app.models import (
     Evaluation, OrderViolation, PersonObs, SafetyFlag, StepResult, Timeline, TimelineStep,
 )
-from app.stages import _fake, evaluate, scoring
+from app.stages import _fake, assess, evaluate, scoring
 from app.stages.evaluate import FlagCheckReply, FlagObservation, GradeReply, StepJudgement
 from fixtures_evaluate import GLOVE_MISSING_TIMELINE, GLOVE_REMOVAL, GLOVE_SKILL, GLOVE_TIMELINE
 
 
+def as_assessment(grade: GradeReply) -> assess.AssessReply:
+    """The whole-video reply that carries the same grading (located where the evidence was seen)."""
+    return assess.AssessReply(
+        observed=[], people=grade.people, skill_match=grade.skill_match, skill_match_note=grade.skill_match_note,
+        steps=[assess.StepAssessment(step_id=j.step_id, performed=j.evidence_start_s is not None,
+                                     start_s=j.evidence_start_s, end_s=j.evidence_end_s, timing_confidence_pct=80,
+                                     evidence=j.evidence, status=j.status, confidence_pct=j.confidence_pct,
+                                     feedback=j.feedback, note="") for j in grade.steps],
+        safety_flags=grade.safety_flags, overall_feedback=grade.overall_feedback,
+    )
+
+
 class StubCtx:
-    """Stands in for jobs.StageContext: records Gemini requests and answers them with `answer`."""
+    """Stands in for jobs.StageContext: records Gemini requests and answers them with `answer`.
+    `answer` gives a GradeReply for the whole-video call ("evaluate"), which is sent as the
+    equivalent AssessReply."""
 
     def __init__(self, answer, duration=60.0, skill=GLOVE_SKILL):
         self.answer = answer
@@ -30,6 +44,8 @@ class StubCtx:
     def generate_json(self, purpose, parts, schema, **kwargs):
         with self._lock:
             self.calls.append({"purpose": purpose, "video": parts[0], "schema": schema, **kwargs})
+        if purpose == "assess":
+            return as_assessment(self.answer("evaluate", parts, schema))
         return self.answer(purpose, parts, schema)
 
     def generate_text(self, purpose, parts, **kwargs):
@@ -121,8 +137,8 @@ def test_double_check_picks_unclear_steps_and_replaces_them(real_ai):
     checks = [c for c in ctx.calls if c["purpose"].startswith("evaluate_double_check")]
     assert sorted(c["purpose"].split(":")[1] for c in checks) == ["s1", "s2", "s4"]
     for c in checks:
-        assert c["model"] == "strong" and c["schema"] is StepJudgement
-        assert c["video"]["resolution"] == "medium" and c["video"]["fps"] > 1  # the stub video is 360p
+        assert c["model"] == "main" and c["schema"] is StepJudgement and c["optional"]
+        assert c["video"]["resolution"] == "medium" and c["video"]["fps"] > 1
     assert ev.overall_feedback == "Rewritten summary."  # a status changed, so the summary was rewritten
     s1_clip = next(c["video"] for c in checks if c["purpose"].endswith("s1"))
     assert (s1_clip["start_s"], s1_clip["end_s"]) == (26.0, 39.0)  # timeline 29-36 padded by 3 s
@@ -141,12 +157,13 @@ def test_double_check_is_capped_and_critical_first(real_ai):
         StepResult(step_id=s.step_id, status="unverified", confidence=0.1 if s.step_id.startswith("x") else 0.6,
                    feedback="") for s in rubric.steps
     ]))
-    assert len(picked) == evaluate.MAX_DOUBLE_CHECKS
-    assert picked[:4] == ["s1", "s2", "s4", "s5"]  # the critical steps come first
+    assert len(picked) == evaluate.MAX_DOUBLE_CHECKS == 3
+    assert picked == ["s1", "s2", "s4"]  # the critical steps come first
 
 
 def test_failed_double_check_keeps_first_result(real_ai):
-    reply = grade_reply(steps=[judgement(f"s{i}", "unverified" if i == 2 else "passed", 90) for i in range(1, 7)])
+    reply = grade_reply(steps=[judgement(f"s{i}", "unverified" if i == 2 else "passed", 60 if i == 2 else 90)
+                               for i in range(1, 7)])
 
     def second(step_id):
         raise RuntimeError("model unavailable")
@@ -156,12 +173,69 @@ def test_failed_double_check_keeps_first_result(real_ai):
     assert any("keeping first result" in line for line in ctx.logs)
 
 
+def test_a_step_the_first_look_was_sure_it_could_not_see_gets_no_second_look(real_ai):
+    # A second look at a jump cut over the second glove has been seen to invent a pass for it.
+    reply = grade_reply(steps=[judgement(f"s{i}", "passed", 95) for i in range(1, 5)]
+                        + [judgement("s5", "unverified", 90), judgement("s6", "unverified", 60)])
+    ctx = StubCtx(answer_with(reply), duration=70.0)
+    ev = evaluate.run(ctx, GLOVE_REMOVAL, GLOVE_TIMELINE)
+    checked = [c["purpose"] for c in ctx.calls if c["purpose"].startswith("evaluate_double_check")]
+    assert checked == ["evaluate_double_check:s6"]
+    assert ev.steps[4].status == "unverified" and not ev.steps[4].double_checked
+
+
+def test_second_looks_stop_at_the_allowance_and_keep_a_reserve(real_ai):
+    reply = grade_reply(steps=[judgement(f"s{i}", "unverified", 50) for i in range(1, 7)])
+    ctx = StubCtx(answer_with(reply), duration=70.0)
+    allowance = {"left": 0.0}
+    ctx.affordable = lambda usd: usd <= allowance["left"]
+    evaluate.run(ctx, GLOVE_REMOVAL, GLOVE_TIMELINE)
+    assert not [c for c in ctx.calls if c["purpose"].startswith("evaluate_double_check")]
+
+    first = evaluate.to_step_result(judgement("s1", "unverified", 50), 70.0)
+    one = evaluate.double_check_estimate(ctx, *evaluate.step_window("s1", GLOVE_REMOVAL, GLOVE_TIMELINE, first, 70.0))
+    allowance["left"] = one + evaluate.RESERVE_USD + 0.001  # room for one second look and the reserve
+    ctx.calls.clear()
+    evaluate.run(ctx, GLOVE_REMOVAL, GLOVE_TIMELINE)
+    checked = [c["purpose"] for c in ctx.calls if c["purpose"].startswith("evaluate_double_check")]
+    assert checked == ["evaluate_double_check:s1"]
+
+
+def test_timeline_and_evaluate_share_one_whole_video_call(real_ai):
+    from app.stages import timeline
+
+    reply = grade_reply(steps=[judgement(f"s{i}", "passed", 95, start=5 * i, end=5 * i + 3) for i in range(1, 7)])
+    ctx = StubCtx(answer_with(reply), duration=70.0)
+    tl = timeline.run(ctx, GLOVE_REMOVAL)
+    ev = evaluate.run(ctx, GLOVE_REMOVAL, tl)
+    assert [c["purpose"] for c in ctx.calls] == ["assess"]
+    assert c_fps(ctx) == 2.0 and ctx.calls[0]["thinking"] == "medium"
+    assert [(t.start_s, t.end_s) for t in tl.steps] == [(5.0 * i, 5.0 * i + 3) for i in range(1, 7)]
+    assert [(r.evidence_start_s, r.status) for r in ev.steps] == [(5.0 * i, "passed") for i in range(1, 7)]
+
+
+def test_located_spans_keep_tenths_and_the_evidence_span_covers_them():
+    from app.stages import timeline
+
+    grade = grade_reply(steps=[judgement(f"s{i}", "passed", 95, start=5 * i, end=5 * i + 3) for i in range(1, 7)])
+    reply = as_assessment(grade)
+    reply.steps[0] = reply.steps[0].model_copy(update={"start_s": 12.4, "end_s": 15.6})
+    [located, *_] = timeline.located_from(reply)
+    assert (located.start_s, located.end_s) == (12.4, 15.6)
+    first = evaluate.grade_reply_from(reply).steps[0]
+    assert (first.evidence_start_s, first.evidence_end_s) == (12, 16)
+
+
+def c_fps(ctx):
+    return ctx.calls[0]["video"]["fps"]
+
+
 def test_skill_mismatch_skips_double_check(real_ai):
     reply = grade_reply(steps=[judgement(f"s{i}", "failed", 95) for i in range(1, 7)], skill_match=False,
                         skill_match_note="Shows a fall response.")
     ctx = StubCtx(answer_with(reply))
     ev = evaluate.run(ctx, GLOVE_REMOVAL, GLOVE_TIMELINE)
-    assert [c["purpose"] for c in ctx.calls] == ["evaluate"]
+    assert [c["purpose"] for c in ctx.calls] == ["assess"]
     assert ev.skill_match is False and ev.skill_match_note == "Shows a fall response."
 
 
@@ -280,13 +354,13 @@ def test_timeline_step_none_times_do_not_break_window():
     assert evaluate.step_window("s3", GLOVE_REMOVAL, timeline, None, 70.0) == (0.0, 70.0)
 
 
-def test_double_check_uses_high_resolution_for_webcam_sized_video(real_ai):
+def test_second_looks_use_medium_resolution_on_the_main_model_even_for_webcam_video(real_ai):
     reply = grade_reply(steps=[judgement(f"s{i}", "passed", 95) for i in range(1, 7)][:5] + [judgement("s6", "passed", 40)])
     ctx = StubCtx(answer_with(reply), duration=70.0)
     ctx.video = {"height": 720}
     evaluate.run(ctx, GLOVE_REMOVAL, GLOVE_TIMELINE)
     checks = [c for c in ctx.calls if c["purpose"].startswith("evaluate_double_check")]
-    assert checks and all(c["video"]["resolution"] == "high" for c in checks)
+    assert checks and all(c["video"]["resolution"] == "medium" and c["model"] == "main" for c in checks)
     assert all(c["max_output_tokens"] == evaluate.DOUBLE_CHECK_MAX_TOKENS for c in checks)
 
 
@@ -406,11 +480,12 @@ def test_double_check_prompt_fails_an_absent_step_only_on_the_whole_video():
     assert "the whole 70-second video" in whole and "recording ends before it" in whole
 
 
-def test_grade_prompt_fails_a_step_that_was_never_performed():
-    prompt = evaluate.prompts.grade_prompt(GLOVE_SKILL, GLOVE_REMOVAL, GLOVE_TIMELINE, 70)
+def test_whole_video_prompt_fails_a_step_that_was_never_performed():
+    prompt = assess.assess_prompts.assess_prompt(GLOVE_SKILL, GLOVE_REMOVAL, 70)
     assert "or the recording ends before it" in prompt
     assert "A step the recording\n     ends before is failed, not unverified" in prompt
-    assert "use null for both" in prompt
+    assert "null for both when it is not performed" in prompt
+    assert "The recording is 70 seconds long" in prompt and "[s1]" in prompt
 
 
 # --- a recording that stops early -----------------------------------------------------
@@ -479,7 +554,7 @@ def test_confirmed_flag_on_a_track_with_no_known_role_drops_the_track_label(real
 
 
 def test_safety_prompts_do_not_flag_the_instability_a_drill_is_about():
-    grade = evaluate.prompts.grade_prompt(GLOVE_SKILL, GLOVE_REMOVAL, GLOVE_TIMELINE, 70)
+    grade = assess.assess_prompts.assess_prompt(GLOVE_SKILL, GLOVE_REMOVAL, 70)
     confirm = evaluate.prompts.confirm_flag_prompt(GLOVE_SKILL, _pose_flag("medium", 10), 8, 14, 70, [])
     assert "do not flag that instability itself" in grade
     assert "the loss of balance a drill" in confirm

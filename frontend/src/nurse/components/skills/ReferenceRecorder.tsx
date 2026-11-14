@@ -6,7 +6,7 @@ import { RecordingCountdown, recordingLimitNote } from "@/components/media/Recor
 import { Button, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatClock } from "@/lib/format";
-import type { useRecorder } from "@/lib/recorder";
+import { settleRecordingDuration, type useRecorder } from "@/lib/recorder";
 
 type Recorder = ReturnType<typeof useRecorder>;
 
@@ -80,6 +80,7 @@ export function ReferenceRecorder({
             src={recording.url}
             controls
             playsInline
+            onLoadedMetadata={(event) => settleRecordingDuration(event.currentTarget)}
             aria-label="Your recording"
             className="aspect-video w-full bg-black object-contain"
           />

@@ -62,6 +62,25 @@ function extensionFor(mime: string) {
 }
 
 /**
+ * For a <video> playing back a fresh recording: pass it from onLoadedMetadata.
+ *
+ * Chrome reports a just-recorded WebM's length as Infinity until it has seen the end, so the
+ * seek bar shows no length and can't be dragged. Jumping far ahead makes it work the length
+ * out; the player then goes back to the start.
+ */
+export function settleRecordingDuration(video: HTMLVideoElement) {
+  if (video.duration !== Infinity) return;
+  video.addEventListener(
+    "durationchange",
+    () => {
+      video.currentTime = 0;
+    },
+    { once: true },
+  );
+  video.currentTime = 1e9;
+}
+
+/**
  * Camera preview and recording.
  *
  *   const r = useRecorder({ facingMode: "user" });
@@ -86,6 +105,7 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef(0);
   const timerRef = useRef(0);
+  const cameraRequestRef = useRef(0);
 
   const [phase, setPhase] = useState<RecorderPhase>("starting");
   const [problem, setProblem] = useState<string | null>(null);
@@ -108,8 +128,13 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
     }
   }, []);
 
-  // Every state change happens once the browser has answered, never while rendering.
+  // Every state change happens once the browser has answered, never while rendering. Each
+  // request takes a number; closing the camera moves the number on, so a request that is
+  // answered after the camera was closed (the screen was left, or React's development mode
+  // mounted it twice) stops its stream at once instead of leaving the camera on.
   const openCamera = useCallback(() => {
+    const requestId = ++cameraRequestRef.current;
+    const current = () => requestId === cameraRequestRef.current;
     const devices = typeof navigator === "undefined" ? undefined : navigator.mediaDevices;
     const request: Promise<MediaStream> = devices?.getUserMedia
       ? devices.getUserMedia({
@@ -124,12 +149,17 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
       : Promise.reject(new DOMException("No camera API", "NotSupportedError"));
     return request.then(
       (stream) => {
+        if (!current()) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         streamRef.current = stream;
         attachPreview();
         setProblem(null);
         setPhase("ready");
       },
       (error: unknown) => {
+        if (!current()) return;
         const name = error instanceof DOMException ? error.name : "";
         setProblem(
           name === "NotAllowedError"
@@ -146,17 +176,14 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
   }, [attachPreview, facingMode]);
 
   const closeCamera = useCallback(() => {
+    cameraRequestRef.current += 1;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    void openCamera().then(() => {
-      if (cancelled) closeCamera();
-    });
+    void openCamera();
     return () => {
-      cancelled = true;
       stopTimer();
       const recorder = recorderRef.current;
       if (recorder && recorder.state !== "inactive") {
@@ -183,6 +210,9 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
         setPhase("ready");
         return;
       }
+      // The camera isn't needed to watch the take back, so it is switched off; reset() turns
+      // it on again for another take.
+      closeCamera();
       setRecording({
         blob,
         url: URL.createObjectURL(blob),
@@ -192,7 +222,7 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
       });
       setPhase("recorded");
     },
-    [stopTimer],
+    [closeCamera, stopTimer],
   );
 
   const stop = useCallback(() => {
@@ -277,6 +307,7 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
       }
       const accept = () => {
         stop();
+        closeCamera();
         discard();
         setProblem(null);
         setFileProblem(null);
@@ -295,7 +326,7 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
         () => setFileProblem(uploadTooLarge(file.size)),
       );
     },
-    [discard, stop],
+    [closeCamera, discard, stop],
   );
 
   const remaining = Math.max(0, maxSeconds - seconds);

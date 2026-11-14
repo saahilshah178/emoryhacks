@@ -4,7 +4,7 @@ import { Clock3, RotateCcw, ScanSearch } from "lucide-react";
 import { Badge, Button, Card, ErrorNote } from "@/components/ui";
 import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
 import { formatClock } from "@/lib/format";
-import type { Recording } from "@/lib/recorder";
+import { settleRecordingDuration, type Recording } from "@/lib/recorder";
 import type { AttemptAllowance, Skill } from "@/lib/types";
 
 /** "This will be attempt 2 of 3." from where they stand before this one is checked. */
@@ -59,20 +59,7 @@ export function ReviewScreen({
             playsInline
             preload="metadata"
             aria-label="Your recording"
-            onLoadedMetadata={(event) => {
-              // Chrome reports a fresh WebM recording's length as Infinity until it has seen the
-              // end, which breaks the seek bar. Jumping far ahead makes it work the length out.
-              const video = event.currentTarget;
-              if (video.duration !== Infinity) return;
-              video.addEventListener(
-                "durationchange",
-                () => {
-                  video.currentTime = 0;
-                },
-                { once: true },
-              );
-              video.currentTime = 1e9;
-            }}
+            onLoadedMetadata={(event) => settleRecordingDuration(event.currentTarget)}
           />
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0">

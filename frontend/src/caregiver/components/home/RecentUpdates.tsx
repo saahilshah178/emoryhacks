@@ -60,10 +60,7 @@ export function RecentUpdates({ className }: { className?: string }) {
   return (
     <Card className={className}>
       <CardHeader>
-        <div>
-          <CardTitle>Recent activity</CardTitle>
-          <p className="mt-1 text-sm text-ink-secondary">Your recordings and your nurse&apos;s decisions.</p>
-        </div>
+        <CardTitle>Recent activity</CardTitle>
       </CardHeader>
       <CardBody className="space-y-1">
         {data ? (

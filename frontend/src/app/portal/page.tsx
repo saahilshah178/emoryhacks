@@ -26,7 +26,7 @@ export default function HomePage() {
     <div className="space-y-6 lg:space-y-5">
       <PortalHeading
         title={`Welcome back, ${firstName(user.name)}`}
-        description={`${user.next_shift ? `Next shift: ${user.next_shift}. ` : ""}Let's get you ready.`}
+        description={user.next_shift ? `Next shift: ${user.next_shift}.` : undefined}
       />
 
       <MySkillsLoadable
@@ -53,7 +53,12 @@ export default function HomePage() {
               <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start lg:gap-5">
                 <div className="space-y-6 lg:space-y-5">
                   <ProgressOverview counts={counts} className="lg:hidden" />
-                  {next ? <StartSkillCta skill={next} /> : <CaughtUpCard inReview={counts.in_review} />}
+                  {/* No banner for a skill a nurse sent back; the "Try again" figure covers it. */}
+                  {!next ? (
+                    <CaughtUpCard inReview={counts.in_review} />
+                  ) : next.state !== "needs_practice" ? (
+                    <StartSkillCta skill={next} />
+                  ) : null}
                   <SkillsAtAGlance skills={skills} className="hidden lg:block" />
                 </div>
                 <RecentUpdates className="hidden lg:block" />

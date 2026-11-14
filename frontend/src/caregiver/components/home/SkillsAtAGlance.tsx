@@ -17,10 +17,7 @@ export function SkillsAtAGlance({ skills, className }: { skills: MySkill[]; clas
   return (
     <Card className={className}>
       <CardHeader>
-        <div>
-          <CardTitle>My skills</CardTitle>
-          <p className="mt-1 text-sm text-ink-secondary">The ones that need you are at the top.</p>
-        </div>
+        <CardTitle>My skills</CardTitle>
         <Link href="/portal/skills" className="shrink-0 text-sm font-medium text-teal hover:underline">
           View all
         </Link>

@@ -25,7 +25,7 @@ function recordingsLine(person: CaregiverDetail) {
 
 export default function CaregiverPage() {
   const { id } = useParams<{ id: string }>();
-  const detail = useApi<CaregiverDetail>(`/caregivers/${id}`);
+  const detail = useApi<CaregiverDetail>(`/caregivers/${id}`, { refreshMs: 30_000 });
   useTitle(detail.data?.name ?? "Caregiver");
   // Which skill's recordings the history shows; a link to #history-<skill> picks one.
   const [historySlug, setHistorySlug] = useHistorySlug();

@@ -82,3 +82,21 @@ def test_pose_flags_are_renamed_once_tracks_have_roles(migrated):
     ]
     assert "the patient (track 1)'s reading" in out[1].description
     assert all(f.source == "pose" and not f.counts_toward_score for f in out)
+
+
+def test_restart_only_fails_jobs_whose_process_is_gone(migrated):
+    import socket
+
+    from app import db
+
+    video = repo.create_video("reference", "/tmp/none.mp4", "x", {"duration_s": 5})
+    host = socket.gethostname()
+    mine = repo.create_job("reference", video["id"])              # this process: a restart means it died
+    other_live = repo.create_job("reference", video["id"])
+    other_dead = repo.create_job("reference", video["id"])
+    db.execute("UPDATE jobs SET runner=%s WHERE id=%s", (f"{host}:1", other_live))          # pid 1 always exists
+    db.execute("UPDATE jobs SET runner=%s WHERE id=%s", (f"{host}:999999999", other_dead))  # no such process
+    repo.fail_interrupted_jobs()
+    status = {j: repo.get_job(j)["status"] for j in (mine, other_live, other_dead)}
+    assert status == {mine: "error", other_live: "queued", other_dead: "error"}
+    db.execute("UPDATE jobs SET status='done' WHERE id=%s", (other_live,))

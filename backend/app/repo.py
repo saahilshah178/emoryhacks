@@ -7,6 +7,8 @@ can be re-run safely.
 from __future__ import annotations
 
 import datetime as dt
+import os
+import socket
 import uuid
 from typing import Any, Iterable
 
@@ -361,10 +363,14 @@ def get_tracks(video_id) -> list[dict]:
 
 
 # --- jobs -----------------------------------------------------------------
+def _runner() -> str:
+    return f"{socket.gethostname()}:{os.getpid()}"
+
+
 def create_job(kind: str, video_id, skill_id=None, attempt_id=None) -> uuid.UUID:
     job_id = uuid.uuid4()
-    db.execute("INSERT INTO jobs (id, kind, video_id, skill_id, attempt_id) VALUES (%s,%s,%s,%s,%s)",
-               (job_id, kind, video_id, skill_id, attempt_id))
+    db.execute("INSERT INTO jobs (id, kind, video_id, skill_id, attempt_id, runner) VALUES (%s,%s,%s,%s,%s,%s)",
+               (job_id, kind, video_id, skill_id, attempt_id, _runner()))
     return job_id
 
 
@@ -380,11 +386,35 @@ def update_job(job_id, **fields) -> None:
     db.execute(f"UPDATE jobs SET {', '.join(sets)}, updated_at=now() WHERE id=%s", (*params, job_id))
 
 
+def _process_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def fail_interrupted_jobs() -> int:
-    return db.execute(
-        "UPDATE jobs SET status='error', error='Interrupted by a server restart. Upload again or re-run.', updated_at=now() "
-        "WHERE status IN ('queued', 'running')"
-    )
+    """Mark unfinished jobs whose process is gone as interrupted. Called at server start.
+
+    A job started by another live process on this machine (a seeding script, say) is left
+    alone. A job from another machine is only given up on after two hours without progress."""
+    host = socket.gethostname()
+    dead = []
+    for job in db.fetch_all("SELECT id, runner, updated_at FROM jobs WHERE status IN ('queued', 'running')"):
+        job_host, _, pid = (job["runner"] or "").rpartition(":")
+        if job_host == host and pid.isdigit():
+            if int(pid) == os.getpid() or not _process_alive(int(pid)):
+                dead.append(job["id"])
+        elif dt.datetime.now(dt.timezone.utc) - job["updated_at"] > dt.timedelta(hours=2):
+            dead.append(job["id"])
+    if dead:
+        db.execute(
+            "UPDATE jobs SET status='error', error='Interrupted by a server restart. Upload again or re-run.', "
+            "updated_at=now() WHERE id = ANY(%s)", (dead,))
+    return len(dead)
 
 
 def people_from(rows: list[dict] | None) -> list[PersonObs]:

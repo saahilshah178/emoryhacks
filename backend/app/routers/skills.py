@@ -93,7 +93,7 @@ def _regenerate(job_id, skill: dict) -> None:
         track.run("gemini_upload", lambda: None if config.FAKE_AI else gemini.ensure_file(skill["video"]))
         rb = track.run("rubric", lambda: rubric.run(ctx, _classification(skill)))
         repo.replace_rubric(skill["id"], rb)
-        repo.update_job(job_id, status="done", stage="done")
+        repo.update_job(job_id, status="done", stage="done", error=None)
     except Exception as exc:
         repo.update_job(job_id, status="error", error=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-1500:]}")
 

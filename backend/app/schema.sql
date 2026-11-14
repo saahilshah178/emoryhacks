@@ -250,3 +250,7 @@ SELECT add_continuous_aggregate_policy('pose_1s',
   end_offset => INTERVAL '1 minute',
   schedule_interval => INTERVAL '5 minutes',
   if_not_exists => true);
+-- @@
+-- Which process is running a job ("host:pid"), so a restarted server only marks its own
+-- dead jobs as interrupted and leaves jobs that a script is still running.
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS runner text;

@@ -145,7 +145,7 @@ def run_reference(job_id, slug: str | None = None, name: str | None = None) -> N
         if summary and summary.candidate_flags:  # advisory only: a reference video is never scored
             repo.save_flags(video["id"], None, pose.relabel_flags(video["id"], summary.candidate_flags),
                             sources=("pose", "pose_confirmed"))
-        repo.update_job(job_id, status="done", stage="done")
+        repo.update_job(job_id, status="done", stage="done", error=None)
     except Exception as exc:
         repo.update_job(job_id, status="error", error=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-1500:]}")
 
@@ -186,7 +186,7 @@ def run_attempt(job_id) -> None:
         flags = repo.get_flags(attempt["id"])
         sc = track.run("score", lambda: scoring.score(rb, tl, ev, flags))
         repo.save_score(attempt["id"], sc)
-        repo.update_job(job_id, status="done", stage="done")
+        repo.update_job(job_id, status="done", stage="done", error=None)
     except Exception as exc:
         repo.update_job(job_id, status="error", error=f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-1500:]}")
 

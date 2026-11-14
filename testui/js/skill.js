@@ -1,7 +1,7 @@
 // Skill screen: the reference video, its rubric steps with jump-to-step links, and an
 // edit mode that saves through PATCH /api/skills/{id} and /api/skills/{id}/steps/{step_id}.
 import {
-  api, esc, fmtRange, fmtTime, mountNav, pollJob, qs, showError, stagesHtml, thumbUrl, videoUrl,
+  api, esc, fmtRange, fmtTime, humanize, mountNav, pollJob, qs, showError, stagesHtml, thumbUrl, videoUrl,
 } from "/js/common.js";
 
 const role = mountNav("home");
@@ -33,21 +33,43 @@ function render() {
 }
 
 // --- read mode ---------------------------------------------------------------
+// True when a newer version of this skill exists (latest_id comes from the API; an older
+// server leaves it out, which counts as latest).
+const isOldVersion = () => Boolean(skill.latest_id) && String(skill.latest_id) !== String(skill.id);
+
 function headHtml() {
-  const facts = [skill.category, `${skill.steps.length} steps`, skill.video ? fmtTime(skill.video.duration_s) : null]
+  const facts = [humanize(skill.category), `${skill.steps.length} steps`, skill.video ? fmtTime(skill.video.duration_s) : null]
     .filter(Boolean).map(esc).join(" · ");
-  return `<div class="header">
+  const old = isOldVersion();
+  const versionNote = old
+    ? `<p class="notice small version-note">This is version ${skill.version}, kept because earlier attempts were graded against it.
+        <a href="/skill.html?id=${encodeURIComponent(skill.latest_id)}">Go to the newest version</a></p>` : "";
+  return `${versionNote}<div class="header">
       <div>
         <h1>${esc(skill.name)}</h1>
         <p class="muted">Version ${skill.version} · ${facts}</p>
+        ${detectedHtml()}
         ${skill.summary ? `<p class="summary">${esc(skill.summary)}</p>` : ""}
       </div>
       <div class="head-actions">
-        <a class="btn primary" href="/attempt.html?skill_id=${encodeURIComponent(skill.id)}">Practice this skill</a>
-        ${role === "nurse" ? `<button class="btn" data-action="edit">Edit skill</button>
-          <button class="btn" data-action="regenerate" title="Run the rubric stage on the reference video again">Rebuild steps</button>` : ""}
+        ${old ? "" : `<a class="btn primary" href="/attempt.html?skill_id=${encodeURIComponent(skill.id)}">Practice this skill</a>`}
+        ${role === "nurse" ? `<button class="btn" data-action="edit">Edit skill</button>` : ""}
+        ${role === "nurse" && !old ? `<button class="btn" data-action="regenerate" title="Build the steps again from the reference video, as a new version">Rebuild steps</button>` : ""}
       </div>
     </div>`;
+}
+
+// What Gemini recognised in the reference video, so the nurse can see the detection
+// and notice when the name they gave the skill disagrees with it.
+function detectedHtml() {
+  const c = skill.classification;
+  if (!c || !c.skill_name) return "";
+  const confidence = c.confidence != null ? `, ${Math.round(Number(c.confidence) * 100)}% confident` : "";
+  const alternatives = (c.alternatives || []).map(humanize).filter(Boolean);
+  const differs = c.skill_name.trim().toLowerCase() !== String(skill.name).trim().toLowerCase();
+  return `<p class="small detected">Detected as <strong>${esc(c.skill_name)}</strong>${esc(confidence)}${
+      alternatives.length ? `<span class="muted"> · also possible: ${esc(alternatives.join(", "))}</span>` : ""}${
+      differs ? `<span class="muted"> · named “${esc(skill.name)}” by the nurse</span>` : ""}</p>`;
 }
 
 function contextHtml() {
@@ -61,7 +83,7 @@ function contextHtml() {
     <div class="card">
       <h3>People in the reference</h3>
       ${people.length ? `<ul class="tight people">${people.map((p) => `<li>
-          <span class="badge neutral">${esc(p.role)}</span> <strong>${esc(p.label)}</strong>
+          <span class="badge neutral">${esc(humanize(p.role))}</span> <strong>${esc(p.label)}</strong>
           <span class="muted small">${esc(p.description)}</span></li>`).join("")}</ul>`
         : `<p class="muted small">No people identified.</p>`}
     </div>`;
@@ -121,6 +143,22 @@ function safetyEditHtml() {
     </div>`;
 }
 
+// The steps a step may be required to follow: the earlier steps, plus any later step it
+// already lists so that saving never drops a prerequisite silently.
+function prerequisiteChoices(s) {
+  const current = s.must_follow || [];
+  return skill.steps.filter((x) => x.step_id !== s.step_id && (x.ord < s.ord || current.includes(x.step_id)));
+}
+
+function prerequisitesHtml(s) {
+  const choices = prerequisiteChoices(s);
+  if (!choices.length) return `<p class="muted small">This is the first step.</p>`;
+  const current = s.must_follow || [];
+  return `<div class="prereqs">${choices.map((x) => `<label class="inline">
+      <input type="checkbox" data-prereq="${esc(x.step_id)}" ${current.includes(x.step_id) ? "checked" : ""}> ${x.ord}. ${esc(x.title)}</label>`).join("")}
+    </div>`;
+}
+
 function stepEditHtml(s) {
   const ev = s.evals || {};
   return `<div class="card step" data-step="${s.step_id}">
@@ -136,6 +174,7 @@ function stepEditHtml(s) {
           </div>
         </div>
         <div><label>&nbsp;</label><label class="inline"><input type="checkbox" data-field="critical" ${s.critical ? "checked" : ""}> Critical step</label></div>
+        <div class="full"><label>Must come after (doing this step before them is flagged as out of order)</label>${prerequisitesHtml(s)}</div>
         <div class="full"><label>Pass criteria</label><textarea data-field="pass_criteria">${lines(ev.pass_criteria)}</textarea></div>
         <div class="full"><label>Fail criteria</label><textarea data-field="fail_criteria">${lines(ev.fail_criteria)}</textarea></div>
         <div class="full"><label>Unverified when</label><textarea data-field="unverified_when">${lines(ev.unverified_when)}</textarea></div>
@@ -185,6 +224,13 @@ function readStepForm(s) {
   const current = { ...s, start_s: round1(s.start_s), end_s: round1(s.end_s) };
   for (const [key, value] of Object.entries(values)) if (value !== current[key]) patch[key] = value;
   if (JSON.stringify(evals) !== JSON.stringify(s.evals)) patch.evals = evals;
+  // Prerequisites are checked only on order-dependent steps, so the two are saved together.
+  const mustFollow = prerequisiteChoices(s).map((x) => x.step_id)
+    .filter((id) => card.querySelector(`[data-prereq="${CSS.escape(id)}"]`).checked);
+  if ([...mustFollow].sort().join() !== [...(s.must_follow || [])].sort().join()) {
+    patch.must_follow = mustFollow;
+    patch.order_dependent = mustFollow.length > 0;
+  }
   return { patch };
 }
 
@@ -215,15 +261,22 @@ async function save() {
 }
 
 // --- rebuild from the reference video ------------------------------------------
+// A rebuild stores the new steps as a new version of the skill (job.skill_id), so attempts
+// graded earlier keep the steps they were graded against. Open that version when done.
 async function regenerate() {
-  if (!confirm("Rebuild the steps from the reference video? This replaces the current steps and any edits to them.")) return;
+  if (!confirm("Rebuild the steps from the reference video? This makes a new version of the skill with fresh steps. "
+    + "This version and the attempts graded against it are kept.")) return;
   const box = $("#job");
   try {
     const { job_id: jobId } = await api(`/skills/${skill.id}/regenerate`, { method: "POST" });
     const job = await pollJob(jobId, (j) => {
       box.innerHTML = `<div class="notice">Rebuilding steps from the reference video…${stagesHtml(j)}</div>`;
     });
-    if (job.status === "error") throw new Error(job.error || "The rebuild failed.");
+    if (job.status === "error") throw new Error((job.error || "The rebuild failed.").split("\n")[0]);
+    if (job.skill_id && String(job.skill_id) !== String(skill.id)) {
+      location.href = `/skill.html?id=${encodeURIComponent(job.skill_id)}`;
+      return;
+    }
     box.innerHTML = "";
     skill = await api(`/skills/${skill.id}`);
     render();

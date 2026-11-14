@@ -32,12 +32,21 @@
   .step-num { width: 1.9rem; height: 1.9rem; border-radius: 50%; background: #f1ebe0; display: inline-grid; place-items: center; font-weight: 600; flex: none; }
   .seen { margin-top: 0.5rem; }
   .order-note { color: var(--unv); }
+  .nurse-note { margin-top: 0.3rem; }
+  .superseded { color: var(--muted); border-left: 3px solid var(--line); padding-left: 0.75rem; margin-top: 0.6rem; }
+  .superseded .feedback { font-size: 0.95rem; }
+  .superseded .badge:not(.neutral) { text-decoration: line-through; opacity: 0.8; }
   ul.flags, ul.people { list-style: none; margin: 0; padding: 0; }
   ul.flags li, ul.people li { padding: 0.55rem 0; border-bottom: 1px solid var(--line); }
   ul.flags li:last-child, ul.people li:last-child { border-bottom: 0; }
   ul.people .small { display: block; }
   .actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1.5rem; }
-  @media (max-width: 640px) { .hero-title { font-size: 2rem; } .score span { font-size: 1.9rem; } }
+  @media (max-width: 640px) {
+    .hero-title { font-size: 2rem; }
+    .hero-top { flex-direction: column; gap: 0.4rem; }
+    .score { text-align: left; }
+    .score span { font-size: 1.9rem; display: inline; margin-right: 0.4rem; }
+  }
 </style>
 </head>
 <body>

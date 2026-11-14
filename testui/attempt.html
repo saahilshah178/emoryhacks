@@ -59,7 +59,6 @@ const NAME_KEY = "firstshift.caregiverName";
 const $ = (sel) => document.querySelector(sel);
 const select = $("#skill");
 const nameInput = $("#caregiver");
-let lastFile = null;
 
 try { nameInput.value = localStorage.getItem(NAME_KEY) || ""; } catch { /* storage unavailable */ }
 nameInput.addEventListener("input", () => {
@@ -83,7 +82,7 @@ async function showSkill(id) {
       ${skill.reference_video_id ? `
         <details class="reference">
           <summary>Watch the reference video (${fmtTime(skill.video?.duration_s)})</summary>
-          <video src="${videoUrl(skill.reference_video_id)}" poster="${thumbUrl(skill.reference_video_id, (skill.duration_s || 2) / 2)}" controls preload="metadata" playsinline></video>
+          <video src="${videoUrl(skill.reference_video_id)}" poster="${thumbUrl(skill.reference_video_id, (skill.video?.duration_s || 2) / 2)}" controls preload="metadata" playsinline></video>
         </details>` : ""}
       <p class="small"><a href="/skill.html?id=${esc(skill.id)}">Open the full skill page</a></p>`;
   } catch (err) {
@@ -92,7 +91,6 @@ async function showSkill(id) {
 }
 
 async function submit(file) {
-  lastFile = file;
   $("#error").innerHTML = "";
   $("#retry").hidden = true;
   const caregiver = nameInput.value.trim();
@@ -106,7 +104,9 @@ async function submit(file) {
   form.append("skill_id", select.value);
   form.append("caregiver_name", caregiver);
   try {
-    const { attempt_id } = await uploadAndWait(form, $("#progress"));
+    const { attempt_id } = await uploadAndWait(form, $("#progress"), {
+      linkFor: (body) => ({ href: `/result.html?id=${body.attempt_id}`, text: "Your attempt is saved. Open its result page" }),
+    });
     location.href = `/result.html?id=${attempt_id}`;
   } catch (err) {
     showError("#error", err);
@@ -121,13 +121,18 @@ try {
   } else {
     select.innerHTML = skills.map((s) =>
       `<option value="${esc(s.id)}">${esc(s.name)}${s.version > 1 ? ` (v${s.version})` : ""} · ${s.step_count} steps</option>`).join("");
-    const wanted = qs("skill_id");
-    if (wanted && skills.some((s) => String(s.id) === wanted)) select.value = wanted;
+    const listed = (skillId) => skillId && skills.some((s) => String(s.id) === String(skillId));
+    let wanted = qs("skill_id");
+    if (wanted && !listed(wanted)) {
+      // An older version of a skill: practise its newest version instead.
+      wanted = await api(`/skills/${encodeURIComponent(wanted)}`).then((s) => s.latest_id, () => null);
+    }
+    if (listed(wanted)) select.value = wanted;
     select.addEventListener("change", () => showSkill(select.value));
     $("#practice").hidden = false;
     showSkill(select.value);
-    createRecorder($("#recorder"), { onVideo: submit });
-    $("#retry").addEventListener("click", () => lastFile && submit(lastFile));
+    const recorder = createRecorder($("#recorder"), { onVideo: submit });
+    $("#retry").addEventListener("click", () => recorder.use());
   }
 } catch (err) {
   showError("#load-error", err);

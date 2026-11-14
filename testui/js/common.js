@@ -79,11 +79,34 @@ export function fmtDate(iso) {
   return iso ? new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "";
 }
 
-const STATUS_LABEL = { passed: "Passed", failed: "Failed", unverified: "Unverified", pending: "Pending" };
+const STATUS_LABEL = {
+  passed: "Passed", failed: "Failed", unverified: "Unverified", pending: "Pending", error: "Processing error",
+};
 
 export function badge(status) {
   const s = status || "pending";
   return `<span class="badge ${esc(s)}">${esc(STATUS_LABEL[s] || s)}</span>`;
+}
+
+// The status an attempts list shows. A job that crashed never graded anything, so it
+// reads "Processing error" rather than "Failed", which would blame the caregiver.
+export function attemptListStatus(a) {
+  if (a.nurse_status) return a.nurse_status;
+  if (a.status) return a.status;
+  return a.job_status === "error" ? "error" : "pending";
+}
+
+// "5 of 7 steps passed", counting the nurse's decision where there is one.
+export function stepTally(steps) {
+  const list = steps || [];
+  const passed = list.filter((s) => (s.nurse_status || s.status) === "passed").length;
+  return `${passed} of ${list.length} step${list.length === 1 ? "" : "s"} passed`;
+}
+
+// "infection_control" -> "Infection control". Also turns skill slugs into names.
+export function humanize(slug) {
+  const text = String(slug ?? "").replace(/_/g, " ").trim();
+  return text ? text[0].toUpperCase() + text.slice(1) : "";
 }
 
 export function videoUrl(videoId) {
@@ -95,12 +118,24 @@ export function thumbUrl(videoId, t) {
 }
 
 // Poll a pipeline job until it finishes. onUpdate(job) is called on every poll.
-export async function pollJob(jobId, onUpdate, intervalMs = 2000) {
+// A failed request is retried with a longer wait, since one dropped connection says
+// nothing about the job; after `tries` failures in a row the last error is thrown.
+export async function pollJob(jobId, onUpdate, intervalMs = 2000, tries = 4) {
+  let failures = 0;
   for (;;) {
-    const job = await api(`/jobs/${jobId}`);
-    if (onUpdate) onUpdate(job);
-    if (job.status === "done" || job.status === "error") return job;
-    await new Promise((r) => setTimeout(r, intervalMs));
+    let job = null;
+    try {
+      job = await api(`/jobs/${jobId}`);
+      failures = 0;
+    } catch (err) {
+      failures += 1;
+      if (failures >= tries) throw err;
+    }
+    if (job) {
+      if (onUpdate) onUpdate(job);
+      if (job.status === "done" || job.status === "error") return job;
+    }
+    await new Promise((r) => setTimeout(r, intervalMs * (failures + 1)));
   }
 }
 

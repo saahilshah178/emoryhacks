@@ -17,7 +17,7 @@
 <div id="attempts"></div>
 </main>
 <script type="module">
-import { api, mountNav, esc, fmtTime, fmtDate, badge, thumbUrl, showError } from "/js/common.js";
+import { api, mountNav, esc, fmtTime, fmtDate, badge, thumbUrl, showError, attemptListStatus, humanize } from "/js/common.js";
 const role = mountNav("home");
 document.querySelector("#sub").textContent = role === "nurse"
   ? "Record a reference video and FirstShift turns it into a step-by-step rubric."
@@ -32,16 +32,16 @@ try {
       ${s.reference_video_id ? `<img class="thumb" src="${thumbUrl(s.reference_video_id, (s.duration_s || 0) / 2)}" alt="">` : ""}
       <div class="grow">
         <h3>${esc(s.name)}</h3>
-        <p class="muted small">Version ${s.version} · ${s.step_count} steps · ${fmtTime(s.duration_s)} · ${esc(s.category)}</p>
+        <p class="muted small">Version ${s.version} · ${s.step_count} steps · ${fmtTime(s.duration_s)} · ${esc(humanize(s.category))}</p>
         <p class="muted">${esc(s.summary)}</p>
       </div>
     </a>`).join("") : `<div class="notice">No skills yet. A nurse records a reference video to create one.</div>`;
   const attempts = await api("/attempts");
-  document.querySelector("#attempts").innerHTML = attempts.length ? `<div class="card"><table>
+  document.querySelector("#attempts").innerHTML = attempts.length ? `<div class="card table-wrap"><table>
     <tr><th>Skill</th><th>Caregiver</th><th>Result</th><th>When</th><th></th></tr>
     ${attempts.slice(0, 10).map((a) => `<tr>
       <td>${esc(a.skill_name)}</td><td>${esc(a.caregiver_name || "—")}</td>
-      <td>${badge(a.nurse_status || a.status || (a.job_status === "error" ? "failed" : "pending"))}</td>
+      <td>${badge(attemptListStatus(a))}</td>
       <td class="muted small">${fmtDate(a.created_at)}</td>
       <td><a href="/${role === "nurse" ? "review" : "result"}.html?id=${a.id}">Open</a></td></tr>`).join("")}
     </table></div>` : `<div class="notice">No attempts yet.</div>`;

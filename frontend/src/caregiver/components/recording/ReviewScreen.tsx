@@ -81,8 +81,8 @@ export function ReviewScreen({
 
           {recording.stoppedAtLimit ? (
             <p role="status" className="rounded-[12px] bg-warning-bg px-4 py-3 text-sm text-warning">
-              The recording stopped by itself at {formatClock(recording.seconds)}, the longest a recording can be. If
-              it cut off before you finished, retake it and leave out any waiting around.
+              The recording stopped by itself at {formatClock(recording.seconds)}, when it reached the limit for one
+              recording. If it cut off before you finished, retake it and leave out any waiting around.
             </p>
           ) : null}
 

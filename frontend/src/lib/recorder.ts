@@ -4,7 +4,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { uploadTooLarge } from "./upload";
+import { MAX_UPLOAD_BYTES, uploadTooLarge } from "./upload";
 
 export type RecorderPhase = "starting" | "ready" | "recording" | "recorded" | "unavailable";
 
@@ -24,7 +24,9 @@ export type Recording = {
 //   x 240 s (RECORDING_MAX_SECONDS)          = 14.5 MB nominal
 //
 // Browsers treat these as targets; WebM/MP4 framing adds about 1% and busy scenes can run
-// over by 10-20%, which still lands at 16-17.5 MB, under MAX_UPLOAD_BYTES.
+// over by 10-20%, which still lands at 16-17.5 MB, under MAX_UPLOAD_BYTES. (In Chrome, real
+// care footage at 854x480 came out near 330 kbit/s; a picture of pure noise overshot to
+// about 1 Mbit/s, which is why the recorder also stops on size, below.)
 //
 // Why that is enough to grade: grading looks at about one frame a second and pose tracking
 // scales frames down to a few hundred pixels before finding limbs, so 854x480 keeps people,
@@ -39,6 +41,8 @@ export const AUDIO_BITS_PER_SECOND = 32_000;
 export const RECORDING_MAX_SECONDS = 240;
 /** A countdown shows for this long before the limit. */
 export const RECORDING_WARN_SECONDS = 30;
+/** A recording also stops this far below MAX_UPLOAD_BYTES, should the browser overshoot badly. */
+const SIZE_MARGIN_BYTES = 500_000;
 
 const MIME_CANDIDATES = [
   "video/webm;codecs=vp9,opus",
@@ -216,8 +220,16 @@ export function useRecorder(options: { facingMode?: "user" | "environment"; maxS
       return;
     }
     chunksRef.current = [];
+    let bytes = 0;
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) chunksRef.current.push(event.data);
+      bytes += event.data.size;
+      // Bitrates are only targets, and a very busy picture can overshoot them, so the size
+      // itself is watched too: stop before the take could no longer be sent.
+      if (bytes >= MAX_UPLOAD_BYTES - SIZE_MARGIN_BYTES && !limitHitRef.current && recorder.state === "recording") {
+        limitHitRef.current = true;
+        recorder.stop();
+      }
     };
     recorder.onstop = () => finish(recorder.mimeType || mime || "video/webm");
     recorder.start(250);

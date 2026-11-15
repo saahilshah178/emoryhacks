@@ -191,6 +191,24 @@
   animation: lively-fall 24s linear infinite both;
 }
 
+.lively-flutter {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: lively-flutter 3.6s ease-in-out infinite;
+}
+
+.lively-sway-side {
+  transform-box: fill-box;
+  transform-origin: top center;
+  animation: lively-sway-side 8s ease-in-out infinite;
+}
+
+.lively-sway-bottom {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lively-sway-bottom 9s ease-in-out infinite;
+}
+
 .lively-drift {
   animation: lively-drift 3.8s ease-in-out infinite;
 }

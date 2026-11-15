@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createCameraMonitor, SAMPLE_FPS } from '../camera.mjs';
+import { CHECK_MS, DEFAULTS, SAMPLE_FPS, createCameraMonitor, lumaGrid, sameGrid } from '../camera.mjs';
 
 const W = 160;
 const H = 90;
@@ -26,6 +26,18 @@ function black() {
   return data;
 }
 
+/** ±1 on RGB: Chert re-encoding a frozen last frame. */
+function jitter(src, delta = 1) {
+  const data = new Uint8Array(src);
+  for (let i = 0; i < data.length; i += 4) {
+    const n = (i / 4) % 2 === 0 ? delta : -delta;
+    data[i] = Math.max(0, Math.min(255, data[i] + n));
+    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + n));
+    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + n));
+  }
+  return data;
+}
+
 function setup() {
   const clock = { t: 1_000_000 };
   const changes = [];
@@ -36,6 +48,7 @@ function setup() {
     clock,
     changes,
     monitor,
+    still: () => picture(shift),
     /** A camera that is on: the picture changes in every sampled frame. */
     live(ms) {
       for (let passed = 0; passed < ms; passed += STEP) {
@@ -53,8 +66,8 @@ function setup() {
     },
     /** No frames at all; only the timer runs. */
     silence(ms) {
-      for (let passed = 0; passed < ms; passed += 250) {
-        clock.t += 250;
+      for (let passed = 0; passed < ms; passed += CHECK_MS) {
+        clock.t += CHECK_MS;
         monitor.check();
       }
     },
@@ -62,17 +75,23 @@ function setup() {
   return run;
 }
 
+test('sameGrid treats re-encode noise as the same picture', () => {
+  const still = lumaGrid(picture(0), W, H);
+  assert.equal(sameGrid(still, lumaGrid(jitter(picture(0)), W, H)), true);
+  assert.equal(sameGrid(still, lumaGrid(picture(20), W, H)), false, 'a block that moved is not a freeze');
+});
+
 test('a picture turns the camera on', () => {
   const { monitor, changes, live, clock } = setup();
   const start = clock.t;
   assert.equal(monitor.on, false);
-  live(500);
-  assert.equal(monitor.on, false, 'half a second of pictures is not yet a camera that is on');
-  live(1000);
+  live(DEFAULTS.liveMs);
+  assert.equal(monitor.on, false, 'a run shorter than liveMs is not yet a camera that is on');
+  live(DEFAULTS.liveMs);
   assert.equal(monitor.on, true);
   assert.equal(changes.length, 1);
   assert.equal(changes[0].reason, 'picture arriving');
-  assert.ok(changes[0].at - start < 500, 'the change is dated to when the picture arrived');
+  assert.ok(changes[0].at - start <= DEFAULTS.liveMs + STEP, 'the change is dated to when the picture arrived');
 });
 
 test('frames that stop turn the camera off, dated to the last picture', () => {
@@ -87,11 +106,30 @@ test('frames that stop turn the camera off, dated to the last picture', () => {
   assert.equal(changes.at(-1).at, lastPicture);
 });
 
-test('a picture that holds still is a camera that is on', () => {
-  // Someone standing still for a count of five, or out of the room fetching a chair.
-  const { monitor, changes, live, same } = setup();
+test('a short freeze stays on; a two-second freeze is off', () => {
+  const { monitor, changes, live, same, clock } = setup();
   live(2000);
-  same(20_000);
+  const lastMoving = clock.t;
+  same(1000);
+  assert.equal(monitor.on, true, 'a one-second freeze is a live caller holding still');
+  same(DEFAULTS.freezeMs);
+  assert.equal(monitor.on, false);
+  assert.equal(changes.at(-1).reason, 'frozen picture');
+  assert.equal(changes.at(-1).at, lastMoving);
+});
+
+test('re-encode jitter on a frozen frame is still camera-off', () => {
+  const run = setup();
+  run.live(2000);
+  run.same(DEFAULTS.freezeMs + STEP, () => jitter(run.still()));
+  assert.equal(run.monitor.on, false);
+  assert.equal(run.changes.at(-1).reason, 'frozen picture');
+});
+
+test('a picture that keeps changing stays on', () => {
+  const { monitor, changes, live } = setup();
+  live(2000);
+  live(DEFAULTS.freezeMs + 1000);
   assert.equal(monitor.on, true);
   assert.equal(changes.length, 1);
 });
@@ -112,13 +150,13 @@ test('a muted or removed track turns the camera off quickly', () => {
   const mutedAt = clock.t;
   monitor.setTrack('video muted');
   assert.equal(monitor.on, true, 'not at once: tracks flap');
-  silence(750);
+  silence(DEFAULTS.explicitMs);
   assert.equal(monitor.on, false);
   assert.equal(changes.at(-1).reason, 'video muted');
   assert.equal(changes.at(-1).at, mutedAt);
 });
 
-test('a short freeze does not turn the camera off', () => {
+test('a short gap in frames does not turn the camera off', () => {
   const { monitor, changes, live, silence } = setup();
   live(2000);
   silence(1500);
@@ -132,7 +170,7 @@ test('a flicker while the camera is off does not turn it on', () => {
   live(2000);
   same(3000, black);
   assert.equal(monitor.on, false);
-  live(350);
+  live(DEFAULTS.liveMs);
   same(2000, black);
   assert.equal(monitor.on, false);
   assert.equal(changes.length, 2);

@@ -27,10 +27,9 @@ if (openaiKey()) {
 
 const agent = defineAgent({
   entry: async ctx => {
+    await ctx.connect(undefined, AutoSubscribe.SUBSCRIBE_ALL);
     const portalMode = await startPortal(skills);
     await showWelcomeScreen();
-
-    await ctx.connect(undefined, AutoSubscribe.SUBSCRIBE_ALL);
     const caller = await ctx.waitForParticipant();
 
     const source = new VideoSource(WIDTH, HEIGHT);

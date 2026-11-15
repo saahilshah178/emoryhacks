@@ -36,7 +36,7 @@ export async function startPortal(loadedSkills) {
   if (page) return mode;
   const url = process.env.WEB_APP_URL || 'http://localhost:3000';
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: true, timeout: 8000 });
     const context = await browser.newContext(VIEW);
     page = await context.newPage();
     const user = process.env.WEB_APP_USERNAME;
@@ -56,7 +56,7 @@ export async function startPortal(loadedSkills) {
   } catch (error) {
     console.warn('[portal] web app unavailable, using local step cards:', error.message);
     try {
-      if (!browser) browser = await chromium.launch({ headless: true });
+      if (!browser) browser = await chromium.launch({ headless: true, timeout: 8000 });
       if (!page) {
         const context = await browser.newContext(VIEW);
         page = await context.newPage();

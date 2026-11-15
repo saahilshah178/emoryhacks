@@ -102,14 +102,24 @@ export async function playDemo(skill, audioSink, { cameraOn = true } = {}) {
   const run = ++demoRun;
   return {
     playing: true,
-    /** Does nothing if this demonstration was stopped or replaced before it started. */
-    start() {
+    /**
+     * Does nothing if this demonstration was stopped or replaced before it started.
+     * onEnded() is called if the video plays through to its end.
+     */
+    start(onEnded) {
       if (run !== demoRun) return;
-      demoRun += 1;
+      const playing = ++demoRun;
       void page.evaluate(() => document.getElementById('demo')?.play()).catch(() => {});
       void playDemoAudio(path, audioSink).catch(error => {
         console.warn('[portal] demonstration soundtrack failed:', error.message);
       });
+      if (!onEnded) return;
+      const watch = setInterval(async () => {
+        if (playing !== demoRun || !page) { clearInterval(watch); return; }
+        const ended = await page.evaluate(() => Boolean(document.getElementById('demo')?.ended)).catch(() => false);
+        if (ended && playing === demoRun) { clearInterval(watch); onEnded(); }
+      }, 1000);
+      watch.unref?.();
     },
   };
 }

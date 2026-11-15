@@ -11,12 +11,12 @@ The caller never says "I'm done". The camera button in FaceTime is the signal:
 | The caller | What happens |
 | - | - |
 | Says a skill | The nurse demonstration plays, with the list of household things to gather |
-| Turns the camera **off** | The demonstration stops. The screen shows what to set up and where to prop the phone |
+| Turns the camera **off**, or watches to the end | The demonstration stops. The screen shows what to set up and where to prop the phone |
 | Turns the camera **on** | Recording starts |
 | Turns the camera **off** | Recording stops and is graded. The screen shows a note for each step |
 | Turns the camera **on** again | Another try at the same skill |
 
-The coach does not listen while a recording runs, so the caller can talk to the person they are "helping" without the coach answering. A recording stops by itself after 75 seconds, and one shorter than 5 seconds is not graded.
+The coach listens only while it waits for the caller to speak. During the demonstration it would hear the nurse through the caller's phone and answer her; during a recording, what the caller says is meant for the person they are "helping". A recording stops by itself after 75 seconds, and one shorter than 5 seconds is not graded.
 
 `camera.mjs` reads the camera from the bridge's `facetime-remote-video` track: off is the track being muted or removed (what Chert documents), or no picture at all for 2.5 seconds. Each change is logged as `[camera] off (video muted)` and the like, with the signal that caused it. If a caller says they turned the camera off or on and nothing happened, the coach moves the call on from their word.
 

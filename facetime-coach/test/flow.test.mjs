@@ -31,7 +31,7 @@ function start({ cameraOn = true, demo = true, capture = { path: '/tmp/attempt.m
     screen: {
       demo: async (skill, options) => {
         log.push(`screen:demo ${skill.slug} camera ${options.cameraOn ? 'on' : 'off'}`);
-        return { playing: demo, start: () => { log.push('demo:start'); } };
+        return { playing: demo, start: onEnded => { log.push('demo:start'); run.demoEnded = onEnded; } };
       },
       stopDemo: async () => { log.push('stopDemo'); },
       setup: async skill => { log.push(`screen:setup ${skill.slug}`); },
@@ -73,6 +73,7 @@ test('the camera runs the whole call: off after the demonstration, on to record,
   assert.ok(!run.log.includes('demo:start'), 'the demonstration waits while the coach explains the camera button');
   run.replied();
   assert.ok(run.log.includes('demo:start'));
+  assert.equal(run.mic, false, 'the coach does not listen to the nurse through the caller\'s phone');
 
   await run.turnCamera(false);
   assert.equal(call.phase, 'setup');
@@ -95,6 +96,31 @@ test('the camera runs the whole call: off after the demonstration, on to record,
   assert.match(run.said().at(-1), /it passed \(100 percent\)/);
   assert.match(run.said().at(-1), /turn your camera back on/);
   assert.equal(run.mic, true);
+});
+
+test('a demonstration that plays to its end moves on to set-up by itself', async () => {
+  const run = start();
+  await run.call.chooseSkill('glove removal');
+  run.replied();
+  assert.equal(run.mic, false);
+  await run.demoEnded();
+  assert.equal(run.call.phase, 'setup');
+  assert.equal(run.mic, true, 'the caller can speak again');
+  assert.equal(run.said().at(-1), lines.demoOver(run.call.skill, true));
+  assert.match(run.said().at(-1), /turn the camera off and back on/);
+  await run.turnCamera(false);
+  await run.turnCamera(true);
+  assert.equal(run.call.phase, 'recording');
+});
+
+test('a demonstration that was already stopped does not move the call when its end is reported late', async () => {
+  const run = start();
+  await run.call.chooseSkill('glove removal');
+  run.replied();
+  await run.turnCamera(false);
+  await run.turnCamera(true);
+  await run.demoEnded();
+  assert.equal(run.call.phase, 'recording');
 });
 
 test('turning the camera on after the results records another try', async () => {

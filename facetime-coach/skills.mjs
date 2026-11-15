@@ -196,6 +196,7 @@ The caller's camera is the signal. Never ask the caller to say they are done, an
 - When they have finished the steps they turn their camera off. Recording stops and grading starts by itself.
 - After the results, turning the camera on again records another try.
 Each time this happens you are told what happened and what to say. Say that, briefly, and nothing more.
+You do not hear the caller during the demonstration or while they are being recorded.
 If the caller says "I'm done" or asks what to do next, tell them to use the camera button in FaceTime.
 If the caller says they already turned their camera off or on and nothing happened, call camera_not_noticed.
 

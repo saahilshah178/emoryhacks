@@ -1,6 +1,6 @@
 // One call, as a small state machine driven by the caller's camera.
 //
-//   pick ─ names a skill ─▶ demo ─ camera off ─▶ setup ─ camera on ─▶ recording ─ camera off ─▶ grading ─▶ review
+//   pick ─ names a skill ─▶ demo ─ camera off, or the video ends ─▶ setup ─ camera on ─▶ recording ─ camera off ─▶ grading ─▶ review
 //                             └──── camera on (it was off during the demonstration) ────▲                     │
 //                                                                                       └──── camera on ──────┘
 //
@@ -22,6 +22,7 @@ export const lines = {
     : `when they are ready to practice, they turn their camera on with ${CAMERA_BUTTON}, and recording starts`}. Do not ask them to say anything.`,
   noDemo: (skill, cameraOn) => `There is no demonstration video for ${skill.name}, so the screen shows what they need at home and the steps. Tell them, in two short sentences: get set up, then turn the camera ${cameraOn ? 'off and back on' : 'on'} with ${CAMERA_BUTTON}, and recording starts.`,
   setup: skill => `The caller turned their camera off, so the demonstration stopped. The screen now lists what they need at home and the steps for ${skill.name}. Tell them, in two short sentences: get set up with the things on the screen and prop the phone where it sees their whole body; when they are ready, turn the camera back on and recording starts.`,
+  demoOver: (skill, cameraOn) => `The ${skill.name} demonstration has finished, and the screen now lists what they need at home and the steps. Tell them, in two short sentences: get set up with the things on the screen; then turn the camera ${cameraOn ? 'off and back on' : 'on'} with ${CAMERA_BUTTON}, and recording starts.`,
   waiting: () => 'The caller\'s camera is off while they set up. Say one short sentence: take your time, and turn the camera back on when you are ready.',
   recording: () => 'The caller\'s camera is on and recording has started. Say only this: "Recording. Go ahead, and turn your camera off when you finish."',
   grading: limit => `Say only this: "${limit ? 'That is the recording limit, so I stopped there. ' : 'Got it. '}I am grading it now. Give me about half a minute."`,
@@ -55,8 +56,10 @@ export function createCoachCall({ skills, camera, screen, startRecording, grade,
   function enter(phase) {
     if (call.phase !== phase) log(`[coach] ${call.phase} -> ${phase}`);
     call.phase = phase;
-    // While they practice, the coach stays quiet: what they say is meant for the person they are helping.
-    coach.listen(phase !== 'recording' && phase !== 'grading');
+    // The coach listens only while it waits for the caller to speak. During the demonstration it would hear
+    // the nurse through the caller's phone and answer her (on a real call it did, six times in forty seconds);
+    // during practice, what the caller says is meant for the person they are helping.
+    coach.listen(phase === 'pick' || phase === 'setup' || phase === 'review');
   }
 
   function dropRecording() {
@@ -70,6 +73,15 @@ export function createCoachCall({ skills, camera, screen, startRecording, grade,
     await screen.stopDemo();
     await screen.setup(call.skill, { cameraOn: camera.on });
     return lines.setup(call.skill);
+  }
+
+  /** The demonstration played to its end with the camera untouched. */
+  async function demoOver(skill) {
+    if (call.phase !== 'demo' || call.skill !== skill) return;
+    enter('setup');
+    await screen.stopDemo();
+    await screen.setup(skill, { cameraOn: camera.on });
+    coach.say(lines.demoOver(skill, camera.on));
   }
 
   async function beginRecording() {
@@ -153,7 +165,7 @@ export function createCoachCall({ skills, camera, screen, startRecording, grade,
         const demo = await screen.demo(skill, { cameraOn: camera.on });
         if (demo.playing) {
           // The demonstration starts once the coach has said how to stop it, so they do not talk over each other.
-          coach.afterReply(() => demo.start());
+          coach.afterReply(() => demo.start(() => inTurn(() => demoOver(skill))));
           return lines.demo(skill, camera.on);
         }
         enter('setup');

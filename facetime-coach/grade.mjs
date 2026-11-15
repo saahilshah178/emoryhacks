@@ -1,12 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setTimeout as pause } from 'node:timers/promises';
 import {
   applyRecordingEnd,
   assessPrompt,
   buildTimeline,
-  loadRubric,
+  rubricFor,
   sampleFps,
   scoreAttempt,
 } from './assess-grade.mjs';
@@ -26,103 +25,6 @@ async function ensureGeminiEnv() {
       if (filled(value) && !filled(process.env[match[1]])) process.env[match[1]] = value;
     }
   } catch { /* no parent env */ }
-}
-
-function cookieFrom(response) {
-  const raw = response.headers.getSetCookie?.() || [];
-  const header = raw.length ? raw : [response.headers.get('set-cookie')].filter(Boolean);
-  const sid = header.map(value => String(value).split(';')[0]).find(part => /^sid=/i.test(part));
-  return sid || '';
-}
-
-async function webAppSession() {
-  const url = (process.env.WEB_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-  const user = process.env.WEB_APP_USERNAME;
-  const password = process.env.WEB_APP_PASSWORD;
-  if (!filled(user) || !filled(password)) return null;
-  const login = await fetch(`${url}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username: user, password }),
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!login.ok) {
-    await login.body?.cancel();
-    return null;
-  }
-  const cookie = cookieFrom(login);
-  await login.json().catch(() => ({}));
-  if (!cookie) return null;
-  return { url, headers: { cookie } };
-}
-
-async function findSkillId(session, slug) {
-  for (const path of ['/api/my/skills', '/api/skills']) {
-    const response = await fetch(`${session.url}${path}`, { headers: session.headers, signal: AbortSignal.timeout(10000) });
-    if (!response.ok) {
-      await response.body?.cancel();
-      continue;
-    }
-    const body = await response.json().catch(() => ({}));
-    const rows = body.skills || body || [];
-    const row = (Array.isArray(rows) ? rows : []).find(item => item.slug === slug || item.name === slug);
-    if (row?.id) return row.id;
-  }
-  return null;
-}
-
-function normalizeAttempt(attempt, skill) {
-  const steps = (attempt.steps || skill.steps).map(step => ({
-    id: step.step_id || step.id,
-    title: step.title,
-    status: step.nurse_status || step.status || 'unverified',
-    feedback: step.feedback || step.evidence || '',
-  }));
-  return {
-    source: 'webapp',
-    overall: attempt.final_status || attempt.status || 'unverified',
-    score_pct: attempt.score_pct,
-    skill_match: attempt.skill_match !== false,
-    overall_feedback: attempt.overall_feedback || '',
-    steps,
-  };
-}
-
-async function gradeViaWebApp(skill, videoPath) {
-  const session = await webAppSession();
-  if (!session || !videoPath) return null;
-  const skillId = await findSkillId(session, skill.slug);
-  if (!skillId) return null;
-  const bytes = await readFile(videoPath);
-  const form = new FormData();
-  form.set('file', new Blob([bytes], { type: 'video/mp4' }), `${skill.slug}.mp4`);
-  form.set('kind', 'attempt');
-  form.set('skill_id', skillId);
-  const uploaded = await fetch(`${session.url}/api/videos`, {
-    method: 'POST',
-    headers: session.headers,
-    body: form,
-    signal: AbortSignal.timeout(120000),
-  });
-  if (!uploaded.ok) {
-    await uploaded.body?.cancel();
-    return null;
-  }
-  const ids = await uploaded.json();
-  if (!ids.job_id || !ids.attempt_id) return null;
-  for (let i = 0; i < 90; i++) {
-    const job = await fetch(`${session.url}/api/jobs/${ids.job_id}`, { headers: session.headers, signal: AbortSignal.timeout(10000) });
-    const body = job.ok ? await job.json() : {};
-    if (body.status === 'done') break;
-    if (body.status === 'failed' || body.status === 'error') return null;
-    await pause(2000);
-  }
-  const attemptRes = await fetch(`${session.url}/api/attempts/${ids.attempt_id}`, { headers: session.headers, signal: AbortSignal.timeout(15000) });
-  if (!attemptRes.ok) {
-    await attemptRes.body?.cancel();
-    return null;
-  }
-  return normalizeAttempt(await attemptRes.json(), skill);
 }
 
 function extractJson(text) {
@@ -203,7 +105,7 @@ async function gradeViaGemini(skill, capture) {
   await ensureGeminiEnv();
   const key = process.env.GEMINI_API_KEY;
   if (!filled(key)) return null;
-  const rubric = await loadRubric(skill);
+  const rubric = rubricFor(skill);
   const duration = Number(capture.duration_s) || 0;
   const fps = sampleFps(duration || 60);
   const parts = [{ text: assessPrompt(skill, rubric, duration || 60) }];
@@ -229,7 +131,7 @@ async function gradeViaGemini(skill, capture) {
   let lastError = '';
   for (const model of models) {
     try {
-      console.log(`[grade] Gemini assess with the web-app rubric (${model})`);
+      console.log(`[grade] Gemini assesses the recording against the home steps (${model})`);
       const text = await geminiGenerate(key, parts, model);
       const parsed = extractJson(text);
       if (parsed) return normalizeGemini(parsed, skill, rubric, duration);
@@ -248,19 +150,12 @@ export async function gradeRecording(skill, capture) {
     return null;
   });
   if (viaGemini) return viaGemini;
-  if (capture?.path) {
-    const viaApp = await gradeViaWebApp(skill, capture.path).catch(error => {
-      console.warn('[grade] web app grading failed:', error.message);
-      return null;
-    });
-    if (viaApp) return viaApp;
-  }
   return {
     source: 'none',
     overall: 'unverified',
     score_pct: null,
     skill_match: true,
-    overall_feedback: 'I could not grade that recording automatically. Look over the steps and try again, or add GEMINI_API_KEY / web app login in .env.local.',
+    overall_feedback: 'I could not grade that recording automatically. Look over the steps and try again. If it keeps happening, check GEMINI_API_KEY in .env.local.',
     steps: skill.steps.map(step => ({
       id: step.id,
       title: step.title,

@@ -31,27 +31,62 @@ const ALIASES = {
   ppe: 'glove_removal',
 };
 
-function parseSkill(raw, file) {
+const LABELS = {
+  pass: /^Pass when:\s*(.+)$/i,
+  retry: /^Try again when:\s*(.+)$/i,
+  key: /^Key step:\s*(.+)$/i,
+  after: /^After:\s*(.+)$/i,
+};
+
+function parseStep(id, title, body) {
+  const step = { id, title: title.trim(), how: '', pass: '', retry: '', key: false, after: [] };
+  const how = [];
+  for (const line of body.split('\n').map(item => item.trim()).filter(Boolean)) {
+    const label = Object.keys(LABELS).find(name => LABELS[name].test(line));
+    if (!label) { how.push(line); continue; }
+    const value = line.match(LABELS[label])[1].trim();
+    if (label === 'key') step.key = /^(yes|true)$/i.test(value);
+    else if (label === 'after') step.after = value.split(/[,\s]+/).filter(Boolean);
+    else step[label] = value;
+  }
+  step.how = how.join(' ');
+  return step;
+}
+
+/**
+ * One skill file. A skill is a home version of a caregiving skill: the steps need no equipment,
+ * every step is something a phone camera can see, and each step says what passes it.
+ * A file that cannot be graded (a step with no instruction or no pass line, an "After" that points
+ * nowhere) stops the coach at start-up, with the file's name.
+ */
+export function parseSkill(raw, file) {
   const text = raw.replace(/\r\n/g, '\n');
   const slug = file.replace(/\.md$/, '');
   const nameMatch = text.match(/^#\s+(.+)$/m);
-  const setup = section(text, 'Setup');
-  const safety = section(text, 'Safety');
-  const stepsBlock = section(text, 'Steps');
+  const summary = (text.match(/^#\s+.+\n([\s\S]*?)(?=\n##\s+|$)/) || ['', ''])[1].replace(/\s+/g, ' ').trim();
   const steps = [];
   const stepRe = /###\s+(s\d+)\.\s+(.+)\n([\s\S]*?)(?=\n###\s+s\d+\.|\s*$)/g;
+  const stepsBlock = section(text, 'Steps');
   let match;
-  while ((match = stepRe.exec(stepsBlock))) {
-    const body = match[3].trim();
-    const done = (body.match(/Say "done" when:\s*(.+)/i) || [])[1] || 'the action is finished';
-    const how = body.replace(/Say "done" when:[\s\S]*/i, '').trim();
-    steps.push({ id: match[1], title: match[2].trim(), how, done: done.trim() });
+  while ((match = stepRe.exec(stepsBlock))) steps.push(parseStep(match[1], match[2], match[3]));
+
+  const fail = problem => { throw new Error(`skills/${file}: ${problem}`); };
+  if (!nameMatch) fail('no "# Name" heading');
+  if (!steps.length) fail('no steps');
+  const seen = new Set();
+  for (const step of steps) {
+    if (!step.how) fail(`${step.id} has no instruction`);
+    if (!step.pass) fail(`${step.id} has no "Pass when:" line`);
+    for (const id of step.after) if (!seen.has(id)) fail(`${step.id} comes "After: ${id}", which is not an earlier step`);
+    seen.add(step.id);
   }
   return {
     slug,
-    name: nameMatch ? nameMatch[1].trim() : slug,
-    setup: bullets(setup),
-    safety: bullets(safety),
+    name: nameMatch[1].trim(),
+    summary,
+    setup: bullets(section(text, 'You need')),
+    camera: section(text, 'Camera').replace(/\s+/g, ' '),
+    safety: bullets(section(text, 'Safety')),
     steps,
     text,
   };
@@ -146,21 +181,30 @@ Always speak English. Every spoken reply must be in English, even if the caller 
 The caller FaceTimes in and tells you which activity they want. Do not mention iMessage, texting, or calling them back.
 Keep each reply to one or two short sentences.
 
+These are home versions of the skills. The caller practices alone, with no wheelchair, gait belt or other equipment: a dining chair, pillows, a strip of tape. In most skills they play the person being helped themselves. The nurse in the demonstration uses clinical equipment; the caller does the home steps shown on the screen.
+
 Safety, always:
 - This is practice, not certification. A nurse still certifies skills.
-- Never have the caller lift, catch, or lower a real person who needs care. Use a pillow, stuffed animal, willing uninjured roommate, or talk-through.
+- Never have the caller lift, catch, or lower a real person who needs care.
 - Stop if anything hurts, feels unsafe, or the space is cluttered or wet.
-- For falls: never practice a real fall. Use pillows on the floor.
-- For stairs and showers: skip the physical move if there is no railing, the floor is wet, or they live alone with no spotter. Talk through the step instead.
+- For falls: never practice a real fall. A big pillow plays the person.
+- For stairs: the bottom step only, with a hand on the rail. With no rail, a strip of tape on the floor is the step.
+
+The caller's camera is the signal. Never ask the caller to say they are done, and never decide for them that a part is finished:
+- During the demonstration they turn their camera off when they have seen enough. The demonstration stops and the screen shows what to set up.
+- When they are set up they turn their camera on. Recording starts by itself.
+- When they have finished the steps they turn their camera off. Recording stops and grading starts by itself.
+- After the results, turning the camera on again records another try.
+Each time this happens you are told what happened and what to say. Say that, briefly, and nothing more.
+If the caller says "I'm done" or asks what to do next, tell them to use the camera button in FaceTime.
+If the caller says they already turned their camera off or on and nothing happened, call camera_not_noticed.
 
 How you run the call:
 1. Greet and ask which one skill they want. Do not name any skill yourself. Do not call choose_skill until the caller has clearly said a skill name. Never guess, never pick a default, never use an example from this prompt as their choice.
-2. When they name it, call choose_skill. That starts the nurse demonstration. Tell them to watch, then say they are done when they have seen enough. Do not wait for the video to finish on its own.
-3. When they say they are done, finished, or stop during the demonstration, call caller_done. That stops the video and its audio, then starts recording. Tell them to stay in FaceTime Video and do the skill, then say they are done.
-4. When they say they are done during recording, call caller_done again. That grades the recording the same way as the web app (Gemini) and shows suggestions on the picture. Summarize the suggestions in spoken words.
-5. Then offer exactly three choices: end the call, record again, or practice another skill.
-6. End the call: call end_call. Record again: call rerecord. Another skill: call choose_skill with the new name.
-7. Coach only one skill at a time. Never walk through all nine.
+2. When they name it, call choose_skill. That starts the nurse demonstration. Say what the tool tells you to say.
+3. The camera runs the rest: demonstration, set-up, recording, grading. You do not grade; the results are given to you to summarize.
+4. After the results there are three choices: turn the camera on to try again, name another skill (call choose_skill), or end the call (call end_call).
+5. Coach only one skill at a time. Never walk through all nine.
 
 Available skills:
 ${list}

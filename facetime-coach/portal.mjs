@@ -3,7 +3,7 @@ import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
 import { drawFace, FPS as FACE_FPS, HEIGHT as FACE_HEIGHT, WIDTH as FACE_WIDTH } from './face.mjs';
 import { playDemoAudio, stopDemoAudio } from './demo-audio.mjs';
-import { demoPage, gradingPage, recordingPage, resultsPage, skillPage, welcomePage } from './overlay.mjs';
+import { demoPage, gradingPage, recordingPage, resultsPage, setupPage, welcomePage } from './overlay.mjs';
 import { demoPath } from './videos.mjs';
 
 /** iPhone 14 / 15 aspect (9:19.5) at 2×. Line video_framing is fill so this is fullscreen, not 16:9. */
@@ -19,12 +19,11 @@ let browser;
 let page;
 let mode = 'face';
 let skills = [];
-let current = null;
-let activeStep = null;
 let tick = 0;
 let speaking = false;
 let demoFile = null;
 let demoRouted = false;
+let demoRun = 0;
 
 const filled = value => Boolean(value) && !value.startsWith(PLACEHOLDER);
 
@@ -79,14 +78,16 @@ export async function stopPortal() {
   page = undefined;
 }
 
-export async function playDemo(skill, audioSink) {
+/**
+ * Gets the nurse's demonstration ready: the picture in the page, the soundtrack for the agent's audio track.
+ * Resolves to { playing: false } when there is no file for the skill, or no browser to show it in.
+ * Otherwise call start() to play it. The soundtrack shares the coach's audio track, so start it once the
+ * coach has stopped speaking: started mid-sentence, the two cut each other off.
+ */
+export async function playDemo(skill, audioSink, { cameraOn = true } = {}) {
   await stopDemo();
-  current = skill;
   const path = skill ? await demoPath(skill.slug) : null;
-  if (!page || !path) {
-    if (skill) await showSkill(skill);
-    return path ? `No picture for the ${skill.name} demo` : `No demonstration file for ${skill?.name || 'that skill'}`;
-  }
+  if (!page || !path) return { playing: false };
   demoFile = path;
   if (!demoRouted) {
     demoRouted = true;
@@ -96,15 +97,25 @@ export async function playDemo(skill, audioSink) {
       await route.fulfill({ status: 200, contentType: 'video/mp4', body });
     });
   }
-  await page.setContent(demoPage(skill), { waitUntil: 'domcontentloaded' });
+  await page.setContent(demoPage(skill, { cameraOn }), { waitUntil: 'domcontentloaded' });
   mode = 'overlay';
-  void playDemoAudio(path, audioSink).catch(error => {
-    console.warn('[portal] demonstration soundtrack failed:', error.message);
-  });
-  return `Playing the ${skill.name} demonstration. Tell them to say they are done when they have seen enough.`;
+  const run = ++demoRun;
+  return {
+    playing: true,
+    /** Does nothing if this demonstration was stopped or replaced before it started. */
+    start() {
+      if (run !== demoRun) return;
+      demoRun += 1;
+      void page.evaluate(() => document.getElementById('demo')?.play()).catch(() => {});
+      void playDemoAudio(path, audioSink).catch(error => {
+        console.warn('[portal] demonstration soundtrack failed:', error.message);
+      });
+    },
+  };
 }
 
 export async function stopDemo() {
+  demoRun += 1;
   stopDemoAudio();
   if (!page) return;
   await page.evaluate(() => {
@@ -116,94 +127,17 @@ export async function stopDemo() {
   }).catch(() => {});
 }
 
-export async function startPractice(skill) {
-  return showSkill(skill);
+async function show(html) {
+  if (!page) return;
+  await showOverlay(html);
+  mode = 'overlay';
 }
 
-export async function showWelcomeScreen() {
-  if (page) {
-    await showOverlay(welcomePage(skills));
-    mode = 'overlay';
-  }
-  return 'Ask which skill they want to practice.';
-}
-
-export async function showRecording(skill) {
-  current = skill;
-  if (page) {
-    await showOverlay(recordingPage(skill));
-    mode = 'overlay';
-  }
-  return `Recording ${skill.name}. They should stay in FaceTime Video and say they are done when finished.`;
-}
-
-export async function showGrading(skill) {
-  current = skill;
-  if (page) {
-    await showOverlay(gradingPage(skill));
-    mode = 'overlay';
-  }
-  return `Grading the ${skill.name} recording.`;
-}
-
-export async function showResults(skill, result) {
-  current = skill;
-  if (page) {
-    await showOverlay(resultsPage(skill, result));
-    mode = 'overlay';
-  }
-  const overall = result?.overall || 'unverified';
-  return `Showed ${skill.name} results (${overall}). They can end the call, record again, or pick another skill.`;
-}
-
-function escapeHtml(value) {
-  return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-}
-
-export async function showSkill(skill) {
-  current = skill;
-  activeStep = skill?.steps[0]?.id || null;
-  if (!skill) return 'no skill';
-  if (mode === 'portal') {
-    try {
-      const opened = await openPortalSkill(skill);
-      if (opened) {
-        await highlightStep(activeStep);
-        return `Showing ${skill.name} in the app`;
-      }
-    } catch (error) {
-      console.warn('[portal] falling back to step cards:', error.message);
-      mode = 'overlay';
-    }
-  }
-  if (page) {
-    await showOverlay(skillPage(skill, activeStep));
-    mode = 'overlay';
-    return `Showing ${skill.name} steps`;
-  }
-  return `${skill.name} is ready; the picture could not change`;
-}
-
-export async function highlightStep(stepId) {
-  activeStep = stepId;
-  if (!current) return 'no skill yet';
-  if (mode === 'portal' && page) {
-    await page.evaluate(id => {
-      for (const el of document.querySelectorAll('[data-step-id]')) {
-        const on = el.getAttribute('data-step-id') === id;
-        el.style.outline = on ? '3px solid #0d9488' : '';
-        el.style.background = on ? '#d1fae5' : '';
-      }
-      document.querySelector(`[data-step-id="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'instant' });
-    }, stepId).catch(() => {});
-    return `Highlighted ${stepId}`;
-  }
-  if (page) {
-    await showOverlay(skillPage(current, stepId));
-    return `Highlighted ${stepId}`;
-  }
-  return `On ${stepId}`;
-}
+export const showWelcomeScreen = () => show(welcomePage(skills));
+export const showSetup = (skill, options) => show(setupPage(skill, options));
+export const showRecording = skill => show(recordingPage(skill));
+export const showGrading = skill => show(gradingPage(skill));
+export const showResults = (skill, result, options) => show(resultsPage(skill, result, options));
 
 export async function captureFrame() {
   tick += 1;
@@ -221,18 +155,6 @@ export async function captureFrame() {
 async function showWelcome() {
   const url = (process.env.WEB_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
   await page.goto(`${url}/portal/skills`, { waitUntil: 'domcontentloaded', timeout: 15000 });
-}
-
-async function openPortalSkill(skill) {
-  const url = (process.env.WEB_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-  const response = await page.request.get(`${url}/api/my/skills`);
-  if (!response.ok()) return false;
-  const body = await response.json();
-  const row = (body.skills || []).find(item => item.slug === skill.slug || item.name === skill.name);
-  if (!row?.id) return false;
-  await page.goto(`${url}/portal/skills/${row.id}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
-  await page.waitForTimeout(400);
-  return true;
 }
 
 async function showOverlay(html) {

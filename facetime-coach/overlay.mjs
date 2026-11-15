@@ -60,8 +60,8 @@ function shell({ title, sub, asideTitle, aside, mainTitle, main, headerExtra, bo
       overflow: auto;
     }
     section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-    .stage { flex: 1; min-height: 0; position: relative; overflow: hidden; background: #f6f8fa; }
-    #demo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center 36px; background: #f6f8fa; }
+    .stage { flex: none; height: 600px; position: relative; overflow: hidden; background: #f6f8fa; }
+    #demo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center top; background: #f6f8fa; }
     aside { flex: none; max-height: 32%; }
     h2 { margin: 0 0 14px; font-size: 22px; letter-spacing: .04em; text-transform: uppercase; color: #0f766e; }
     li { display: flex; gap: 16px; list-style: none; padding: 14px 4px; border-radius: 12px; }
@@ -75,6 +75,15 @@ function shell({ title, sub, asideTitle, aside, mainTitle, main, headerExtra, bo
     .title { margin: 0; font-weight: 650; font-size: 32px; line-height: 1.25; overflow-wrap: anywhere; }
     .how { margin: 6px 0 0; color: #4b6278; font-size: 28px; line-height: 1.35; overflow-wrap: anywhere; }
     .setup li { display: list-item; list-style: disc; margin-left: 24px; padding: 8px 0; font-size: 28px; }
+    .tip { margin: 0; font-size: 28px; line-height: 1.35; overflow-wrap: anywhere; }
+    /* A FaceTime picture cannot scroll, so long notes are cut to whole lines rather than through the middle of one. */
+    .lines3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: 3; }
+    .notes li { padding: 9px 4px; }
+    .notes .title { font-size: 30px; }
+    .notes .how { font-size: 26px; margin-top: 3px; }
+    h2.next { margin-top: 22px; }
+    .steps li { padding: 9px 4px; align-items: center; }
+    .steps .title { font-size: 30px; }
     .rec { display: flex; align-items: center; gap: 12px; font-weight: 700; color: #b91c1c; font-size: 32px; margin: 14px 0 0; }
     .rec.watch { color: #0f766e; }
     .dot { width: 20px; height: 20px; border-radius: 999px; background: #dc2626; }
@@ -106,61 +115,72 @@ function shell({ title, sub, asideTitle, aside, mainTitle, main, headerExtra, bo
 </html>`;
 }
 
-export function skillPage(skill, activeId) {
-  const steps = (skill?.steps || []).map(step => {
-    const on = step.id === activeId;
-    return `<li data-step-id="${escapeHtml(step.id)}" class="${on ? 'on' : ''}">
+/** Words for the one control the caller has: the camera button. */
+const CAMERA = {
+  demo: on => (on ? 'Seen enough? Turn your camera off.' : 'Ready to practice? Turn your camera on.'),
+  setup: on => (on
+    ? 'Get set up. Then turn your camera off and on again: recording starts.'
+    : 'Get set up. Turn your camera on when you are ready: recording starts.'),
+  again: on => (on ? 'Turn your camera off, then on, to try again.' : 'Turn your camera on to try again.'),
+};
+
+const items = list => list.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+
+/** Between the demonstration and the recording: what to gather at home, where to put the phone, what to show. */
+export function setupPage(skill, { cameraOn = false } = {}) {
+  const steps = (skill?.steps || []).map(step => `<li>
       <span class="num">${escapeHtml(step.id.replace('s', ''))}</span>
       <p class="title">${escapeHtml(step.title)}</p>
-    </li>`;
-  }).join('');
+    </li>`).join('');
   return shell({
-    title: skill?.name || 'Pick a skill',
-    sub: 'Watch the demonstration, then record yourself doing it.',
-    mainTitle: 'Setup',
-    main: `<ul class="setup">${(skill?.setup || ['Say which skill you want to practice.']).map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
-      <h2 style="margin-top:24px">Safety</h2>
-      <ul class="setup">${(skill?.safety || []).map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
-      <h2 style="margin-top:24px">What you will show</h2>
-      <ul>${steps || '<li>Choose a skill to see its steps.</li>'}</ul>`,
+    title: skill?.name || 'Get set up',
+    sub: CAMERA.setup(cameraOn),
+    mainTitle: 'You need',
+    main: `<ul class="setup">${items(skill?.setup || [])}</ul>
+      ${skill?.camera ? `<h2 class="next">Your phone</h2><p class="tip">${escapeHtml(skill.camera)}</p>` : ''}
+      <h2 class="next">Steps you will show</h2>
+      <ul class="steps">${steps}</ul>`,
   });
 }
 
 export function welcomePage(skills) {
-  const items = skills.map((skill, index) => `<li class="skill">
+  const rows = skills.map((skill, index) => `<li class="skill">
       <span class="num">${index + 1}</span>
       <p class="title">${escapeHtml(skill.name)}</p>
       <span class="count">${skill.steps.length} steps</span>
     </li>`).join('');
   return shell({
     title: 'What do you want to practice?',
-    sub: 'Say one skill. I will play the nurse demonstration, then record you, then grade it.',
-    asideTitle: 'On this call',
+    sub: 'Say one skill. These are home versions: no equipment needed.',
+    asideTitle: 'Your camera runs the call',
     aside: `<ul class="setup">
-      <li>Name one skill.</li>
-      <li>Watch the demonstration, then say you are done.</li>
-      <li>Record yourself doing it, then say you are done.</li>
-      <li>Then end the call, record again, or pick another skill.</li>
+      <li>Watch the nurse. Camera off when you have seen enough.</li>
+      <li>Get set up. Camera on: I record you.</li>
+      <li>Camera off when you finish: I grade it.</li>
     </ul>`,
     mainTitle: 'Skills',
-    main: `<ul>${items}</ul>`,
+    main: `<ul>${rows}</ul>`,
   });
 }
 
-export function demoPage(skill) {
+export function demoPage(skill, { cameraOn = true } = {}) {
   return shell({
     title: skill?.name || 'Demonstration',
-    sub: 'Say “I am done” when you have seen enough.',
+    sub: CAMERA.demo(cameraOn),
     boxed: false,
     headerExtra: `<p class="rec watch">Demonstration</p>`,
-    main: `<div class="stage"><video id="demo" src="https://coach.local/demo.mp4" autoplay playsinline muted></video></div>`,
+    main: `<div class="stage"><video id="demo" src="https://coach.local/demo.mp4" preload="auto" playsinline muted></video></div>
+      <section>
+        <h2>At home you will use</h2>
+        <ul class="setup">${items(skill?.setup || [])}</ul>
+      </section>`,
   });
 }
 
 export function recordingPage(skill) {
   return shell({
     title: skill?.name || 'Your practice',
-    sub: 'Stay in FaceTime Video so I can see you. Say “I am done” when you finish.',
+    sub: 'Do each step where the camera can see you. Turn your camera off when you finish.',
     headerExtra: `<p class="rec"><span class="dot"></span> Recording</p>`,
     mainTitle: 'Steps to show',
     main: `<ul>${(skill?.steps || []).map(step => `<li>
@@ -177,11 +197,11 @@ export function gradingPage(skill) {
     asideTitle: 'Now',
     aside: `<ul class="setup"><li>Watching your recording against the skill steps.</li></ul>`,
     mainTitle: 'Next',
-    main: `<p class="banner">You will see pass or retry notes for each step, then you can end the call, record again, or practice another skill.</p>`,
+    main: `<p class="banner">You will see pass or retry notes for each step. Then turn your camera on to try again, say another skill, or say goodbye.</p>`,
   });
 }
 
-export function resultsPage(skill, result) {
+export function resultsPage(skill, result, { cameraOn = false } = {}) {
   const steps = (result?.steps || skill?.steps || []).map((step, index) => {
     const status = String(step.status || 'unverified').toLowerCase();
     const klass = status === 'passed' ? 'pass' : status === 'failed' ? 'fail' : 'unverified';
@@ -190,25 +210,25 @@ export function resultsPage(skill, result) {
       <span class="num">${index + 1}</span>
       <div>
         <p class="title">${escapeHtml(step.title || step.id)} · ${label}</p>
-        <p class="how">${escapeHtml(step.feedback || step.how || '')}</p>
+        <p class="how lines3">${escapeHtml(step.feedback || step.how || '')}</p>
       </div>
     </li>`;
   }).join('');
   const overall = String(result?.overall || 'unverified').toLowerCase();
   const headline = overall === 'passed' ? 'Looks good' : overall === 'failed' ? 'Try this again' : 'Some steps were hard to see';
-  const matchNote = result?.skill_match === false ? 'This recording did not look like that skill. Record again with the demonstration in mind.' : (result?.overall_feedback || '');
+  const matchNote = result?.skill_match === false ? 'This recording did not look like that skill. Record again with the steps in mind.' : (result?.overall_feedback || '');
   return shell({
     title: headline,
     sub: skill ? `${skill.name}${result?.score_pct != null ? ` · ${Math.round(result.score_pct)}%` : ''}` : 'Your practice',
     asideTitle: 'What next',
     aside: `<ul class="setup">
-      <li>Say “end the call” to hang up.</li>
-      <li>Say “record again” to retry this skill.</li>
-      <li>Say another skill name to practice that one.</li>
+      <li>${CAMERA.again(cameraOn)}</li>
+      <li>Say another skill to practice that one.</li>
+      <li>Say “goodbye” to end the call.</li>
     </ul>
     <h2 style="margin-top:14px">Summary</h2>
-    <p class="how">${escapeHtml(matchNote || 'Look over the step notes below.')}</p>`,
+    <p class="how lines3">${escapeHtml(matchNote || 'Look over the step notes below.')}</p>`,
     mainTitle: 'Step notes',
-    main: `<ul>${steps || '<li>No step notes came back. You can still record again.</li>'}</ul>`,
+    main: `<ul class="notes">${steps || '<li>No step notes came back. You can still try again.</li>'}</ul>`,
   });
 }

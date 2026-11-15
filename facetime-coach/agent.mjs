@@ -3,12 +3,14 @@ import { AutoSubscribe, defineAgent, llm, voice } from '@livekit/agents';
 import { realtime } from '@livekit/agents-plugin-openai';
 import { LocalVideoTrack, TrackSource, VideoBufferType, VideoFrame, VideoSource } from '@livekit/rtc-node';
 import { z } from 'zod';
+import { watchCamera } from './camera.mjs';
 import { runAgent } from './chert-rooms.mjs';
+import { createCoachCall } from './flow.mjs';
 import { greetOnBridgeReady } from './greet.mjs';
 import { gradeRecording } from './grade.mjs';
-import { FPS, HEIGHT, WIDTH, captureFrame, setSpeaking, showGrading, showRecording, showResults, showSkill, showWelcomeScreen, startPortal, stopPortal, playDemo, stopDemo } from './portal.mjs';
+import { FPS, HEIGHT, WIDTH, captureFrame, setSpeaking, showGrading, showRecording, showResults, showSetup, showWelcomeScreen, startPortal, stopPortal, playDemo, stopDemo } from './portal.mjs';
 import { startCallerRecording } from './record.mjs';
-import { findSkill, instructionsFor, loadSkills } from './skills.mjs';
+import { instructionsFor, loadSkills } from './skills.mjs';
 
 const skills = await loadSkills();
 
@@ -42,70 +44,82 @@ const agent = defineAgent({
       throw new Error('Set OPENAI_API_KEY in .env.local for the FaceTime coach. Do not paste it into chat.');
     }
 
-    const call = { skill: null, phase: 'pick', recorder: null, result: null, listening: false, greeted: false };
-
-    async function stopRecorder() {
-      const recorder = call.recorder;
-      call.recorder = null;
-      if (!recorder?.stop) return null;
-      return recorder.stop();
-    }
-
-    async function beginRecording() {
-      if (!call.skill) return 'They have not chosen a skill yet. Ask which skill they want.';
-      await stopDemo();
-      await stopRecorder();
-      await showRecording(call.skill);
-      const recorder = await startCallerRecording(ctx.room);
-      if (recorder.error) {
-        call.phase = 'demo';
-        await showSkill(call.skill);
-        return recorder.error;
-      }
-      call.recorder = recorder;
-      call.phase = 'recording';
-      return `Recording ${call.skill.name}. Tell them to do the skill, then say they are done.`;
-    }
-
-    async function gradeNow() {
-      if (call.phase !== 'recording' || !call.recorder) {
-        return 'You are not recording. After they finish the demonstration, wait for them to say they are done, then record.';
-      }
-      const skill = call.skill;
-      await showGrading(skill);
-      call.phase = 'grading';
-      const capture = await stopRecorder();
-      if (capture?.error) {
-        call.phase = 'review';
-        await showSkill(skill);
-        return capture.error;
-      }
-      const result = await gradeRecording(skill, capture);
-      call.result = result;
-      call.phase = 'review';
-      await showResults(skill, result);
-      const notes = (result.steps || []).map(step => `${step.title}: ${step.status}. ${step.feedback}`).join(' ');
-      return `Graded ${skill.name} as ${result.overall}. ${result.overall_feedback} ${notes} Offer to end the call, record again, or practice another skill.`;
-    }
-
     const session = new voice.AgentSession({
       llm: new realtime.RealtimeModel({
         model: process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime',
         voice: process.env.OPENAI_REALTIME_VOICE || 'marin',
       }),
     });
-    const openMic = () => {
-      if (call.listening) return;
-      call.listening = true;
-      session.input.setAudioEnabled(true);
-    };
+
+    // The caller's microphone reaches the coach only after the greeting, and never while they are being recorded.
+    let greeted = false;
+    let wanted = true;
+    const applyMic = () => session.input.setAudioEnabled(greeted && wanted);
+
+    /** Runs the callback once the coach has finished the reply to the tool call being handled now. */
+    let pendingReply = null;
+    function afterReply(callback) {
+      let ran = false;
+      const run = () => {
+        if (ran) return;
+        ran = true;
+        clearTimeout(timer);
+        if (pendingReply === run) pendingReply = null;
+        callback();
+      };
+      const timer = setTimeout(run, 15_000); // the coach never replied: go on anyway
+      pendingReply = run;
+    }
+    session.on(voice.AgentSessionEventTypes.SpeechCreated, event => {
+      if (event.source === 'tool_response' && pendingReply) event.speechHandle.addDoneCallback(pendingReply);
+    });
+
+    /** The coach says something because of what happened on the call, not because the caller spoke. */
+    function say(instructions) {
+      try {
+        void session.interrupt();
+        session.generateReply({ instructions, toolChoice: 'none' });
+      } catch (error) {
+        console.warn('[coach] could not speak:', error.message);
+      }
+    }
+
+    // The caller's camera runs the call: see flow.mjs.
+    let coach;
+    const camera = watchCamera(ctx.room, {
+      identity: caller.identity,
+      log: message => console.log(message),
+      onChange: change => { void coach?.cameraChanged(change); },
+    });
+    coach = createCoachCall({
+      skills,
+      camera,
+      screen: {
+        demo: (skill, options) => playDemo(skill, session.output.audio, options),
+        stopDemo,
+        setup: showSetup,
+        recording: showRecording,
+        grading: showGrading,
+        results: showResults,
+      },
+      startRecording: options => startCallerRecording(camera, options),
+      grade: gradeRecording,
+      coach: {
+        say,
+        listen(open) { wanted = open; applyMic(); },
+        afterReply,
+      },
+      hangUp: () => ctx.shutdown('caller asked to end'),
+      log: message => console.log(message),
+    });
+
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, event => {
       setSpeaking(event.newState === 'speaking');
     });
     ctx.addShutdownCallback(async () => {
       clearInterval(timer);
-      await stopDemo();
-      await stopRecorder();
+      camera.close();
+      await coach.close();
       await session.close();
       await track.close();
       await source.close();
@@ -116,50 +130,22 @@ const agent = defineAgent({
         instructions: `${instructionsFor(skills)}\nThe picture on this call is currently: ${portalMode}.`,
         tools: {
           choose_skill: llm.tool({
-            description: 'Play the demonstration for a skill the caller just named. Call only after they said the skill. Never guess. Return immediately so they can say they are done.',
+            description: 'Play the demonstration for a skill the caller just named. Call only after they said the skill. Never guess. It returns what to tell them.',
             parameters: z.object({ skill: z.string().describe('Exact skill name the caller said') }),
-            execute: async ({ skill: query }) => {
-              if (!call.greeted || !call.listening) {
-                return 'The caller has not named a skill yet. Ask which skill they want, then wait.';
-              }
-              const skill = findSkill(skills, query);
-              if (!skill) return `Unknown skill. Available: ${skills.map(item => item.name).join(', ')}`;
-              await stopRecorder();
-              call.skill = skill;
-              call.phase = 'demo';
-              call.result = null;
-              const played = await playDemo(skill, session.output.audio);
-              return `${played} Do not wait for the video to finish. When they say they are done, call caller_done.`;
+            execute: async ({ skill }) => {
+              if (!greeted) return 'The caller has not named a skill yet. Ask which skill they want, then wait.';
+              return coach.chooseSkill(skill);
             },
           }),
-          caller_done: llm.tool({
-            description: 'The caller said they are done. During the demonstration, stop the video and audio and start recording. During recording, stop and grade with Gemini.',
-            parameters: z.object({}),
-            execute: async () => {
-              if (call.phase === 'demo' && call.skill) return beginRecording();
-              if (call.phase === 'recording' && call.recorder) return gradeNow();
-              if (!call.skill) return 'They have not chosen a skill yet. Ask which skill they want.';
-              return 'Wait until a demonstration or a recording is in progress, then call this when they say they are done.';
-            },
-          }),
-          rerecord: llm.tool({
-            description: 'After they have seen suggestions, record the same skill again.',
-            parameters: z.object({}),
-            execute: async () => {
-              if (!call.skill) return 'No skill yet.';
-              call.result = null;
-              return beginRecording();
-            },
+          camera_not_noticed: llm.tool({
+            description: 'Only when the caller says they already turned their camera off or on and nothing happened. Never call it because they said they are done: tell them to use the camera button instead.',
+            parameters: z.object({ camera: z.enum(['off', 'on']).describe('What the caller says their camera is now') }),
+            execute: async ({ camera: claimed }) => coach.cameraNotNoticed(claimed),
           }),
           end_call: llm.tool({
             description: 'Hang up after they ask to end the call.',
             parameters: z.object({}),
-            execute: async () => {
-              await stopDemo();
-              await stopRecorder();
-              setTimeout(() => ctx.shutdown('caller asked to end'), 1500);
-              return 'Say goodbye in one short sentence, then the call will end.';
-            },
+            execute: async () => coach.end(),
           }),
         },
       }),
@@ -174,20 +160,15 @@ const agent = defineAgent({
       },
       outputOptions: { audioEnabled: true, transcriptionEnabled: false, audioSampleRate: 24000, audioNumChannels: 1 },
     });
-    session.input.setAudioEnabled(false);
+    applyMic();
     const stopGreeting = greetOnBridgeReady(ctx.room, () => {
       const speech = session.generateReply({
         allowInterruptions: false,
         toolChoice: 'none',
         instructions: 'Greet in one short sentence: you are an AI caregiver coach. Ask which one skill they want. Do not name any skill. Do not call any tool. Do not mention texting.',
       });
-      void speech.waitForPlayout().then(() => {
-        call.greeted = true;
-        openMic();
-      }).catch(() => {
-        call.greeted = true;
-        openMic();
-      });
+      const open = () => { greeted = true; applyMic(); };
+      void speech.waitForPlayout().then(open, open);
     });
     ctx.addShutdownCallback(async () => stopGreeting());
   },

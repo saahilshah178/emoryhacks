@@ -1,43 +1,56 @@
 # Glove removal
 
-## Setup
-- A pair of disposable gloves, or clean kitchen gloves
-- A sink with soap, or hand sanitizer if there is no sink
-- A trash bag
-- Optional: a long-sleeve shirt as a gown
+Practice taking off dirty gloves without touching the outside. Any gloves work, and so do two clean socks worn on your hands.
+
+## You need
+- Disposable or dish gloves. No gloves? Wear two clean socks or two sandwich bags on your hands
+- A trash can or an open bag
+- Soap and water or hand sanitizer, if they are close by
+
+## Camera
+Prop your phone about 3 feet away at chest height, so both hands and the trash can show the whole time.
 
 ## Safety
-- Treat the outside of used gloves as dirty even in practice.
-- Do not touch your face while gloves are on.
-- Do not snap gloves off.
-- Wash or sanitize immediately after they are in the trash.
+- Treat the outside of the gloves as dirty, even in practice.
+- Do not touch your face while the gloves are on.
+- Peel slowly. Do not snap the gloves off.
 
 ## Steps
 
-### s1. Perform hand hygiene before donning gloves
-Wash with soap and water, rubbing all surfaces, then dry. Sanitizer is fine if there is no sink.
-Say "done" when: hands are clean and dry.
+### s1. Clean your hands
+Rub your palms, the backs of your hands and between your fingers. In real care this takes 20 seconds; a few seconds is enough here.
+Pass when: the person rubs the palms, the backs of the hands and between the fingers before the gloves go on.
+Try again when: the gloves go on with no hand cleaning first.
 
-### s2. Don disposable gloves over gown cuffs
-Put a glove on each hand. Pull the cuffs over your sleeves so no skin shows at the wrist.
-Say "done" when: both gloves cover the sleeve cuffs.
+### s2. Put on both gloves
+Put a glove on each hand and pull the cuffs up over your wrists.
+Pass when: both hands are covered, with the cuffs pulled over the wrists.
+Try again when: only one hand is covered.
+After: s1
 
-### s3. Pinch the first glove's outer cuff
-With the other gloved hand, pinch the outside of one glove at the wrist. Do not touch skin.
-Say "done" when: you are pinching the outer cuff only.
+### s3. Pinch the outside of one glove
+With one gloved hand, pinch the outside of the other glove at the wrist. Glove touches glove, never skin.
+Pass when: a gloved hand pinches the outside of the other glove near the wrist.
+Try again when: gloved fingers slide under the cuff and touch bare skin.
+Key step: yes
+After: s2
 
-### s4. Peel first glove inside-out and hold
-Peel it off inside-out and wad it in the remaining gloved hand. Do not fling it.
-Say "done" when: one hand is bare and the dirty glove is in the still-gloved palm.
+### s4. Peel it off inside-out and hold it
+Peel that glove off so it turns inside-out, and ball it up in your gloved hand.
+Pass when: the first glove comes off inside-out and is held in the hand that is still gloved.
+Try again when: the glove is flung off, put down on a surface, or held in the bare hand.
+Key step: yes
+After: s3
 
-### s5. Remove second glove inside-out from inside
-Slide a bare finger under the remaining cuff, touching only the inside, and peel it off over the first glove.
-Say "done" when: both gloves are inside-out in a bundle and your hands are bare.
+### s5. Bare fingers under the second cuff
+Slip two bare fingers inside the cuff of the second glove and peel it off inside-out, over the first glove.
+Pass when: bare fingers go inside the cuff, and the second glove peels off inside-out around the first.
+Try again when: the bare hand grabs the outside of the second glove.
+Key step: yes
+After: s4
 
-### s6. Dispose of the removed gloves
-Hold the clean inner surface and drop the bundle in the trash. Do not set them on a counter.
-Say "done" when: gloves are in the trash.
-
-### s7. Perform hand hygiene after glove removal
-Wash or sanitize right away, before touching your face or phone.
-Say "done" when: hands are clean again.
+### s6. Bin the gloves, clean your hands
+Drop the bundle in the trash, then clean your hands again right away.
+Pass when: the bundle is dropped into the trash and the hands are rubbed clean afterward.
+Try again when: the gloves are left on a surface, or the hands are not cleaned afterward.
+After: s5

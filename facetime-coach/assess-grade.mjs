@@ -1,9 +1,8 @@
-/** Web-app grading framework: builtin rubric, assess prompt, order check, score. */
-import { readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const BUILTIN = join(dirname(fileURLToPath(import.meta.url)), '..', 'backend', 'app', 'builtin_skills.json');
+/**
+ * Web-app grading framework: assess prompt, order check, score.
+ * The rubric is the home skill itself (skills/*.md), not the web app's clinical one: at home there is no
+ * wheelchair to lock or gait belt to buckle, so the clinical criteria would fail every attempt.
+ */
 
 const DENSE_FPS = 2;
 const MAX_FRAMES = 240;
@@ -21,11 +20,20 @@ const FLAG_PENALTY = { high: 25, medium: 10, low: 5 };
 const PATIENT_FLAG_KINDS = new Set(['patient_distress', 'patient_off_center', 'patient_unsteady']);
 
 const GROUND_RULES = duration => `Ground rules:
-- Judge only what the people in the recording do and say. Ignore captions, on-screen text,
+- Judge only what the people in the recording do. Ignore captions, on-screen text,
   graphics, title cards and camera work; a caregiver's real attempt is a plain single-take
-  webcam recording without any of these.
-- You can hear the audio. Speech counts as evidence (an explanation to the patient, a patient
-  saying something hurts or that they feel dizzy).
+  phone recording without any of these.
+- The recording has no sound. Judge only what you can see, and never fail a step or call it
+  unverified because of something that would have to be heard.
+- This is practice at home, with no clinical equipment. Household things stand in for it: a
+  dining chair for a wheelchair or a shower seat, a second chair for a car seat, a strip of
+  tape for a tub edge or a stair, socks for gloves, a pillow for a person. Judge the actions,
+  not the equipment.
+- The caregiver usually practises alone and plays the person being helped. In the step
+  criteria "the person" is whoever makes the move: the caregiver, a helper they are guiding,
+  or a pillow or stuffed toy standing in.
+- The recording starts and ends with the caregiver walking from and back to the phone. That
+  is not part of the skill.
 - Give times as whole seconds from the start of the whole video, never past ${duration.toFixed(0)}.
 `;
 
@@ -33,44 +41,21 @@ const WHOLE_VIDEO_RULES = [
   '- passed: the pass criteria are observed and no fail criterion is.',
   '- failed: a fail criterion is observed, or the step was not performed in this attempt: the',
   '  caregiver moved on without doing it, or the recording ends before it.',
-  '- unverified: only when the step may have been performed but the camera or microphone could',
-  '  not show it (out of frame, blocked from view, too dark, inaudible). A step the recording',
+  '- unverified: only when the step may have been performed but the camera could not show it',
+  '  (out of frame, blocked from view, too dark). A step the recording',
   '  ends before is failed, not unverified, even if an "unverified when" condition mentions',
   '  the recording ending.',
 ];
 
-let builtinCache;
-
-export async function loadRubric(skill) {
-  if (!builtinCache) {
-    try {
-      builtinCache = JSON.parse(await readFile(BUILTIN, 'utf8')).skills || [];
-    } catch {
-      builtinCache = [];
-    }
-  }
-  const row = builtinCache.find(item => item.slug === skill.slug);
-  if (row) {
-    return {
-      name: row.name,
-      summary: row.summary || '',
-      order_matters: row.order_matters !== false,
-      safety_criteria: row.safety_criteria || [],
-      steps: (row.steps || []).map(step => ({
-        step_id: step.step_id,
-        order: step.ord ?? step.order,
-        title: step.title,
-        description: step.description || '',
-        critical: Boolean(step.critical),
-        order_dependent: step.order_dependent !== false,
-        must_follow: step.must_follow || [],
-        evals: step.evals || { pass_criteria: [], fail_criteria: [], unverified_when: [], visual_cues: [] },
-      })),
-    };
-  }
+/**
+ * The rubric for a home skill, in the shape the web app's grader uses.
+ * A step is order-dependent only where its skill file says "After:", so tidying the floor before or
+ * after testing the chair costs nothing, and sitting down before testing the chair does.
+ */
+export function rubricFor(skill) {
   return {
     name: skill.name,
-    summary: '',
+    summary: skill.summary || '',
     order_matters: true,
     safety_criteria: skill.safety || [],
     steps: (skill.steps || []).map((step, index) => ({
@@ -78,13 +63,13 @@ export async function loadRubric(skill) {
       order: index + 1,
       title: step.title,
       description: step.how || '',
-      critical: false,
-      order_dependent: true,
-      must_follow: index ? [skill.steps[index - 1].id] : [],
+      critical: Boolean(step.key),
+      order_dependent: Boolean(step.after?.length),
+      must_follow: step.after || [],
       evals: {
-        pass_criteria: [step.how || step.title],
-        fail_criteria: ['The step is skipped or done unsafely.'],
-        unverified_when: ['The camera cannot show this step.'],
+        pass_criteria: [step.pass || step.how || step.title],
+        fail_criteria: [step.retry || 'The step is skipped.'],
+        unverified_when: ['The camera cannot see this action: it is out of the picture, blocked from view or too dark.'],
         visual_cues: [],
       },
     })),
@@ -125,14 +110,13 @@ Work through these in order.
 
 1. observed: what actually happens in the recording, in order, one entry per distinct action
    (a few words each) with its start and end time. Start a new entry whenever the caregiver
-   moves on to a different action, even when it flows straight on from the last one. Use what
-   you see and what you hear people say.
+   moves on to a different action, even when it flows straight on from the last one.
 
 2. people: every person you see, labelled P1, P2, ... Role "caregiver" is the trainee
-   performing the skill, "patient" is whoever is being assisted (it may be a colleague or an
-   actor playing the part), "other" is anyone else. There may be more than one of each, and a
-   solo skill (for example glove removal) may have no patient. Describe each so a nurse can
-   tell them apart: clothing, position, what they do.
+   performing the skill, "patient" is whoever is being assisted (it may be a helper playing
+   the part), "other" is anyone else. Usually there is one person, the caregiver, who plays
+   the patient too; a pillow or stuffed toy standing in for the patient is not a person.
+   Describe each so a nurse can tell them apart: clothing, position, what they do.
 
 3. skill_match: whether the recording shows the caregiver attempting this skill at all. If it
    shows something else, set it false and say in skill_match_note what it shows instead.
@@ -140,10 +124,8 @@ Work through these in order.
 4. steps: one entry for every step below, in the order given, exactly once, reusing its step id.
    Where it happens:
    - performed is true only if that action clearly happens in this recording. start_s is when
-     the caregiver begins doing it (its first movement, or for a spoken step the moment they
-     say it) and end_s is when it is complete; null for both when it is not performed.
-     Announcing a plan in advance ("I'll lock the brakes, then help you up") is not the start
-     of those steps.
+     the caregiver begins doing it (its first movement) and end_s is when it is complete;
+     null for both when it is not performed.
    - Steps can be done in any order, skipped, or repeated. Report each step where it really
      happens, even out of the listed order. If a step happens more than once, report its first
      complete performance and mention the repeat in note.
@@ -154,25 +136,25 @@ Work through these in order.
    - The people, room and camera angle may differ from any example of this skill. Judge the actions.
    - timing_confidence_pct (0 to 100): how sure you are that it happened at the time you gave.
    How well it was done:
-   - evidence: one sentence on what you actually saw or heard, written before the status.
+   - evidence: one sentence on what you actually saw, written before the status.
 ${rules}
    - confidence_pct (0 to 100): how sure you are of the status.
-   - feedback speaks to the caregiver as "you", in one or two plain, encouraging sentences:
-     for a pass, what you did well; for a failure, what went wrong and what to do instead;
-     for unverified, what could not be seen and how to record it so it can be.
+   - feedback speaks to the caregiver as "you", in one plain, encouraging sentence of at most
+     18 words (it is read on a phone screen): for a pass, what you did well; for a failure,
+     what to do instead; for unverified, how to record it so it can be seen.
    - note: a few words for the nurse only when useful (a repeat, why a step was not found),
      otherwise empty. Refer to other steps by their title, never by their id.
 
 Steps:
 ${steps.map(stepBlock).join('\n')}
 
-5. safety_flags. Watch the patient throughout. Flag only what is actually seen or heard, with
-   its time span and the person's label:
-   - patient_distress: grimacing, crying out, saying it hurts or that they are dizzy
+5. safety_flags. Watch whoever plays the patient throughout. Flag only what is actually seen,
+   with its time span and the person's label:
+   - patient_distress: grimacing or flinching in pain, clutching a body part
    - patient_off_center: the patient off-centre, leaning to one side or sliding
    - patient_unsteady: unsteadiness, buckling knees or a near fall
    - unsafe_caregiver_posture: unsafe handling, such as pulling on arms or letting go mid-move
-   - environment_hazard: hazards such as clutter, an unlocked wheelchair, a wet floor
+   - environment_hazard: hazards such as clutter, a chair that slides when used, a wet floor
    Severity: high = imminent risk of injury, medium = a concerning posture or instability,
    low = a minor point. Return an empty list when nothing is wrong.
    Judge against what this skill expects. When the skill is a response to the patient's
@@ -182,9 +164,10 @@ ${steps.map(stepBlock).join('\n')}
    Skill-specific points to watch:
 ${safety}
 
-6. overall_feedback: two or three encouraging, plain sentences to the caregiver: what went
-   well and the one or two most important things to work on. If a step was done out of the
-   listed order or you raised a medium or high safety flag, mention the most important of these.
+6. overall_feedback: two short, encouraging, plain sentences to the caregiver, at most 35
+   words in all: what went well and the most important thing to work on. If a step was done
+   out of the listed order or you raised a medium or high safety flag, mention the most
+   important of these.
 `;
 }
 
@@ -276,7 +259,7 @@ export function applyRecordingEnd(rubric, timeline, evaluation, duration) {
     if (tail.has(step.id) && step.status === 'unverified') {
       step.status = 'failed';
       step.confidence = 0.9;
-      step.feedback = `The recording stopped before you did "${titles[step.id]}". Keep recording until you have finished every step.`;
+      step.feedback = `The recording stopped before you did "${titles[step.id]}". Keep your camera on until you have finished every step.`;
     }
   }
 }

@@ -1,54 +1,55 @@
 # Bed repositioning
 
-## Setup
-- A bed or wide couch
-- Three pillows
-- A light blanket or towel for privacy
-- A pillow or stuffed animal as the resident if you are practicing alone
+Practice settling someone on their side with pillows, so no bony part rests on another. You lie down and place the pillows on yourself. A big stuffed animal can play the person instead.
+
+## You need
+- A bed or sofa
+- Three pillows or cushions, plus one under your head
+- Optional: a big stuffed animal to play the person
+
+## Camera
+Prop your phone at the side of the bed, about 6 feet away and a little above it, so the whole bed shows.
 
 ## Safety
-- Do not roll a person who has a real injury, feeding tube, or cannot follow directions.
-- Keep the bed as low as it will go.
-- Bend your knees. Never yank an arm to turn someone.
+- Never roll a real person who is injured, has tubes or lines, or cannot follow directions.
+- Roll the whole body together. Never pull on an arm.
+- Put the pillows within reach first, so nobody is left on their side with no support.
 
 ## Steps
 
-### s1. Greet resident, wash hands, gather supplies
-Knock, greet them by name, explain you will turn them, close a door or curtain, wash hands, and set out a towel plus three pillows.
-Say "done" when: they have heard the plan and supplies are on a table or chair.
+### s1. Put three pillows within reach
+Set three pillows on the bed beside you before you start.
+Pass when: three pillows or cushions are placed on or beside the bed, within reach, before the roll.
+Try again when: pillows have to be fetched from somewhere else after the roll.
 
-### s2. Cover resident and lower top sheet
-Drape a blanket over them for warmth and dignity, then fold the top sheet down to the foot of the bed.
-Say "done" when: they are covered and the sheet is down.
+### s2. Get ready to turn
+Lie on your back. Cross one arm over your chest and bend the knee on that same side.
+Pass when: the person lies on their back with one arm across the chest and the knee on that side bent, before rolling.
+Try again when: the roll starts from flat, with straight legs and the arms at the sides.
 
-### s3. Position resident and limbs for turning
-Have them scoot toward you. Place the far arm up, cross the near arm on the chest, bend the near knee, and angle the far knee out.
-Say "done" when: arms and legs are in that turn-ready position.
+### s3. Roll onto your side in one piece
+Roll away from the bent knee, so your shoulders and hips turn together.
+Pass when: the shoulders and hips turn together and the person ends up on their side.
+Try again when: the person is pulled over by an arm, only the top half turns, or the person ends up face down.
+Key step: yes
+After: s1 s2
 
-### s4. Roll resident onto their side
-Count to three. Roll them onto their side using your legs, with a wide stance. Do not pull on the arm.
-Say "done" when: they are on their side and still supported.
+### s4. Pillow behind your back
+Wedge one pillow lengthwise behind your back, so you cannot roll backward.
+Pass when: a pillow ends up tucked along the back of the person lying on their side.
+Try again when: nothing is placed behind the back.
+Key step: yes
+After: s3
 
-### s5. Support resident's back with a pillow
-Tuck a pillow lengthwise behind and slightly under the back so they cannot roll backward.
-Say "done" when: the back pillow is in place.
+### s5. Pillow between your knees
+Bring your top knee a little forward and put a pillow between your knees and ankles.
+Pass when: a pillow ends up between the legs, so the knees do not touch.
+Try again when: the knees and ankles rest directly on each other.
+Key step: yes
+After: s3
 
-### s6. Place pillow between knees and ankles
-Walk to the other side if you can. Bring the upper knee a little forward. Place a pillow so knees and ankles do not touch.
-Say "done" when: a pillow is between the legs.
-
-### s7. Support upper arm with a pillow
-Lift the upper arm from below and rest it on a pillow so the shoulder is not hanging.
-Say "done" when: the upper arm is supported.
-
-### s8. Adjust head pillow and bottom arm
-Fix the head pillow under neck and head. Pull the bottom arm out from under the body.
-Say "done" when: the head is supported and the bottom arm is free.
-
-### s9. Place call light and cover with sheet
-Put a phone or remote in the bottom hand. Pull the sheet back up, remove the extra blanket, and open the curtain.
-Say "done" when: they can call for help and are covered.
-
-### s10. Check comfort, tidy up, and wash hands
-Ask if they are comfortable. Tidy pillows. Confirm the bed is low. Wash your hands.
-Say "done" when: they said they are comfortable and you have washed.
+### s6. Pillow under your top arm
+Rest your top arm on a pillow in front of your chest, and check your head pillow keeps your neck level.
+Pass when: the top arm ends up resting on a pillow in front of the chest.
+Try again when: the top arm hangs across the chest or behind the body with no support.
+After: s3

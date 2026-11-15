@@ -1,56 +1,57 @@
 # Wheelchair transfer
 
-## Setup
-- A bed, sofa, or sturdy couch as the starting surface
-- A dining chair with a back as the wheelchair
-- A scarf, belt, or yoga strap as the gait belt
-- Non-slip socks or shoes
-- A pillow or stuffed animal as the patient, or a willing uninjured roommate who can stand on their own
+Practice the move from a bed to a wheelchair, with a dining chair as the wheelchair. You do the move yourself, so you learn every cue. There is no lifting.
+
+## You need
+- A bed or sofa to start from
+- A sturdy chair with a back, as the wheelchair
+- A wall or heavy furniture to wedge the chair against
+- Shoes or bare feet, not plain socks
+
+## Camera
+Prop your phone about 8 feet away, so the bed or sofa, the chair and your whole body all show.
 
 ## Safety
-- Do not lift anyone who actually needs help transferring.
-- Keep a wide stance and bend your knees, not your back.
-- If the chair can slide, put it against a wall or brace the legs with books.
-- Stop if anyone feels dizzy.
+- Never lift a person who cannot stand on their own.
+- Test the chair before anyone sits in it.
+- Turn with your feet. Do not twist your back.
+- Stop and sit down if you feel dizzy.
 
 ## Steps
 
-### s1. Perform routine preparation and greet patient
-Wash your hands. Close a door or pull a curtain for privacy. Greet the "patient" by name, say you will help them into the chair, and check a pretend ID band (a sticky note on a sleeve works).
-Say "done" when: hands are clean, privacy is set, and you have explained the transfer.
+### s1. Set the chair close, at an angle
+Put the chair right beside the bed or sofa, angled toward it, so the move is one short turn.
+Pass when: the chair ends up within one step of the bed or sofa, angled toward it.
+Try again when: the chair is left more than a step away, or facing away.
 
-### s2. Position the wheelchair alongside the bed
-Place the dining chair beside the bed or sofa, close enough for a short pivot, facing the same way the wheelchair would.
-Say "done" when: the chair is beside the bed with a short, clear path.
+### s2. Lock the brakes
+A dining chair has no brakes, so wedge it against a wall or heavy furniture, then push on it to check it will not slide.
+Pass when: the person pushes or presses on the chair to test it, and it stays put.
+Try again when: the chair is never tested, or it slides when pushed and is used anyway.
+Key step: yes
+After: s1
 
-### s3. Lock the wheelchair brakes
-If the chair has no brakes, press both sides of the seat and say "brakes locked," then wedge books against the legs so it cannot slide.
-Say "done" when: the chair cannot roll or slide.
+### s3. Clear the floor
+Move shoes, bags, cords and loose rugs out of the space between the bed and the chair.
+Pass when: the person moves things off the floor between the two seats, or sweeps a foot or hand through the space to show it is clear.
+Try again when: something is left lying on the floor between the seats.
 
-### s4. Clear the wheelchair footrests
-Swing imaginary footrests away, or move any bags or shoes out from under the chair so feet can plant on the floor.
-Say "done" when: the space in front of the chair is empty.
+### s4. Sit at the edge, feet flat
+Sit on the edge of the bed or sofa with both feet flat on the floor, under your knees.
+Pass when: the person sits at the edge with both feet flat on the floor.
+Try again when: the person starts from far back on the bed or sofa, or the feet are not flat on the floor.
+After: s2
 
-### s5. Assist patient to sit with shoes
-Check that the bed or sofa will not slide. Help the patient sit with feet flat. Put on non-slip socks or shoes.
-Say "done" when: they are sitting at the edge with feet flat and shoes on.
+### s5. Stand, then turn with small steps
+Stand up and pause. Then take small steps to turn until the backs of your legs touch the chair.
+Pass when: the person stands fully, then turns with several small steps until the backs of the legs touch the chair.
+Try again when: the person twists at the waist with the feet planted, or starts to sit before the legs touch the chair.
+Key step: yes
+After: s4
 
-### s6. Apply the transfer belt securely
-Wrap the scarf or belt over clothing at the waist. Tighten so two fingers fit underneath. Never hold someone by the arms.
-Say "done" when: the belt is snug at the waist and you can hold it.
-
-### s7. Instruct patient and align stance
-Tell them you will count to three. Stand with your feet and knees lined up with theirs, toes toward theirs.
-Say "done" when: they know the count and your stance matches theirs.
-
-### s8. Stand, pivot, and lower into wheelchair
-Count "1, 2, 3." Hold the belt, stand together, pivot until the backs of their legs touch the chair, then lower slowly. Do not twist your own back.
-Say "done" when: they are sitting in the chair with control.
-
-### s9. Position feet and remove belt
-Place feet on imaginary footrests or flat on the floor. Unbuckle and remove the belt.
-Say "done" when: feet are placed and the belt is off.
-
-### s10. Complete routine finishing actions
-Put a phone or call-bell stand-in within reach. Wash your hands. Open the door or curtain.
-Say "done" when: they can reach help, you have washed, and privacy is opened.
+### s6. Reach back and sit slowly
+Reach one hand back to the chair, then lower yourself slowly. Do not drop.
+Pass when: a hand reaches back to the chair before sitting, and the person lowers with control.
+Try again when: the person drops into the chair, or sits without reaching back.
+Key step: yes
+After: s5

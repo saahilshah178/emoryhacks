@@ -1,38 +1,51 @@
 # Stair assistance
 
-## Setup
-- Stairs with a solid railing, or skip the climb and talk through it
-- A belt or scarf as the gait belt
-- A second person only if they are uninjured and willing
-- Sturdy shoes
+Practice the stair rule on the bottom step only: up with the strong leg, down with the weak leg, one hand on the rail the whole time. You do it yourself, so you can cue it for someone else.
+
+## You need
+- Stairs with a solid handrail. You use only the bottom step
+- Shoes with grip
+- No stairs, or no rail? Stick a strip of tape on the floor beside a counter. The tape is the step and the counter is the rail
+
+## Camera
+Prop your phone at the bottom of the stairs, to the side, so the bottom step, the rail and your feet all show.
 
 ## Safety
-- If there is no railing, the stairs are cluttered, or you are alone, do not climb. Point at the stairs and describe each step.
-- Stay below the person: behind going up, in front going down.
-- Never practice hopping on stairs.
+- Use the bottom step only. Do not climb the stairs for this practice.
+- Keep one hand on the rail the whole time.
+- If the stairs are cluttered, wet or have no rail, use the tape line instead.
+- With a real person, stand below them: behind going up, in front going down.
 
 ## Steps
 
-### s1. Ask about home stair railing
-Ask whether there is a railing at home and which side it is on when going up. Wait for the answer.
-Say "done" when: you know which side the railing is on, or you have decided to talk through only.
+### s1. Test the rail, clear the step
+Grip the handrail and tug it to check it is solid. Move anything off the bottom steps.
+Pass when: the person grips and tugs the rail, or leans on the counter, to test it before stepping.
+Try again when: the person starts stepping without testing the rail.
+Key step: yes
 
-### s2. Position behind patient on involved side
-Stand behind and toward the weaker side. Hold the gait belt as you walk to the first step.
-Say "done" when: you are behind on that side with a hand on the belt.
+### s2. Hold the rail and pick the weak leg
+Stand at the bottom with one hand on the rail. Tap the leg you will treat as the weak one.
+Pass when: the person stands at the bottom with a hand on the rail and taps or points to one leg.
+Try again when: no hand is on the rail.
+After: s1
 
-### s3. Guard patient ascending the stairs
-Cue: strong leg up first, then crutches or the weaker leg. Stay behind and below. Keep the belt.
-Say "done" when: you have gone up at least one step that way, or talked through a full flight.
+### s3. Step up, strong leg first
+Step up with your strong leg, then bring the weak leg up beside it.
+Pass when: the leg that was not tapped steps up first, the other foot follows onto the same step, and a hand stays on the rail.
+Try again when: the tapped leg steps up first, the hand leaves the rail, or the person climbs past the bottom step.
+Key step: yes
+After: s2
 
-### s4. Guard patient turning at top landing
-Stand between them and the drop. Keep the belt. Turn in a wide arc toward the strong side.
-Say "done" when: they have turned at the top without standing next to the open stairs.
+### s4. Step back down, weak leg first
+Still holding the rail, lower your weak leg back to the floor first, then the strong leg.
+Pass when: the tapped leg comes down first, the other foot follows, and a hand stays on the rail.
+Try again when: the same leg leads both up and down, the person hops or jumps down, or lets go of the rail.
+Key step: yes
+After: s3
 
-### s5. Position below patient on involved side
-Step down so you are lower than they are, on the weaker side, still holding the belt. Brace on the rail if needed.
-Say "done" when: you are below them on that side.
-
-### s6. Guard patient descending the stairs
-Cue: crutches or the weaker side down first, hips forward, then step down. Stay below. Do not let them hop.
-Say "done" when: you have descended at least one step that way, or finished the talk-through at the bottom.
+### s5. Do it once more
+Go up and down one more time: strong leg up, weak leg down, hand on the rail.
+Pass when: a second up-and-down is done with the same leg order and a hand on the rail.
+Try again when: the legs are mixed up the second time, or the hand leaves the rail.
+After: s4

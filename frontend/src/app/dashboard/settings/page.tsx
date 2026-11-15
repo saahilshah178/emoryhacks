@@ -20,7 +20,6 @@ import type { Health, Prefs, User } from "@/lib/types";
 import { PageHeading } from "@/shared/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useAuth, useUser } from "@/shared/AuthProvider";
-import { APP_NAME } from "@/shared/brand";
 import { CopyJoinCode, formatJoinCode, JoinAgencyForm } from "@/shared/JoinAgency";
 
 type Outcome = { ok: boolean; message: string } | null;
@@ -60,7 +59,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeading title="Settings" description={`Your profile, your agency and how ${APP_NAME} is running.`} />
+      <PageHeading title="Settings" description="Your profile, your agency and how the system is running." />
       {/* Two columns of cards on wide screens, so the forms span the page without stretching. */}
       <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
         <div className="space-y-5">

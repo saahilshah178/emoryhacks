@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { SkillIcon } from "@/components/skills/SkillIcon";
 import { Card, StateBadge } from "@/components/ui";
 import { skillHref } from "@/caregiver/skills";
 import { attemptsLeftLine, skillAllowance, skillCardState } from "@/caregiver/status";
@@ -20,26 +21,32 @@ export function SkillCard({ skill }: { skill: MySkill }) {
   const left = skill.state === "verified" ? null : attemptsLeftLine(skillAllowance(skill));
 
   return (
-    <Card className="h-full transition-colors hover:border-teal/35">
-      <Link href={skillHref(skill)} className="flex h-full flex-col p-4">
-        <h2 className="text-[16px] font-semibold leading-snug text-navy">{skill.name}</h2>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <StateBadge entry={badge} />
-          {extra ? <StateBadge entry={extra} /> : null}
+    <Card className="h-full overflow-hidden transition-colors hover:border-teal/35">
+      <Link href={skillHref(skill)} className="flex h-full flex-col">
+        {/* The same pictogram the nurse sees for this skill. */}
+        <div className="flex h-36 items-center justify-center border-b border-border bg-white">
+          <SkillIcon skill={skill} className="h-24 w-24" />
         </div>
-        {description ? (
-          <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-secondary">{description}</p>
-        ) : (
-          <span className="flex-1" />
-        )}
-        {facts.length > 0 ? <p className="mt-2 text-xs text-ink-muted">{facts.join(" · ")}</p> : null}
-        {left ? (
-          <p className={cn("mt-1 text-xs font-medium", skill.attempts_left === 0 && skill.state !== "in_review" ? "text-danger" : "text-ink-secondary")}>{left}</p>
-        ) : null}
-        <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-teal">
-          {action}
-          <ArrowRight className="h-4 w-4" aria-hidden />
-        </span>
+        <div className="flex flex-1 flex-col p-4">
+          <h2 className="text-[16px] font-semibold leading-snug text-navy">{skill.name}</h2>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <StateBadge entry={badge} />
+            {extra ? <StateBadge entry={extra} /> : null}
+          </div>
+          {description ? (
+            <p className="mt-2 flex-1 text-sm leading-relaxed text-ink-secondary">{description}</p>
+          ) : (
+            <span className="flex-1" />
+          )}
+          {facts.length > 0 ? <p className="mt-2 text-xs text-ink-muted">{facts.join(" · ")}</p> : null}
+          {left ? (
+            <p className={cn("mt-1 text-xs font-medium", skill.attempts_left === 0 && skill.state !== "in_review" ? "text-danger" : "text-ink-secondary")}>{left}</p>
+          ) : null}
+          <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-teal">
+            {action}
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </span>
+        </div>
       </Link>
     </Card>
   );

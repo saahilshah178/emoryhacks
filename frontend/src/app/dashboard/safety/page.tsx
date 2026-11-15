@@ -5,7 +5,6 @@ import { SafetyOverview } from "@/nurse/components/dashboard/SafetyOverview";
 import { PageHeading } from "@/shared/layout/PageHeading";
 import { MovementTable } from "@/nurse/components/safety/MovementTable";
 import { OpenIssues } from "@/nurse/components/safety/OpenIssues";
-import { StoragePanel } from "@/nurse/components/safety/StoragePanel";
 import { TrendsPanel } from "@/nurse/components/safety/TrendsPanel";
 
 export default function SafetyPage() {
@@ -34,7 +33,6 @@ export default function SafetyPage() {
         </div>
         <MovementTable />
         <TrendsPanel />
-        <StoragePanel />
       </section>
     </div>
   );

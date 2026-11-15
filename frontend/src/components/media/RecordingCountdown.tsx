@@ -45,7 +45,9 @@ export function RecordingCountdown({
   );
 }
 
-/** "Recordings stop at 4:00." — said before recording starts. */
+/** "Maximum video length is 4 minutes." — said before recording starts. */
 export function recordingLimitNote(maxSeconds = RECORDING_MAX_SECONDS) {
-  return `Recordings stop by themselves at ${formatClock(maxSeconds)}, which keeps them small enough to send.`;
+  const minutes = maxSeconds / 60;
+  const length = Number.isInteger(minutes) ? `${minutes} ${minutes === 1 ? "minute" : "minutes"}` : formatClock(maxSeconds);
+  return `Maximum video length is ${length}.`;
 }

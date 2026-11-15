@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { Circle, FileVideo, RotateCcw, Square, VideoOff } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
-import { CoachingCue } from "@/caregiver/components/recording/CoachingCue";
 import { StepChecklist } from "@/caregiver/components/recording/StepChecklist";
 import { RecordingCountdown, recordingLimitNote } from "@/components/media/RecordingCountdown";
 import { formatClock } from "@/lib/format";
@@ -50,8 +49,6 @@ export function CameraStage({
     if (recording) onRecorded(recording);
   }, [recording, onRecorded]);
 
-  const cues = [...(skill.guide.cues ?? [])].sort((a, b) => a.at_s - b.at_s);
-  const cue = phase === "recording" ? cues.filter((item) => item.at_s <= seconds).at(-1) : undefined;
   const cameraOn = phase === "ready" || phase === "recording";
 
   return (
@@ -59,7 +56,7 @@ export function CameraStage({
       <PortalHeading
         eyebrow="Your turn"
         title={`Record ${skill.name.toLowerCase()}`}
-        description="Set up the camera so your whole body and the space around you are in view. The check watches without sound, so show each step rather than saying it. Sound is still recorded for your nurse. You'll watch it back before it is checked."
+        description="Set up the camera so your whole body and the space around you are in view. The check watches without sound, so show each step rather than saying it. Sound is still recorded for your nurse."
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
@@ -98,7 +95,6 @@ export function CameraStage({
                 </div>
               ) : null}
 
-              {cue ? <CoachingCue message={cue.message} /> : null}
 
               {cameraOn ? (
                 <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-navy/90 to-transparent px-4 pb-4 pt-10">
@@ -198,16 +194,10 @@ export function CameraStage({
             </div>
           )}
 
-          {cues.length === 0 ? (
-            <Card className="p-4">
-              <StepChecklist
-                steps={skill.steps}
-                orderMatters={skill.order_matters}
-                title="Steps to show"
-                compact
-              />
-            </Card>
-          ) : null}
+          {/* No live prompts over the video while recording; the steps are always listed here instead. */}
+          <Card className="p-4">
+            <StepChecklist steps={skill.steps} orderMatters={skill.order_matters} title="Steps to show" compact />
+          </Card>
         </div>
       </div>
     </div>

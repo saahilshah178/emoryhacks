@@ -6,7 +6,7 @@ import { ProgressOverview } from "@/caregiver/components/home/ProgressOverview";
 import { ProgressTiles, progressTilesGrid } from "@/caregiver/components/home/ProgressTiles";
 import { RecentUpdates } from "@/caregiver/components/home/RecentUpdates";
 import { SkillsAtAGlance } from "@/caregiver/components/home/SkillsAtAGlance";
-import { CaughtUpCard, StartSkillCta } from "@/caregiver/components/home/StartSkillCta";
+import { CaughtUpCard } from "@/caregiver/components/home/StartSkillCta";
 import { PortalHeading } from "@/caregiver/components/layout/PortalHeading";
 import { recommendedSkill } from "@/caregiver/skills";
 import { cn } from "@/lib/cn";
@@ -15,9 +15,9 @@ import { useTitle } from "@/lib/hooks";
 import { useUser } from "@/shared/AuthProvider";
 
 /**
- * Phone: progress on one card, then the next skill to record.
- * Laptop: two columns. The figures, the next skill and the recent activity on the left;
- * every skill's state on the right.
+ * Phone: progress on one card.
+ * Laptop: two columns. The figures and the recent activity on the left; every skill's
+ * state on the right.
  */
 export default function HomePage() {
   useTitle("Home");
@@ -51,12 +51,8 @@ export default function HomePage() {
               <div className="space-y-6 lg:space-y-5">
                 <ProgressTiles counts={counts} className="hidden lg:grid" />
                 <ProgressOverview counts={counts} ready={ready} className="lg:hidden" />
-                {/* No "Practice again" card for a skill a nurse sent back; the "Try again" figure covers it. */}
-                {!next ? (
-                  <CaughtUpCard inReview={counts.in_review} />
-                ) : next.state === "needs_practice" && !next.checking_attempt_id && !next.ready_attempt_id ? null : (
-                  <StartSkillCta skill={next} />
-                )}
+                {/* No dark "next step" card for any skill state; only the note when nothing is left to do. */}
+                {next ? null : <CaughtUpCard inReview={counts.in_review} />}
                 <RecentUpdates className="hidden lg:block" />
               </div>
               <SkillsAtAGlance skills={skills} className="hidden lg:block" />

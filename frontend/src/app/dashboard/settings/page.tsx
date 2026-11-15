@@ -192,9 +192,6 @@ function AgencyCard() {
               required
             />
           </Field>
-          <Field label="Product name">
-            <Input value={APP_NAME} readOnly />
-          </Field>
           {user.org.join_code ? (
             // Laid out like a Field, but the copy button stays outside the label.
             <div>

@@ -97,6 +97,8 @@ export function LivelyBackground({
           viewBox={`0 0 90 ${SIDE_H}`}
           preserveAspectRatio="xMinYMin slice"
           className="absolute left-0 top-0 hidden h-full w-[90px] md:block"
+          // Leaves sway past the drawing's own box; let them show unless real content covers them.
+          overflow="visible"
         >
           <g className="lively-sway-side">
             <path d={sidePath} fill="none" stroke={STEM} strokeWidth="2.4" pathLength={1} className="lively-stem" />
@@ -110,6 +112,7 @@ export function LivelyBackground({
           viewBox={`0 0 ${BOTTOM_W} 200`}
           preserveAspectRatio="xMidYMax slice"
           className="absolute inset-x-0 bottom-0 h-[200px] w-full"
+          overflow="visible"
         >
           <g className="lively-sway-bottom">
             <path d={bottomPath} fill="none" stroke={STEM} strokeWidth="2.4" pathLength={1} className="lively-stem" />
@@ -122,7 +125,7 @@ export function LivelyBackground({
         {/* Now and then a leaf drifts down the page, roughly one every eight seconds. */}
         {FALLING.map((leaf, i) => (
           <span key={i} className="lively-fall absolute -top-10" style={{ left: leaf.left, animationDelay: leaf.delay }}>
-            <svg viewBox="-16 -16 32 32" width="26" height="26" className="lively-drift block" style={{ animationDelay: leaf.delay }}>
+            <svg viewBox="-16 -16 32 32" width="26" height="26" overflow="visible" className="lively-drift block" style={{ animationDelay: leaf.delay }}>
               <path d="M-14 0 C -7 -10, 7 -10, 14 0 C 7 10, -7 10, -14 0Z" fill={leaf.color} />
               <path d="M-14 0 H 11" stroke="#ffffff" strokeOpacity="0.45" strokeWidth="1" />
             </svg>

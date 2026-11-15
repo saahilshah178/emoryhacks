@@ -39,9 +39,10 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(scope="session")
 def migrated():
-    from app import db
+    from app import auth, db
 
     db.migrate()
+    auth.ensure_join_codes()  # as the API does when it starts, so the default agency has its code
     yield
     db.close()
 

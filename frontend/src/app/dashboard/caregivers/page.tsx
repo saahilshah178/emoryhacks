@@ -9,6 +9,7 @@ import type { CaregiverRow } from "@/lib/types";
 import { PageHeading } from "@/shared/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useUser } from "@/shared/AuthProvider";
+import { AgencyCode } from "@/shared/JoinAgency";
 
 export default function CaregiversPage() {
   useTitle("Caregivers");
@@ -41,8 +42,11 @@ export default function CaregiversPage() {
           if (people.length === 0) {
             return (
               <EmptyState title="No caregivers yet">
-                Caregivers appear here once they are added to your agency. Their progress on each skill fills in
-                as they submit recordings.
+                <p>
+                  Share this agency code so caregivers can join. They appear here once they do, and their
+                  progress on each skill fills in as they submit recordings.
+                </p>
+                <AgencyCode className="mt-4" code={user.org.join_code} />
               </EmptyState>
             );
           }

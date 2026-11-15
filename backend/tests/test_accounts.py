@@ -1,5 +1,6 @@
 """Accounts, roles, agency separation and the states derived from attempts."""
 import datetime as dt
+import re
 import uuid
 
 import pytest
@@ -28,8 +29,7 @@ def _account(role: str, name: str = "Pat Example") -> tuple[TestClient, dict]:
 
 def _client_in_new_org(role: str = "nurse") -> TestClient:
     """A signed-in user of an agency other than the default one."""
-    org_id = uuid.uuid4()
-    db.execute("INSERT INTO orgs (id, name) VALUES (%s, %s)", (org_id, "Other agency"))
+    org_id = auth.create_org(name="Other agency")
     user_id = auth.create_user(org_id=org_id, role=role, name="Other Person",
                                email=f"{uuid.uuid4().hex[:10]}@other.test", password="long-enough")
     client = _anonymous()
@@ -76,6 +76,7 @@ def test_passwords_are_hashed_and_verified():
 def test_login_logout(migrated):
     client, user = _account("nurse")
     assert user["role"] == "nurse" and user["org"]["id"] == str(auth.DEFAULT_ORG) and "password" not in str(user)
+    assert re.fullmatch(r"[a-z0-9]{4}-[a-z0-9]{4}", user["org"]["join_code"])
     assert client.get("/api/auth/me").json()["username"] == user["username"]
     assert client.get("/api/auth/session").json()["user"]["id"] == user["id"]
     login = {"username": user["username"], "password": "long-enough"}
@@ -91,22 +92,144 @@ def test_login_logout(migrated):
     assert again.post("/api/auth/login", json={**login, "username": user["username"].upper()}).status_code == 200
 
 
-def test_the_logins_are_a_fixed_set(migrated):
-    """There is no sign-up and no password change, and only a username logs anyone in."""
+def test_signup_then_login(migrated):
+    """A nurse and a caregiver can each create an account, then sign in with email or username."""
+    fresh = _anonymous()
+    caregiver_email = f"{uuid.uuid4().hex[:10]}@example.test"
+    nurse_email = f"{uuid.uuid4().hex[:10]}@example.test"
+    caregiver = fresh.post("/api/auth/signup", json={"role": "caregiver", "name": "New Caregiver",
+                                                     "email": caregiver_email, "password": "long-enough"})
+    assert caregiver.status_code == 200, caregiver.text
+    created = caregiver.json()
+    assert created["role"] == "caregiver" and created["email"] == caregiver_email and created["username"]
+    assert created["org"]["id"] != str(auth.DEFAULT_ORG) and "password" not in str(created)
+    assert created["org"]["join_code"] == ""  # only nurses are sent their agency's code
+    assert created["org"]["has_nurse"] is False and created["employment"] == "onboarding"
+    mine = fresh.get("/api/my/skills").json()
+    assert mine["skills"] == [] and mine["counts"]["total"] == 0
+    stored = db.fetch_one("SELECT email, username, password_hash FROM users WHERE id=%s", (created["id"],))
+    assert stored["email"] == caregiver_email and stored["username"] == created["username"]
+    assert stored["password_hash"].startswith("scrypt$") and "long-enough" not in stored["password_hash"]
+    assert fresh.post("/api/auth/logout").json() == {"ok": True}
+
+    nurse_client = _anonymous()
+    nurse = nurse_client.post("/api/auth/signup", json={"role": "nurse", "name": "New Nurse",
+                                                       "email": nurse_email, "password": "long-enough"})
+    assert nurse.status_code == 200 and nurse.json()["role"] == "nurse"
+    assert nurse.json()["org"]["id"] != created["org"]["id"]
+    assert nurse.json()["org"]["has_nurse"] is True and nurse.json()["employment"] == "active"
+    assert re.fullmatch(r"[a-z0-9]{4}-[a-z0-9]{4}", nurse.json()["org"]["join_code"])
+    overview = nurse_client.get("/api/overview").json()
+    assert overview["counts"]["caregivers"] == 0 and overview["counts"]["skills"] == 0
+    assert overview["activity"] == []
+    assert nurse_client.get("/api/skills").json() == []
+    assert nurse_client.get("/api/caregivers").json() == []
+    assert nurse_client.post("/api/auth/logout").status_code == 200
+
+    for ident, field in ((caregiver_email, "email"), (created["username"], "username"),
+                         (caregiver_email.upper(), "email"), (created["username"].upper(), "username")):
+        res = _anonymous().post("/api/auth/login", json={field: ident, "password": "long-enough"})
+        assert res.status_code == 200, res.text
+        assert res.json()["id"] == created["id"]
+        assert "httponly" in res.headers["set-cookie"].lower()
+        _anonymous()  # a new client, so the cookie is not reused
+    assert _anonymous().post("/api/auth/login", json={"username": "  ", "email": caregiver_email,
+                                                      "password": "long-enough"}).json()["id"] == created["id"]
+    assert _anonymous().post("/api/auth/login", json={"email": caregiver_email, "password": "nope-nope"}).status_code == 401
+    assert _anonymous().post("/api/auth/login", json={"username": "nobody", "password": "x"}).status_code == 401
+    assert _anonymous().post("/api/auth/login", json={"email": nurse_email, "password": "long-enough"}).json()["role"] == "nurse"
+
+
+def test_signup_validation(migrated):
     client, user = _account("caregiver")
     fresh = _anonymous()
-    signup = {"role": "caregiver", "name": "New Person", "email": "new.person@example.test", "password": "long-enough"}
-    assert fresh.post("/api/auth/signup", json=signup).status_code == 404
+    base = {"role": "caregiver", "name": "New Person", "email": "new.person@example.test", "password": "long-enough"}
+    assert fresh.post("/api/auth/signup", json={**base, "email": user["email"]}).status_code == 409
+    assert fresh.post("/api/auth/signup", json={**base, "password": "short"}).status_code == 422
+    assert fresh.post("/api/auth/signup", json={**base, "email": "not-an-email"}).status_code == 422
+    assert fresh.post("/api/auth/signup", json={**base, "role": "admin"}).status_code == 422
+    assert fresh.post("/api/auth/signup", json={**base, "name": " "}).status_code == 422
+    assert fresh.post("/api/auth/signup", json={**base, "join_code": "zzzz-zzzz"}).status_code == 422
     change = {"current_password": "long-enough", "new_password": "a-new-password"}
     assert client.post("/api/auth/password", json=change).status_code == 404
-    assert fresh.post("/api/auth/login", json={"username": user["email"], "password": "long-enough"}).status_code == 401
-    # someone on the roster without a username cannot log in, whatever their password
+    # someone on the roster with no password cannot log in, even with their email
     auth.create_user(org_id=auth.DEFAULT_ORG, role="caregiver", name="No Login",
-                     email="no.login@example.test", password="long-enough")
+                     email="no.login@example.test", password=None)
     assert fresh.post("/api/auth/login", json={"username": "no.login@example.test",
                                                "password": "long-enough"}).status_code == 401
     assert fresh.post("/api/auth/login", json={"email": "no.login@example.test",
-                                               "password": "long-enough"}).status_code == 422
+                                               "password": "long-enough"}).status_code == 401
+
+
+def _signup(role: str, **extra) -> tuple[TestClient, dict]:
+    client = _anonymous()
+    res = client.post("/api/auth/signup", json={"role": role, "name": f"New {role}",
+                                                "email": f"{uuid.uuid4().hex[:10]}@example.test",
+                                                "password": "long-enough", **extra})
+    assert res.status_code == 200, res.text
+    return client, res.json()
+
+
+def test_join_agency_by_code(migrated):
+    """A caregiver or a nurse with an empty agency can move into another agency by its code."""
+    nurse_client, nurse = _signup("nurse")
+    code = nurse["org"]["join_code"]
+    nurse_org = nurse["org"]["id"]
+
+    caregiver_client, caregiver = _signup("caregiver")
+    old_caregiver_org = caregiver["org"]["id"]
+    assert caregiver["org"]["has_nurse"] is False
+    # what a nurse of the agency they leave decided about them does not follow them
+    db.execute("UPDATE users SET skill_attempt_limit=2, employment='active' WHERE id=%s", (caregiver["id"],))
+    # hyphens and uppercase are ignored
+    joined = caregiver_client.post("/api/org/join", json={"code": code.replace("-", "").upper()}).json()
+    assert joined["org"]["id"] == nurse_org and joined["org"]["join_code"] == ""
+    assert caregiver_client.get("/api/auth/me").json()["org"]["join_code"] == ""
+    assert joined["org"]["has_nurse"] is True
+    assert joined["employment"] == "onboarding"
+    assert db.fetch_one("SELECT skill_attempt_limit FROM users WHERE id=%s",
+                        (caregiver["id"],))["skill_attempt_limit"] is None
+    assert db.fetch_one("SELECT 1 FROM orgs WHERE id=%s", (old_caregiver_org,)) is None
+    roster = nurse_client.get("/api/caregivers").json()
+    assert any(person["id"] == caregiver["id"] for person in roster)
+
+    other_client, other = _signup("nurse")
+    old_nurse_org = other["org"]["id"]
+    moved = other_client.post("/api/org/join", json={"code": code}).json()
+    assert moved["org"]["id"] == nurse_org and moved["org"]["join_code"] == code
+    assert db.fetch_one("SELECT 1 FROM orgs WHERE id=%s", (old_nurse_org,)) is None
+
+    assert caregiver_client.post("/api/org/join", json={"code": code}).status_code == 422
+    assert caregiver_client.post("/api/org/join", json={"code": "nope-nope"}).status_code == 422
+
+    # an agency that still holds a video (a reference being built, say) is kept when its last person leaves
+    uploader_client, uploader = _signup("nurse")
+    video_id = uuid.uuid4()
+    db.execute("INSERT INTO videos (id, kind, path, org_id) VALUES (%s, 'reference', '', %s)",
+               (video_id, uploader["org"]["id"]))
+    assert uploader_client.post("/api/org/join", json={"code": code}).json()["org"]["id"] == nurse_org
+    assert db.fetch_one("SELECT 1 FROM orgs WHERE id=%s", (uploader["org"]["id"],)) is not None
+    assert db.fetch_one("SELECT 1 FROM videos WHERE id=%s", (video_id,)) is not None
+
+    via_signup = _anonymous().post("/api/auth/signup", json={
+        "role": "caregiver", "name": "Joining At Signup",
+        "email": f"{uuid.uuid4().hex[:10]}@example.test", "password": "long-enough",
+        "join_code": code,
+    }).json()
+    assert via_signup["org"]["id"] == nurse_org
+
+    # a nurse whose agency has a skill cannot leave, even alone in it
+    skilled_client, skilled = _signup("nurse")
+    db.execute("INSERT INTO skills (id, org_id, slug, name) VALUES (%s, %s, 'hand-washing', 'Hand washing')",
+               (uuid.uuid4(), skilled["org"]["id"]))
+    refused = skilled_client.post("/api/org/join", json={"code": code})
+    assert refused.status_code == 422 and "already has skills" in refused.json()["detail"]
+
+    # a nurse who already has someone in their agency cannot leave
+    occupied_client, occupied = _signup("nurse")
+    _signup("caregiver", join_code=occupied["org"]["join_code"])
+    refused = occupied_client.post("/api/org/join", json={"code": code})
+    assert refused.status_code == 422 and "already has people" in refused.json()["detail"]
 
 
 def test_everything_needs_a_session(migrated):

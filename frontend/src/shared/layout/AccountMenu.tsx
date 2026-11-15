@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Avatar } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useAuth, useUser } from "@/shared/AuthProvider";
+import { agencyCaption } from "@/shared/JoinAgency";
 
 export type AccountLink = { href: string; label: string; icon: LucideIcon };
 
@@ -114,7 +115,7 @@ export function AccountMenu({
             <p className="truncate text-sm font-semibold text-ink">{user.name}</p>
             <p className="text-xs text-ink-secondary">{roleLine}</p>
             <p className="mt-0.5 truncate text-xs text-ink-secondary">{user.email}</p>
-            <p className="mt-0.5 truncate text-xs text-ink-secondary">{user.org.name}</p>
+            <p className="mt-0.5 truncate text-xs text-ink-secondary">{agencyCaption(user)}</p>
           </div>
           {links.map(({ href, label, icon: Icon }) => (
             <Link

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useAuth } from "./AuthProvider";
-import { homeUrlFor, LOGIN_PATH } from "./urls";
+import { homeUrlFor, LOGIN_PATH, SIGNUP_PATH } from "./urls";
 import { Logo } from "./Logo";
 
 export function PublicHeader() {
@@ -22,12 +22,22 @@ export function PublicHeader() {
               {user.role === "nurse" ? "Open dashboard" : "Open my portal"}
             </Link>
           ) : (
-            <Link
-              href={LOGIN_PATH}
-              className="inline-flex h-11 items-center rounded-[12px] bg-white px-4 text-sm font-semibold text-teal shadow-[0_1px_2px_rgba(23,50,77,0.12)] transition-colors hover:bg-white/90"
-            >
-              Log in
-            </Link>
+            <>
+              <Link
+                href={LOGIN_PATH}
+                className="inline-flex h-11 items-center rounded-[12px] px-2 text-sm font-semibold text-white transition-colors hover:bg-white/10 sm:px-3"
+              >
+                Log in
+              </Link>
+              {/* A phone has no room for the brand and two full labels, so the second one is shorter there. */}
+              <Link
+                href={SIGNUP_PATH}
+                className="inline-flex h-11 items-center rounded-[12px] bg-white px-3 text-sm font-semibold text-teal shadow-[0_1px_2px_rgba(23,50,77,0.12)] transition-colors hover:bg-white/90 sm:px-4"
+              >
+                <span className="sm:hidden">Sign up</span>
+                <span className="hidden sm:inline">Create account</span>
+              </Link>
+            </>
           )}
         </div>
       </div>

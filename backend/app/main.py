@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import builtin, config, db, gemini, repo
+from . import auth, builtin, config, db, gemini, repo
 from . import jobs as pipeline
 from .routers import accounts, attempts, jobs, people, review, safety, skills, videos
 
@@ -22,6 +22,7 @@ from .routers import accounts, attempts, jobs, people, review, safety, skills, v
 async def lifespan(app: FastAPI):
     config.ensure_dirs()
     db.migrate()
+    auth.ensure_join_codes()  # agencies created before join codes existed
     # The nine standard skills, on any database, without a Gemini call. A database that has an
     # earlier revision of one, unchanged by a nurse, gets the revised rubric as a new version.
     for line in builtin.describe(builtin.ensure()):

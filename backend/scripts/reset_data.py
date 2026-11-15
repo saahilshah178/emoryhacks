@@ -10,8 +10,9 @@ Deletes
     skill_policies and skill_assignments, if those tables exist);
   - in the default agency, every attempt with its recording, steps, order violations, safety
     flags, jobs and pose rows;
-  - default-agency users who have no username (left over from the old sign-up flow), their
-    sessions and their skill_assignments;
+  - default-agency users who have no username, their sessions and their skill_assignments.
+    That is roster people without a login, and also anyone in the default agency whose
+    username `make logins` took back (they could still log in with their email);
   - everyone's "notifications seen" time, so nothing starts out looking read.
 
 Keeps the default agency, its logins and their passwords, every skill with its steps and

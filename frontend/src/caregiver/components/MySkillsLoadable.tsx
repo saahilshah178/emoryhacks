@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { EmptyState, Loadable, Skeleton } from "@/components/ui";
 import { useCaregiver } from "@/caregiver/context/CaregiverContext";
 import type { MySkill, MySkills } from "@/lib/types";
+import { useUser } from "@/shared/AuthProvider";
+import { connectedToAgency, JoinAgencyForm } from "@/shared/JoinAgency";
 
 /**
  * The caregiver's skills from the portal context, with the standard loading and error
@@ -16,7 +18,9 @@ export function MySkillsLoadable({
   skeleton?: ReactNode;
   children: (skills: MySkill[], counts: MySkills["counts"]) => ReactNode;
 }) {
+  const user = useUser();
   const { skills, counts, loading, error, reload } = useCaregiver();
+  const connected = connectedToAgency(user);
   return (
     <Loadable
       data={counts}
@@ -35,7 +39,19 @@ export function MySkillsLoadable({
       {(loaded) =>
         skills.length === 0 ? (
           <EmptyState title="No skills yet">
-            Your nurse hasn&apos;t added any skills to practice. They will appear here as soon as they do.
+            {connected ? (
+              <p>
+                You&apos;re connected to {user.org.name}. Skills your nurse assigns will show up here.
+              </p>
+            ) : (
+              <>
+                <p>
+                  You&apos;re not connected to an agency yet. Ask your nurse for their code and enter it
+                  here.
+                </p>
+                <JoinAgencyForm className="mt-4 text-left" size="lg" onJoined={() => reload()} />
+              </>
+            )}
           </EmptyState>
         ) : (
           children(skills, loaded)

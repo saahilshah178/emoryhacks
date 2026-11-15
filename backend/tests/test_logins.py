@@ -1,7 +1,7 @@
 """make logins: six fixed logins with stable passwords (scripts/logins.py).
 
-These tests clear the username of every other account in the test database (that is what the
-script is for), so they live in their own file, which runs after the account tests.
+These tests start from a clean set of listed logins, so they live in their own file, which
+runs after the account tests.
 """
 import uuid
 
@@ -134,6 +134,7 @@ def test_a_password_that_is_not_recorded_is_not_invented(fresh):
 def test_taking_a_login_off_the_list_clears_its_username(fresh, monkeypatch):
     path, first = fresh
     client = _log_in("caregiver4", first["caregiver4"])[0]
+    everyone = logins.LOGINS
     monkeypatch.setattr(logins, "LOGINS", [l for l in logins.LOGINS if l.username != "caregiver4"])
     logins.generate(path)
     row = db.fetch_one("SELECT username FROM users WHERE id=%s", (logins.uid("login:caregiver4"),))
@@ -141,11 +142,27 @@ def test_taking_a_login_off_the_list_clears_its_username(fresh, monkeypatch):
     assert client.get("/api/auth/me").status_code == 401
     assert _log_in("caregiver4", first["caregiver4"])[1].status_code == 401
     assert "caregiver4" not in path.read_text().split("| Role")[1]
-    # someone with an unlisted username elsewhere loses it as well, and the listed ones are kept
+    # someone who signed up keeps their username, even one a listed login used to have
     stray = auth.create_user(org_id=auth.DEFAULT_ORG, role="caregiver", name="Stray",
                              email=f"{uuid.uuid4().hex[:8]}@x.test", password="long-enough", username="stray")
+    taker_email = f"{uuid.uuid4().hex[:8]}@x.test"
+    taker = auth.create_user(org_id=auth.DEFAULT_ORG, role="caregiver", name="Taker",
+                             email=taker_email, password="long-enough", username="caregiver4")
     logins.generate(path)
-    assert db.fetch_one("SELECT username FROM users WHERE id=%s", (stray,))["username"] is None
+    assert db.fetch_one("SELECT username FROM users WHERE id=%s", (stray,))["username"] == "stray"
+    assert db.fetch_one("SELECT username FROM users WHERE id=%s", (taker,))["username"] == "caregiver4"
+    # once the name is listed again it is taken back, and the person can still log in with their email
+    monkeypatch.setattr(logins, "LOGINS", everyone)
+    logins.generate(path)
+    assert db.fetch_one("SELECT username FROM users WHERE id=%s", (stray,))["username"] == "stray"
+    taken_back = db.fetch_one("SELECT username, password_hash FROM users WHERE id=%s", (taker,))
+    assert taken_back["username"] is None and taken_back["password_hash"]
+    by_email = TestClient(app)
+    by_email.headers.pop("authorization", None)
+    answer = by_email.post("/api/auth/login", json={"email": taker_email, "password": "long-enough"})
+    assert answer.status_code == 200 and answer.json()["id"] == str(taker)
+    assert db.fetch_one("SELECT username FROM users WHERE id=%s",
+                        (logins.uid("login:caregiver4"),))["username"] == "caregiver4"
 
 
 def test_logins_never_share_a_hash_and_each_works_only_with_its_own_password(fresh):

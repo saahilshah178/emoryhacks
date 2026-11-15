@@ -20,7 +20,7 @@ make run                  # the API and the web app; open the address it prints 
 
 ### Logins
 
-Nobody signs up. The accounts that can log in are a fixed set of six, listed in `backend/scripts/logins.py`, and all of them belong to the one agency (the default agency), so they share its skills and submissions:
+People can sign up in the app as a nurse or a caregiver. Each new account gets its own empty agency unless they enter an agency code, which puts them in that agency instead. Nurses share a code from settings; caregivers (and nurses with an empty agency) can join with it. Someone who moves to another agency starts there as onboarding, without the attempt limit a nurse of the old agency set for them, and an agency nobody is left in is deleted unless it holds skills or videos. There are also six shared agency logins, listed in `backend/scripts/logins.py`:
 
 | Username | Person | Role |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ Nobody signs up. The accounts that can log in are a fixed set of six, listed in 
 
 - A login that already has a password keeps it and stays signed in. Its line in `LOGINS.md` is carried over as long as it still matches the stored hash; otherwise the file says "unchanged (not recorded here)".
 - A login that does not exist yet gets a new random password. Adding a login means adding a line to `LOGINS` and running `make logins`; nobody else's password changes.
-- Anyone else who has a username loses it, and their sessions. Taking a line out of `LOGINS` and running `make logins` removes that login.
+- Taking a line out of `LOGINS` and running `make logins` removes that login. Accounts created by sign-up keep their username and password.
 - `make logins ARGS="--reset nurse,caregiver2"` gives only those logins a new password and signs only them out. `make logins ARGS="--reset-all"` does it for every login. An unknown name is an error and changes nothing.
 
 The top of `LOGINS.md` says which accounts changed in the last run. There is no password change in the app.
@@ -48,7 +48,7 @@ There is no sample agency and no invented data: the only data is what real peopl
 
 Each standard skill in the file has a revision. When the file's revision of a skill is newer than the one a database holds, the API installs the revised rubric as a new version of that skill at startup, provided the newest version there is the earlier revision exactly as it was installed. A version a nurse edited, rebuilt or recorded a new reference for is left alone, a revised version a nurse deleted is not put back, and attempts keep the version they were graded against. Revision 2 made the nine rubrics gradable by sight and marked the steps that are only needed in some situations.
 
-`make reset-data` prepares a database for real use, so that caregivers start with nothing recorded. By default it only prints what it would delete. `make reset-data ARGS="--yes"` does it, in one transaction. It deletes every agency other than the default one with everything in it; every attempt in the default agency with its recording, steps, flags, jobs and pose rows; and default-agency accounts that have no username (left over from the old sign-up flow). It clears everyone's "notifications seen" time. It keeps the default agency, the logins and their passwords, every skill with its steps and reference video, the pose data of reference videos and the log of Gemini calls. Add `--files` to also delete video and thumbnail files under the data directory that no video refers to any more (it prints how many and how many megabytes). This is destructive and cannot be undone; run it without `--yes` first.
+`make reset-data` prepares a database for real use, so that caregivers start with nothing recorded. By default it only prints what it would delete. `make reset-data ARGS="--yes"` does it, in one transaction. It deletes every agency other than the default one with everything in it, which includes every agency made by sign-up and the accounts in it; every attempt in the default agency with its recording, steps, flags, jobs and pose rows; and default-agency accounts that have no username (roster people without a login, and anyone there whose username `make logins` took back). It clears everyone's "notifications seen" time. It keeps the default agency, the logins and their passwords, every skill with its steps and reference video, the pose data of reference videos and the log of Gemini calls. Add `--files` to also delete video and thumbnail files under the data directory that no video refers to any more (it prints how many and how many megabytes). This is destructive and cannot be undone; run it without `--yes` first.
 
 ### Attempts and sending
 
@@ -132,7 +132,7 @@ The recording is graded by sight only, because what is said, and how well a micr
 
 **What the screens call a state.** The database stores the AI's result, the nurse's decision, the flags and the job. Everything shown as a state is derived from those in one place, `backend/app/progress.py`, so the two portals cannot disagree: an attempt is processing, failed processing, not sent yet, awaiting a nurse, replaced by a newer one, approved or sent back for retraining; a skill is not started, in progress, in review, to practise again, or verified for a caregiver.
 
-**Accounts.** The logins are a fixed set of six with generated passwords (`make logins`); there is no sign-up and no password change in the app. A new caregiver login starts as onboarding until a nurse marks them active. Passwords are stored as scrypt hashes. A login sets an HttpOnly session cookie; only its hash is stored. Every route checks the session, the role (nurse or caregiver) and the agency: a caregiver sees the skills assigned to them and only their own attempts, and one agency never sees another's data.
+**Accounts.** People sign up with an email and password, or use one of the six shared agency logins (`make logins`). There is no password change in the app. A new caregiver login starts as onboarding until a nurse marks them active. Passwords are stored as scrypt hashes. A login sets an HttpOnly session cookie; only its hash is stored. Every route checks the session, the role (nurse or caregiver) and the agency: a caregiver sees the skills assigned to them and only their own attempts, and one agency never sees another's data.
 
 **Tiger Data.** `pose_frames` is a hypertable with one row per measured frame per tracked person (12 joint angles, centre of mass, base of support, balance score, sway). `pose_1s` is a continuous aggregate the dashboard reads, alongside toolkit aggregates on the raw frames. Accounts, skills, steps, criteria, attempts, flags, jobs and a log of every Gemini call are ordinary tables in the same database. Schema: `backend/app/schema.sql`.
 
@@ -140,13 +140,13 @@ Pose is measured on every frame up to 30 fps for videos of up to about 100 secon
 
 ## API
 
-All routes are under `/api`, return JSON, and need a session (cookie, or `Authorization: Bearer <token>`) except `/health`, `/auth/login` and `/auth/session`. Times are seconds from the start of the video. Statuses are `passed`, `failed` or `unverified`; one step of an attempt may also be `not_applicable` (not needed), as the AI's result or the nurse's.
+All routes are under `/api`, return JSON, and need a session (cookie, or `Authorization: Bearer <token>`) except `/health`, `/auth/signup`, `/auth/login` and `/auth/session`. Times are seconds from the start of the video. Statuses are `passed`, `failed` or `unverified`; one step of an attempt may also be `not_applicable` (not needed), as the AI's result or the nurse's.
 
 | Route | Purpose |
 | --- | --- |
-| `POST /auth/login`, `/auth/logout` | Log in with `{username, password}`; log out. There is no sign-up. |
-| `GET /auth/session`, `GET /auth/me`, `PATCH /auth/me` | Who is signed in; edit name, title, credentials, notification preferences |
-| `PATCH /org` | Rename the agency (nurse) |
+| `POST /auth/signup`, `/auth/login`, `/auth/logout` | Sign up with `{role, name, email, password, join_code?}`; log in with `{username or email, password}`; log out. |
+| `GET /auth/session`, `GET /auth/me`, `PATCH /auth/me` | Who is signed in; edit name, title, credentials, notification preferences. Org includes `{id, name, is_sample, join_code, has_nurse}`; `join_code` is sent to nurses only. |
+| `PATCH /org`, `POST /org/join` | Rename the agency (nurse); join another agency by `{code}` |
 | `GET /videos/upload-target` | Where to send a video: `{url, token, max_bytes}`. `url` and `token` are null when it goes to `POST /videos` on this origin; otherwise post to `url` with `Authorization: Bearer <token>` (see Hosting) |
 | `POST /videos` | Multipart upload: `file`, `kind` (`reference`, nurses only, or `attempt`), and for an attempt `skill_id`. Returns `{video_id, job_id, attempt_id}`. A caregiver is refused when the skill is not assigned to them (403) or they have no attempts left (409). |
 | `GET /jobs/{id}` | Pipeline progress: `status` (`queued`, `running`, `done`, `error`), `stages[]`, `error`, `skill_id`, `attempt_id`. Poll until done. |
@@ -199,5 +199,6 @@ Hosts such as Vercel refuse forwarded request bodies above about 20 MB. So that 
 - Whether a conditional step was needed is the AI's reading of the recording. A critical step found not needed is flagged for the nurse, who can change any step's result.
 - The attempts-left check when a recording is uploaded is not atomic: two uploads sent at the same instant could both be accepted.
 - A job that is running when the server stops resumes at the next start, but only on the machine that has the video file.
-- The logins are shared, fixed accounts. There is no sign-up, password change or invitation flow; adding a login means editing `backend/scripts/logins.py` and running `make logins`, and a forgotten password is replaced with `make logins ARGS="--reset <name>"`.
+- Shared agency logins are the six names in `backend/scripts/logins.py`. People can also sign up in the app. A forgotten shared password is replaced with `make logins ARGS="--reset <name>"`.
+- Sign-up is open to anyone and is not rate limited. An agency's code admits nurses as well as caregivers, so anyone a nurse gives it to can join as a nurse, and it cannot be changed. An agency made by sign-up starts with no skills (the nine standard ones are installed in the default agency only), and every agency draws on the one AI budget (`GEMINI_BUDGET_USD`).
 - Notifications appear in the app only. No emails are sent.

@@ -4,16 +4,16 @@
   uv run python -m scripts.logins --reset nurse,caregiver2
   uv run python -m scripts.logins --reset-all
 
-Nobody signs up or changes a password in the app: the people in LOGINS below are the only
-ones who can log in, and they all belong to the default agency, so they share its skills and
-submissions. A run changes as little as it can:
+The people in LOGINS below are the shared agency logins. Anyone can also sign up in the app;
+those accounts keep their username and password when this script runs. A run changes as
+little as it can:
 
-  - a login that already exists with a password keeps it, and stays signed in;
-  - a login that does not exist yet (or has no password) gets a new random password;
+  - a listed login that already exists with a password keeps it, and stays signed in;
+  - a listed login that does not exist yet (or has no password) gets a new random password;
   - --reset gives only the named logins a new password and signs only them out;
-    --reset-all does so for every login;
-  - anyone else who has a username loses it, and their sessions, so a line taken out of
-    LOGINS stops that login.
+    --reset-all does so for every listed login;
+  - a reserved username sitting on the wrong person is taken back;
+  - a line taken out of LOGINS clears that person's username, password and sessions.
 
 LOGINS.md in the repository root is rewritten each run. It is gitignored. The database keeps
 only hashes, so the file is the only copy of the passwords. A password made in this run is
@@ -110,16 +110,24 @@ def generate(path: Path | None = LOGINS_FILE, reset: list[str] | tuple[str, ...]
     with db.tx() as conn:  # one transaction: either every change happens or none does
         for login in LOGINS:
             _ensure_person(conn, login)
-        # Anyone holding a username that is not theirs here, or not listed at all, loses it.
-        stale = conn.execute(
-            "SELECT id FROM users WHERE username IS NOT NULL AND NOT EXISTS ("
-            "  SELECT 1 FROM unnest(%s::text[], %s::uuid[]) AS l(name, id) "
-            "  WHERE l.name = users.username AND l.id = users.id)",
-            ([login.username for login in LOGINS], [login.user_id for login in LOGINS])).fetchall()
-        stale_ids = [row["id"] for row in stale]
-        if stale_ids:
-            conn.execute("UPDATE users SET username=NULL, password_hash=NULL WHERE id = ANY(%s)", (stale_ids,))
-            conn.execute("DELETE FROM sessions WHERE user_id = ANY(%s)", (stale_ids,))
+        reserved = [login.username for login in LOGINS]
+        managed_ids = [login.user_id for login in LOGINS]
+        # A reserved name on the wrong person is taken back; they can still log in with email.
+        stolen = conn.execute(
+            "SELECT id FROM users WHERE username = ANY(%s) AND NOT (id = ANY(%s))",
+            (reserved, managed_ids)).fetchall()
+        stolen_ids = [row["id"] for row in stolen]
+        if stolen_ids:
+            conn.execute("UPDATE users SET username=NULL WHERE id = ANY(%s)", (stolen_ids,))
+        # A listed login taken out of LOGINS loses the username, password and sessions.
+        held = conn.execute(
+            "SELECT id, username FROM users WHERE username IS NOT NULL AND NOT (id = ANY(%s))",
+            (managed_ids,)).fetchall()
+        former_ids = [row["id"] for row in held if row["id"] == uid(f"login:{row['username']}")]
+        if former_ids:
+            conn.execute("UPDATE users SET username=NULL, password_hash=NULL WHERE id = ANY(%s)", (former_ids,))
+            conn.execute("DELETE FROM sessions WHERE user_id = ANY(%s)", (former_ids,))
+        stale_ids = stolen_ids + former_ids
         for login in LOGINS:
             row = conn.execute("SELECT username, password_hash FROM users WHERE id=%s", (login.user_id,)).fetchone()
             keep = row["username"] == login.username and row["password_hash"] and login.username not in forced
@@ -159,7 +167,7 @@ def _markdown(made: list[dict], removed: int) -> str:
     lines = [
         "# Logins",
         "",
-        f"Made by `make logins` on {when}. These are the only accounts that can sign in.",
+        f"Made by `make logins` on {when}. Shared agency logins; people can also sign up in the app.",
         "",
         ("Changed in this run: " + ", ".join(f"`{m['username']}` ({m['status']})" for m in changed) + "."
          if changed else "Changed in this run: nothing."),

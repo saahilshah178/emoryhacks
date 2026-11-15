@@ -127,7 +127,7 @@ def test_the_reset_deletes_exactly_what_it_should(world):
         assert _n("SELECT 1 FROM safety_flags WHERE video_id=%s", item["video"]) == 0
         assert not media.video_path(item["video"]).exists()
     assert not any(p.exists() for p in world["orphans"])
-    # accounts left over from sign-up, and their sessions, are gone
+    # roster people with no username, and their sessions, are gone
     assert _n("SELECT 1 FROM users WHERE id=%s", world["leftover"]) == 0
     assert _n("SELECT 1 FROM sessions WHERE user_id=%s", world["leftover"]) == 0
     assert _n("SELECT 1 FROM users WHERE org_id=%s AND username IS NULL", auth.DEFAULT_ORG) == 0

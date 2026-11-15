@@ -21,6 +21,7 @@ import { PageHeading } from "@/shared/layout/PageHeading";
 import { useDashboard } from "@/nurse/context/DashboardContext";
 import { useAuth, useUser } from "@/shared/AuthProvider";
 import { APP_NAME } from "@/shared/brand";
+import { CopyJoinCode, formatJoinCode, JoinAgencyForm } from "@/shared/JoinAgency";
 
 type Outcome = { ok: boolean; message: string } | null;
 
@@ -151,7 +152,10 @@ function AgencyCard() {
   const user = useUser();
   const { setUser } = useAuth();
   const { reloadOverview } = useDashboard();
-  const [name, setName] = useState(user.org.name);
+  // The name being typed. Null shows the saved one, so the field follows the agency when
+  // this nurse joins another.
+  const [draft, setDraft] = useState<string | null>(null);
+  const name = draft ?? user.org.name;
   const { saving, outcome, run, clear } = useSave();
   const changed = name.trim() !== user.org.name;
 
@@ -160,7 +164,7 @@ function AgencyCard() {
     void run(async () => {
       const updated = await api<User>("/org", { method: "PATCH", json: { name: name.trim() } });
       setUser(updated);
-      setName(updated.org.name);
+      setDraft(null);
       reloadOverview();
     }, "Agency name saved.");
   }
@@ -170,7 +174,9 @@ function AgencyCard() {
       <CardHeader>
         <div>
           <CardTitle>Agency</CardTitle>
-          <CardDescription>Everyone in your agency sees this name: nurses and caregivers.</CardDescription>
+          <CardDescription>
+            Everyone in your agency sees this name. Share the code so caregivers and other nurses can join.
+          </CardDescription>
         </div>
       </CardHeader>
       <CardBody>
@@ -180,7 +186,7 @@ function AgencyCard() {
               value={name}
               maxLength={120}
               onChange={(event) => {
-                setName(event.target.value);
+                setDraft(event.target.value);
                 clear();
               }}
               required
@@ -189,6 +195,24 @@ function AgencyCard() {
           <Field label="Product name">
             <Input value={APP_NAME} readOnly />
           </Field>
+          {user.org.join_code ? (
+            // Laid out like a Field, but the copy button stays outside the label.
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-ink">Agency code</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Input
+                  aria-label="Agency code"
+                  value={formatJoinCode(user.org.join_code)}
+                  readOnly
+                  className="max-w-[12rem] tracking-[0.18em]"
+                />
+                <CopyJoinCode code={user.org.join_code} />
+              </div>
+              <p className="mt-1 text-xs text-ink-secondary">
+                Share this with caregivers and other nurses so they can join.
+              </p>
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" loading={saving} disabled={!changed || name.trim().length < 2}>
               Save agency name
@@ -196,6 +220,18 @@ function AgencyCard() {
             <SaveNote outcome={outcome} />
           </div>
         </form>
+        {/* An API from before join codes existed sends no code and cannot move anyone. */}
+        <div className={user.org.join_code ? "mt-6 border-t border-border pt-5" : "hidden"}>
+          <JoinAgencyForm
+            label="Another agency's code"
+            hint="Joining moves you into that agency. You can only do this while this agency has no skills and no other people."
+            onJoined={() => {
+              setDraft(null);
+              clear();
+              reloadOverview();
+            }}
+          />
+        </div>
       </CardBody>
     </Card>
   );

@@ -84,11 +84,12 @@ const agent = defineAgent({
       }
     }
 
-    // The caller's camera runs the call: see flow.mjs.
+    // The caller's camera runs the call: see flow.mjs. Every line says when, so a call can be pieced together afterwards.
+    const log = message => console.log(`${new Date().toTimeString().slice(0, 8)} ${message}`);
     let coach;
     const camera = watchCamera(ctx.room, {
       identity: caller.identity,
-      log: message => console.log(message),
+      log,
       onChange: change => { void coach?.cameraChanged(change); },
     });
     coach = createCoachCall({
@@ -110,7 +111,7 @@ const agent = defineAgent({
         afterReply,
       },
       hangUp: () => ctx.shutdown('caller asked to end'),
-      log: message => console.log(message),
+      log,
     });
 
     session.on(voice.AgentSessionEventTypes.AgentStateChanged, event => {

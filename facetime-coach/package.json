@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node --env-file=.env.local agent.mjs start",
-    "check": "node --check chert-rooms.mjs && node --check agent.mjs && node --check face.mjs && node --check greet.mjs && node --check skills.mjs && node --check portal.mjs && node --check overlay.mjs && node --check videos.mjs && node --check camera.mjs && node --check flow.mjs && node --check record.mjs && node --check grade.mjs && node --check assess-grade.mjs && node --check demo-audio.mjs && node --check ffmpeg.mjs",
+    "check": "node --check chert-rooms.mjs && node --check agent.mjs && node --check face.mjs && node --check greet.mjs && node --check skills.mjs && node --check portal.mjs && node --check overlay.mjs && node --check videos.mjs && node --check camera.mjs && node --check camera-debug.mjs && node --check flow.mjs && node --check record.mjs && node --check grade.mjs && node --check assess-grade.mjs && node --check demo-audio.mjs && node --check ffmpeg.mjs",
     "test": "node --test test/*.test.mjs",
     "preview": "node preview-overlay.mjs",
     "help": "node agent.mjs --help",

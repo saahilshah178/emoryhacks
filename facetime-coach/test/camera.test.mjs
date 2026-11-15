@@ -20,6 +20,18 @@ function picture(shift = 0) {
   return data;
 }
 
+/** The same room with nobody moving, as a real sensor sees it: every pixel jitters a little in every frame. */
+let seed = 7;
+function noisy(base) {
+  const data = new Uint8Array(base);
+  for (let i = 0; i < data.length; i += 4) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    const value = Math.max(0, Math.min(255, base[i] + (seed % 7) - 3));
+    data[i] = value; data[i + 1] = value; data[i + 2] = value;
+  }
+  return data;
+}
+
 function black() {
   const data = new Uint8Array(W * H * 4);
   for (let i = 3; i < data.length; i += 4) data[i] = 255;
@@ -62,20 +74,20 @@ function setup() {
   return run;
 }
 
-test('a picture turns the camera on', () => {
+test('a moving picture turns the camera on', () => {
   const { monitor, changes, live, clock } = setup();
   const start = clock.t;
   assert.equal(monitor.on, false);
   live(500);
-  assert.equal(monitor.on, false, 'half a second of pictures is not yet a camera that is on');
+  assert.equal(monitor.on, false, 'half a second of movement is not yet a camera that is on');
   live(1000);
   assert.equal(monitor.on, true);
   assert.equal(changes.length, 1);
-  assert.equal(changes[0].reason, 'picture arriving');
-  assert.ok(changes[0].at - start < 500, 'the change is dated to when the picture arrived');
+  assert.equal(changes[0].reason, 'moving picture');
+  assert.ok(changes[0].at - start < 500, 'the change is dated to when the picture started moving');
 });
 
-test('frames that stop turn the camera off, dated to the last picture', () => {
+test('frames that stop turn the camera off, dated to the last moving picture', () => {
   const { monitor, changes, live, silence, clock } = setup();
   live(2000);
   const lastPicture = clock.t;
@@ -87,13 +99,49 @@ test('frames that stop turn the camera off, dated to the last picture', () => {
   assert.equal(changes.at(-1).at, lastPicture);
 });
 
-test('a picture that holds still is a camera that is on', () => {
-  // Someone standing still for a count of five, or out of the room fetching a chair.
+test('a picture that stops changing turns the camera off', () => {
+  // What a real FaceTime line sends when the caller turns the camera off: the track stays, the picture freezes.
+  const { monitor, changes, live, same, clock } = setup();
+  live(2000);
+  const lastMoving = clock.t;
+  same(2000);
+  assert.equal(monitor.on, true, 'two seconds could be a frozen connection');
+  same(1000);
+  assert.equal(monitor.on, false);
+  assert.equal(changes.at(-1).reason, 'still picture');
+  assert.equal(changes.at(-1).at, lastMoving, 'dated to the last moving picture, so the frozen tail is cut from a recording');
+});
+
+test('a room where nobody moves is still a camera that is on', () => {
+  // Someone holding still for a count of five, or out of the picture fetching a chair: the sensor's noise keeps moving.
   const { monitor, changes, live, same } = setup();
   live(2000);
-  same(20_000);
+  const room = picture(0);
+  same(20_000, () => noisy(room));
   assert.equal(monitor.on, true);
   assert.equal(changes.length, 1);
+});
+
+test('one refreshed frame now and then does not keep a frozen picture on', () => {
+  const { monitor, changes, live, same } = setup();
+  live(2000);
+  const frozen = picture(0);
+  for (let i = 0; i < 6; i++) {
+    same(900, () => frozen);
+    same(1, () => noisy(frozen)); // the encoder repainting the same picture
+  }
+  assert.equal(monitor.on, false);
+  assert.equal(changes.at(-1).reason, 'still picture');
+});
+
+test('the camera comes back on after a frozen picture', () => {
+  const { monitor, changes, live, same } = setup();
+  live(2000);
+  same(4000);
+  assert.equal(monitor.on, false);
+  live(1500);
+  assert.equal(monitor.on, true);
+  assert.deepEqual(changes.map(change => change.on), [true, false, true]);
 });
 
 test('a black picture turns the camera off, dated to the last real picture', () => {
@@ -116,6 +164,19 @@ test('a muted or removed track turns the camera off quickly', () => {
   assert.equal(monitor.on, false);
   assert.equal(changes.at(-1).reason, 'video muted');
   assert.equal(changes.at(-1).at, mutedAt);
+});
+
+test('pictures that resume after a gap have to move for a moment before the camera counts as on', () => {
+  const { monitor, changes, live, silence, clock } = setup();
+  live(2000);
+  silence(4000);
+  assert.equal(monitor.on, false);
+  const resumed = clock.t;
+  live(400);
+  assert.equal(monitor.on, false, 'not on the first picture back');
+  live(1000);
+  assert.equal(monitor.on, true);
+  assert.ok(changes.at(-1).at >= resumed, 'dated to the pictures that came back, not to the ones before the gap');
 });
 
 test('a short freeze does not turn the camera off', () => {

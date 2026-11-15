@@ -18,7 +18,7 @@ The caller never says "I'm done". The camera button in FaceTime is the signal:
 
 The coach listens only while it waits for the caller to speak. During the demonstration it would hear the nurse through the caller's phone and answer her; during a recording, what the caller says is meant for the person they are "helping". A recording stops by itself after 75 seconds, and one shorter than 5 seconds is not graded.
 
-`camera.mjs` reads the camera from the bridge's `facetime-remote-video` track: off is the track being muted or removed (what Chert documents), or no picture at all for 2.5 seconds. Each change is logged as `[camera] off (video muted)` and the like, with the signal that caused it. If a caller says they turned the camera off or on and nothing happened, the coach moves the call on from their word.
+`camera.mjs` reads the camera from the bridge's `facetime-remote-video` track, which is a capture of the FaceTime window on Chert's Mac. When the caller turns the camera off, FaceTime shows its paused picture and the track carries on, so "off" is a picture that has stopped changing for 2.5 seconds (also a blank picture, no frames, or the track muted or removed; the mute only comes when the call ends). Each change is logged as `[camera] off (still picture)` and the like, with the time and the signal that caused it. `CAMERA_DEBUG=1` adds the numbers behind each decision and saves small stills of the caller's picture to `.state/camera-debug`. If a caller says they turned the camera off or on and nothing happened, the coach moves the call on from their word.
 
 Caller video needs **caller capture** enabled on the Chert line. Without it the log says `[camera] the caller has no video track yet` and nothing can be recorded.
 

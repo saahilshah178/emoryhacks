@@ -1,13 +1,18 @@
 // Watches the caller's camera, so the coach never has to hear "I'm done".
 // On FaceTime the caller turns the camera off to say "I have finished this part" and on again to say "watch me now".
 //
-// Chert's bridge publishes the caller's camera as the track facetime-remote-video and, when the camera goes off,
-// mutes or removes that track (docs.trychert.com/facetime-cli/video: "Handle camera mute, track removal, and
-// replacement"). Those are the signals. Two more count as off, for a camera that is lost without either: frames
-// stop arriving, or the picture goes blank (a covered lens, black frames).
-// A picture that merely holds still is a camera that is on: someone standing still, or out of the room.
-// Each change is logged with the signal that caused it.
+// The bridge publishes the caller's camera as the track facetime-remote-video: a capture of the FaceTime window
+// on Chert's Mac. Chert's docs say a camera that goes off shows up as that track muted or removed, but on a
+// real call it does not. FaceTime shows its paused picture (the last frame, blurred, with a pause icon), the
+// track stays, and frames keep arriving. The mute comes only when the call ends.
+// So "off" is any of: no moving picture for a while (a picture that has stopped changing, a blank one, or no
+// frames at all), or the track muted or removed.
+// Measured on a call on 2026-11-15, counting how many of the 2,304 samples below change from one picture to
+// the next: 150 to 800 with the camera on, 0 to 14 with it off. The few that still move with it off are
+// FaceTime's small self-view in the corner, which shows the coach's own screen, demonstration included.
+// Each change is logged with the signal that caused it. CAMERA_DEBUG=1 adds what the pictures looked like.
 import { RoomEvent, TrackKind, VideoBufferType, VideoStream } from '@livekit/rtc-node';
+import { cameraDebug } from './camera-debug.mjs';
 
 function milliseconds(name, fallback) {
   const value = Number(process.env[name] || NaN);
@@ -20,18 +25,23 @@ const GRID_W = 64;
 const GRID_H = 36;
 
 export const DEFAULTS = {
-  // The track was muted or removed: the documented signal, so a short wait (tracks can flap) is enough.
+  // The track was muted or removed: a short wait (tracks can flap) is enough.
   explicitMs: 500,
-  // No picture for this long (no frames, or only blank ones) also means the camera is off.
+  // No moving picture for this long means the camera is off.
   // Long enough to ride out a frozen connection, which freezes video for a second or two.
   deadMs: milliseconds('CAMERA_OFF_MS', 2500),
-  // A picture for this long means the camera is on.
+  // A moving picture for this long means the camera is on.
   liveMs: 800,
-  // Pictures further apart than this belong to different runs.
+  // Moving pictures further apart than this belong to different runs.
   runGapMs: 600,
   // A picture this flat or this dark shows nothing: a covered lens or a black frame.
   blankSpread: 4,
   blankMean: 10,
+  // A sample "moved" when its brightness changed by at least this much (0 to 255) ...
+  delta: 3,
+  // ... and a picture "moved" when at least this many of its 2,304 samples did: well above what the
+  // self-view moves with the camera off, well below what a camera that is on moves.
+  minMoved: 40,
 };
 
 /** Brightness of a GRID_W x GRID_H grid of points, taken straight from the RGBA picture. */
@@ -48,15 +58,17 @@ export function lumaGrid(data, width, height) {
   return grid;
 }
 
-/** True when the picture shows nothing at all. */
-export function isBlank(data, width, height, limits = DEFAULTS) {
-  const grid = lumaGrid(data, width, height);
+/** What one picture shows: whether it is blank, and how many samples moved since the picture before it. */
+function describe(grid, previous, limits) {
   let sum = 0;
   for (const value of grid) sum += value;
   const mean = sum / grid.length;
   let squares = 0;
   for (const value of grid) squares += (value - mean) ** 2;
-  return Math.sqrt(squares / grid.length) < limits.blankSpread || mean < limits.blankMean;
+  const blank = Math.sqrt(squares / grid.length) < limits.blankSpread || mean < limits.blankMean;
+  let moved = 0;
+  if (previous) for (let i = 0; i < grid.length; i++) if (Math.abs(grid[i] - previous[i]) >= limits.delta) moved += 1;
+  return { blank, moved, moving: !blank && Boolean(previous) && moved >= limits.minMoved };
 }
 
 /**
@@ -72,8 +84,12 @@ export function createCameraMonitor({ onChange = () => {}, now = Date.now, limit
   let explicit = 'no video track';
   let explicitSince = now();
   let lastFrameAt = 0;
-  let lastSeenAt = 0; // the last picture that showed something
+  let lastLiveAt = 0; // the last picture that was part of a moving run
   let runStart = 0;
+  let previous = null;
+  let streak = 0; // moving pictures in a row
+  let streakStart = 0;
+  let lastStill = 'still picture';
 
   function change(next, why, at) {
     if (on === next) return;
@@ -89,10 +105,10 @@ export function createCameraMonitor({ onChange = () => {}, now = Date.now, limit
       return;
     }
     if (on) {
-      if (t - lastSeenAt < limits.deadMs) return;
-      change(false, t - lastFrameAt >= limits.deadMs / 2 ? 'frames stopped' : 'blank picture', lastSeenAt);
-    } else if (runStart && lastSeenAt - runStart >= limits.liveMs && t - lastSeenAt <= limits.runGapMs) {
-      change(true, 'picture arriving', runStart);
+      if (t - lastLiveAt < limits.deadMs) return;
+      change(false, t - lastFrameAt >= limits.deadMs / 2 ? 'frames stopped' : lastStill, lastLiveAt);
+    } else if (runStart && lastLiveAt - runStart >= limits.liveMs && t - lastLiveAt <= limits.runGapMs) {
+      change(true, 'moving picture', runStart);
     }
   }
 
@@ -107,17 +123,29 @@ export function createCameraMonitor({ onChange = () => {}, now = Date.now, limit
       if (next === explicit) return;
       explicit = next;
       explicitSince = now();
-      if (!next) runStart = 0;
+      if (!next) { previous = null; streak = 0; runStart = 0; }
       check();
     },
-    /** One sampled picture. Returns true when it showed something. */
+    /** One sampled picture. Returns what it showed: { blank, moved, moving }. */
     frame(data, width, height) {
       const t = now();
+      if (t - lastFrameAt > limits.runGapMs) streak = 0; // pictures resuming after a gap start a new run
       lastFrameAt = t;
-      const seen = !isBlank(data, width, height, limits);
-      if (seen) {
-        if (!runStart || t - lastSeenAt > limits.runGapMs) runStart = t;
-        lastSeenAt = t;
+      const grid = lumaGrid(data, width, height);
+      const seen = describe(grid, previous, limits);
+      previous = grid;
+      if (seen.moving) {
+        if (streak === 0) streakStart = t;
+        streak += 1;
+      } else {
+        streak = 0;
+        lastStill = seen.blank ? 'blank picture' : 'still picture';
+      }
+      // Three in a row is a camera. One or two is a frozen picture being repainted by the encoder,
+      // which changes it going in and again coming out.
+      if (streak >= 3) {
+        if (!runStart || t - lastLiveAt > limits.runGapMs) runStart = streakStart;
+        lastLiveAt = t;
       }
       check();
       return seen;
@@ -143,6 +171,7 @@ export function watchCamera(room, { identity, onChange = () => {}, log = () => {
       onChange(change);
     },
   });
+  const debug = cameraDebug(log);
   let closed = false;
   let publication = null;
   let track = null;
@@ -172,7 +201,8 @@ export function watchCamera(room, { identity, onChange = () => {}, log = () => {
         lastSampleAt = t;
         const rgba = value.frame.convert(VideoBufferType.RGBA);
         if (first) { first = false; log(`[camera] first picture, ${rgba.width}x${rgba.height}`); }
-        monitor.frame(rgba.data, rgba.width, rgba.height);
+        const seen = monitor.frame(rgba.data, rgba.width, rgba.height);
+        debug?.frame(rgba, seen, monitor.on);
         for (const listener of listeners) listener({ data: rgba.data, width: rgba.width, height: rgba.height, at: t });
       }
     } catch (error) {
@@ -272,6 +302,7 @@ export function watchCamera(room, { identity, onChange = () => {}, log = () => {
       if (closed) return;
       closed = true;
       clearInterval(timer);
+      debug?.close();
       for (const [event, handler] of handlers) room.off(event, handler);
       listeners.clear();
       detach();
